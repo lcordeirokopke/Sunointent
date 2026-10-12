@@ -5,7 +5,7 @@ Este documento detalha a E2 (Extractor & Anchor) e a E3 (Validador de Âncoras):
 ## Responsabilidade
 
 - **E2:** o modelo lê o documento inteiro e propõe os claims. O código ancora cada um: acha a posição do trecho citado no texto limpo e associa os números da `tabela_numeros`. Devolve o `FactSheet` não assinado, que fica só no estado do grafo, e a lista dos claims que não conseguiu ancorar, com o motivo.
-- **E3:** confere cada claim contra o mesmo texto limpo e a mesma `tabela_numeros` que a E2 recebeu, nunca contra o PDF. Com todos aprovados, assina e grava o FactSheet. Com algum reprovado, devolve só os reprovados para a E2, com o motivo.
+- **E3:** confere cada claim contra o mesmo texto limpo e a mesma `tabela_numeros` que a E2 recebeu, nunca contra o PDF. Com todos aprovados, assina e grava o FactSheet. Com algum reprovado, devolve só os reprovados para a E2, com o motivo. Depois da última rodada, os que seguem reprovados vão para a quarentena, e o FactSheet é assinado com os válidos.
 
 O modelo nunca escreve página, offset nem valor de número. Ele cita o trecho e o bruto, e a posição e o `Numero` vêm do código. Assim, âncora e número inventados não chegam ao FactSheet: o que não existe no documento não resolve.
 
@@ -15,13 +15,15 @@ O modelo nunca escreve página, offset nem valor de número. Ele cita o trecho e
 |---|---|
 | `sunontent/nodes/extract.py` | Nó da E2: extrai (rodada 1) ou corrige (rodadas seguintes), ancora e coloca o FactSheet no estado. Grava os spans. |
 | `sunontent/nodes/validate.py` | Nó da E3: valida, grava a rodada e, com todos aprovados, assina e grava o FactSheet. |
+| `sunontent/nodes/quarentena.py` | Nó da quarentena: depois da última rodada, grava os reprovados em quarentena e assina e grava o FactSheet com os válidos. |
 | `sunontent/extracao/extractor.py` | Monta o prompt de `prompts/extractor.j2`, chama o modelo e renumera ou substitui as propostas. |
 | `sunontent/extracao/ancoragem.py` | Localiza o trecho citado e resolve os números. Determinístico. |
 | `sunontent/extracao/validador.py` | Regras da E3. Determinístico. |
+| `sunontent/extracao/quarentena.py` | Separação entre claims válidos e quarentena, e as funções da revisão humana: preparar, aceitar e descartar. |
 | `sunontent/llm.py` | Cliente LLM: modelo por nó, saída JSON validada, retentativa, custo e span. Único módulo que importa o SDK do provider. |
-| `sunontent/graph.py` | Arestas E2 -> E3 -> E2 e o limite de rodadas (`RODADAS_EXTRACAO`). |
-| `sunontent/persistencia.py` | `gravar_span`, `gravar_validacao` e `gravar_factsheet`: Supabase e cópia local. |
-| `config/models.yaml` | Snapshot do modelo de cada nó, preço por milhão de tokens e cotação USD/BRL. |
+| `sunontent/graph.py` | Arestas E2 -> E3 -> E2, E3 -> quarentena e o limite de rodadas (`RODADAS_EXTRACAO`). |
+| `sunontent/persistencia.py` | `gravar_span`, `gravar_validacao`, `gravar_factsheet`, `gravar_quarentena` e `gravar_decisao_quarentena`: Supabase e cópia local. Também lê o documento e a quarentena de um run para a revisão. |
+| `config/models.yaml` | Snapshot do modelo de cada nó, preço por milhão de tokens, cotação USD/BRL e nível de raciocínio da correção. |
 
 ## Modelo
 
@@ -29,7 +31,7 @@ O extractor usa o `gemini-3.8-flash` (Gemini API, SDK `google-genai`), escolhido
 
 ## O que o modelo recebe
 
-Uma chamada por rodada, com o documento inteiro. O prompt (`prompts/extractor.j2`) traz as regras e o documento entre `<documento>` e `</documento>`, um bloco por chunk (`### Bloco K03 | seção: ...`), com o texto limpo de cada página marcado por `[página N]`. O texto é o mesmo que a E3 usa para validar. O prompt avisa que o conteúdo do documento é dado e não instrução, para que um texto no PDF não seja lido como ordem.
+Uma chamada por rodada: na extração, com o documento inteiro; na correção, só com os blocos em volta dos claims reprovados (ver Loop E2/E3). O prompt (`prompts/extractor.j2`) traz as regras e o documento entre `<documento>` e `</documento>`, um bloco por chunk (`### Bloco K03 | seção: ...`), com o texto limpo de cada página marcado por `[página N]`. O texto é o mesmo que a E3 usa para validar. O prompt avisa que o conteúdo do documento é dado e não instrução, para que um texto no PDF não seja lido como ordem.
 
 A resposta segue o schema `SaidaExtractor` (`schemas.py`): uma lista de `ClaimProposto`, cada um com `id`, `chunk_id`, `texto`, `literal_fonte`, `numeros` (lista de brutos), `tipo` e `tags`.
 
@@ -86,12 +88,33 @@ Os claims que a E2 não ancorou também reprovam, com o motivo da E2.
 ```
 E1 -> E2 (rodada 1: extração) -> E3 --todos aprovados--> FactSheet assinado (fim do grafo, por enquanto)
                                     --reprovados, rodada < 3--> E2 (correção só dos reprovados) -> E3
-                                    --reprovados, rodada = 3--> run abortado (terminal)
+                                    --reprovados, rodada = 3--> quarentena: FactSheet assinado com os válidos
+                                                                e reprovados em quarentena (fim do grafo)
 ```
 
-- Na correção, o prompt traz o documento inteiro de novo e, para cada claim reprovado, o claim enviado e o motivo. O modelo devolve só esses claims, com o mesmo id. Id fora da lista é ignorado; claim reprovado que o modelo não devolver continua como estava e reprova de novo.
-- No máximo 3 rodadas: a extração e até 2 correções (`RODADAS_EXTRACAO` em `graph.py`). Se ainda houver claim reprovado, o run aborta com a lista de claims e motivos. Nada segue sem assinatura.
+- Na correção, o prompt traz as mesmas regras, só os blocos do documento em volta dos claims reprovados e, para cada claim reprovado, o claim enviado e o motivo. Os blocos são, para cada claim, o chunk citado, o chunk onde o trecho foi encontrado (quando ele ancora fora do citado) e um vizinho de cada lado (`VIZINHOS` em `extractor.py`); se o claim cita um chunk que não existe, o prompt traz o documento inteiro. A chamada usa o nível de raciocínio `extractor_correcao` de `config/models.yaml`. O modelo devolve só esses claims, com o mesmo id. Id fora da lista é ignorado; claim reprovado que o modelo não devolver continua como estava e reprova de novo.
+- No máximo 3 rodadas: a extração e até 2 correções (`RODADAS_EXTRACAO` em `graph.py`). Se ainda houver claim reprovado, o grafo segue para o nó `quarentena` (abaixo). Nada segue sem assinatura.
 - A cada rodada, todas as propostas são ancoradas e validadas de novo.
+
+## Quarentena
+
+Claim reprovado depois da última rodada não derruba o run nem é perdido. O nó `quarentena`:
+
+1. Grava cada reprovado em `claims_quarentena`: o claim como o extractor o propôs (`ClaimProposto`), o motivo da última recusa e a rodada.
+2. Assina o FactSheet só com os claims válidos e o grava como na E3. O run conclui, e a linha final do terminal diz quantos claims ficaram em quarentena.
+3. Se nenhum claim for válido, grava a quarentena e aborta o run com erro terminal: um FactSheet vazio não serve para a E4.
+
+O caso típico é um número que o modelo cita e a E1 não leu: a ancoragem recusa o claim porque o número não está na `tabela_numeros`, e o modelo insiste.
+
+### Revisão humana
+
+Uma pessoa decide cada claim em quarentena, uma vez, e a decisão é final (`decisoes_quarentena`, com o nome de quem revisou). As funções ficam em `extracao/quarentena.py`; a tela de revisão no dashboard ainda não existe, e o dashboard hoje só mostra a quarentena.
+
+- **Aceitar:** `preparar_revisao` ancora de novo o trecho e, para cada bruto, devolve a entrada da `tabela_numeros` ou, se a E1 não leu o número, a posição do bruto dentro do trecho e o valor e a unidade interpretados por `numeros.py`, para a pessoa confirmar. Se o formato não for interpretado, ela informa valor e unidade (`numero_informado`). `aceitar_da_quarentena` passa o claim pelas mesmas regras da E3, contra a `tabela_numeros` acrescida dos números confirmados, e, se passar, grava numa transação os números novos em `numeros` e o claim em `claims` e `claim_numeros`, com `origem = humano`, no FactSheet do mesmo run.
+- **Corrigir o trecho:** para claim sem âncora, a pessoa informa o trecho certo (`literal_fonte`), que o código ancora de novo; depois segue como em aceitar.
+- **Descartar:** grava só a decisão.
+
+A pessoa nunca informa posição: aponta o trecho e o bruto, e a âncora vem do código. Número novo precisa estar dentro do trecho e não pode se sobrepor a um número que a E1 leu. Claim que não passa nas regras da E3 é recusado com o motivo, e nada é gravado. Um run abortado, sem FactSheet, não aceita claim da quarentena.
 
 ## Cliente LLM
 
@@ -102,6 +125,8 @@ E1 -> E2 (rodada 1: extração) -> E3 --todos aprovados--> FactSheet assinado (f
 - **Conteúdo recusado pelo provider** (bloqueio do prompt ou `finish_reason` de segurança) e demais erros HTTP 4xx: terminal, sem repetir.
 
 A retentativa interna do SDK fica desligada, para que cada tentativa passe pelo cliente e vire um span. O timeout por chamada é de 300 s.
+
+Nível de raciocínio: a chamada pode pedir uma chave de `raciocinio` em `config/models.yaml` (`minimal`, `low`, `medium` ou `high`). Chave ausente usa o padrão do modelo. A extração usa o padrão; a correção usa `extractor_correcao`, porque corrigir um claim com o motivo dado é uma tarefa menor que ler o documento inteiro, e o raciocínio conta como saída, o token mais caro.
 
 ## Custo
 
@@ -117,13 +142,15 @@ Ordem de grandeza nos documentos de referência, com 2 rodadas: de R$ 0,15 a R$ 
 |---|---|---|
 | Span de cada tentativa (E2) | `llm_spans`, e o custo somado em `runs` | `spans/<span_id>.json` |
 | Resultado de cada rodada (E3) | `validacoes_ancora`: uma linha por claim proposto, com `passou` e `motivo` | `validacoes/<rodada>.json` |
-| FactSheet assinado (E3) | `factsheets`, `claims` e `claim_numeros`, numa transação | `factsheet.json`, sem a `tabela_numeros`, que já está em `documento.json` |
+| FactSheet assinado (E3 ou quarentena) | `factsheets`, `claims` e `claim_numeros`, numa transação | `factsheet.json`, sem a `tabela_numeros`, que já está em `documento.json` |
+| Claims em quarentena | `claims_quarentena` | `quarentena.json` |
+| Decisão da revisão humana | `decisoes_quarentena` e, ao aceitar, `numeros`, `claims` e `claim_numeros` com `origem = humano`, numa transação | `revisoes/<claim_id>.json`, com o claim aceito e os números novos |
 
-Todas as gravações usam `on conflict do nothing`: repetir não duplica linhas. Cada `claim_numeros` guarda o `Numero` completo e o `numero_id` da sua entrada em `numeros`, sempre preenchido. O FactSheet só é gravado assinado; `gravar_factsheet` recusa um FactSheet não assinado.
+Todas as gravações usam `on conflict do nothing`: repetir não duplica linhas. Repetir a mesma decisão da revisão não tem efeito, e uma decisão diferente da gravada é recusada. `claims_quarentena` e `decisoes_quarentena` são imutáveis: um trigger bloqueia update, delete e truncate. Cada `claim_numeros` guarda o `Numero` completo e o `numero_id` da sua entrada em `numeros`, sempre preenchido. O FactSheet só é gravado assinado; `gravar_factsheet` recusa um FactSheet não assinado.
 
 ## Como falha
 
 - **Omissão silenciosa:** um fato que não vira claim não existe para o resto do pipeline, e nenhuma etapa detecta. A defesa é o teste de cobertura com os documentos anotados à mão (`docs/testes.md`).
-- **Não convergência:** claim que segue reprovado depois de 3 rodadas aborta o run.
+- **Não convergência:** claim que segue reprovado depois de 3 rodadas vai para a quarentena e fica fora do FactSheet até a revisão humana; se nenhum claim passar, o run aborta.
 - **Provider fora ou resposta inválida:** retentativas esgotadas abortam o run com erro terminal.
 - **Falha de gravação:** segue a classificação de `docs/fluxos/ingestao.md`; esgotadas as tentativas, aborta o run.

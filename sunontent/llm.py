@@ -34,6 +34,7 @@ TENTATIVAS_PARSE = 3
 TIMEOUT_S = 300
 MAX_TOKENS_SAIDA = 65536
 VARIAVEL_CHAVE = "GOOGLE_API_KEY"
+NIVEIS_RACIOCINIO = ("minimal", "low", "medium", "high")
 
 
 @dataclass(frozen=True)
@@ -53,8 +54,10 @@ class RespostaBruta:
 
 
 class Provider(Protocol):
-    def gerar(self, modelo: str, prompt: str, json_schema: dict) -> RespostaBruta:
-        """Uma chamada. Levanta FalhaRetriavel (429, 5xx, timeout, conexão) ou FalhaTerminal (demais erros)."""
+    def gerar(self, modelo: str, prompt: str, json_schema: dict, raciocinio: str | None = None) -> RespostaBruta:
+        """Uma chamada. `raciocinio` é um de NIVEIS_RACIOCINIO, ou None para o padrão do modelo.
+
+        Levanta FalhaRetriavel (429, 5xx, timeout, conexão) ou FalhaTerminal (demais erros)."""
         ...
 
 
@@ -66,10 +69,19 @@ class ClienteLLM:
         precos: Mapping[str, Preco],
         cotacao_usd_brl: Decimal,
         relogio: Callable[[], float] = time.monotonic,
+        raciocinio: Mapping[str, str] | None = None,
     ):
         sem_preco = sorted({m for m in modelos.values() if m not in precos})
         if sem_preco:
             raise FalhaTerminal(f"config/models.yaml: sem preço para {', '.join(sem_preco)}")
+        invalidos = sorted(f"{chave}: {nivel}" for chave, nivel in (raciocinio or {}).items()
+                           if nivel not in NIVEIS_RACIOCINIO)
+        if invalidos:
+            raise FalhaTerminal(
+                f"config/models.yaml: nível de raciocínio inválido ({', '.join(invalidos)}); "
+                f"use {', '.join(NIVEIS_RACIOCINIO)}"
+            )
+        self._raciocinio = dict(raciocinio or {})
         self._provider = provider
         self._modelos = dict(modelos)
         self._precos = dict(precos)
@@ -80,7 +92,7 @@ class ClienteLLM:
 
     @classmethod
     def de_config(cls, raiz: Path, provider: Provider) -> "ClienteLLM":
-        """Lê modelos, preços e cotação de config/models.yaml."""
+        """Lê modelos, preços, cotação e níveis de raciocínio de config/models.yaml."""
         relativo = "config/models.yaml"
         try:
             dados = yaml.safe_load((Path(raiz) / relativo).read_text(encoding="utf-8")) or {}
@@ -91,7 +103,7 @@ class ClienteLLM:
             cotacao = Decimal(str(dados["cotacao_usd_brl"]))
         except (OSError, yaml.YAMLError, KeyError, TypeError, ArithmeticError) as erro:
             raise FalhaTerminal(f"{relativo}: preços ou cotacao_usd_brl inválidos ({erro!r})") from erro
-        return cls(provider, dados.get("modelos") or {}, precos, cotacao)
+        return cls(provider, dados.get("modelos") or {}, precos, cotacao, raciocinio=dados.get("raciocinio") or {})
 
     def custo_brl(self, modelo: str, tokens_entrada: int, tokens_saida: int) -> Decimal:
         preco = self._precos[modelo]
@@ -109,8 +121,12 @@ class ClienteLLM:
         nivel: str | None = None,
         celula_id: str | None = None,
         tentativa: int | None = None,
+        raciocinio: str | None = None,
     ) -> T:
+        """`raciocinio` é uma chave de `raciocinio` em config/models.yaml (ex: extractor_correcao); chave
+        ausente no YAML ou None usa o padrão do modelo."""
         modelo = self._modelos.get(no)
+        nivel_raciocinio = self._raciocinio.get(raciocinio) if raciocinio else None
         if modelo is None:
             raise FalhaTerminal(f"config/models.yaml: nenhum modelo para o nó {no!r}")
         json_schema = schema.model_json_schema()
@@ -143,7 +159,7 @@ class ClienteLLM:
         while True:
             inicio = self._relogio()
             try:
-                bruta = self._provider.gerar(modelo, prompt_atual, json_schema)
+                bruta = self._provider.gerar(modelo, prompt_atual, json_schema, nivel_raciocinio)
             except FalhaRetriavel as falha:
                 span(inicio, classe="retriavel", mensagem=falha.mensagem)
                 falhas_infra += 1
@@ -215,7 +231,7 @@ class ProviderGemini:
             ),
         )
 
-    def gerar(self, modelo: str, prompt: str, json_schema: dict) -> RespostaBruta:
+    def gerar(self, modelo: str, prompt: str, json_schema: dict, raciocinio: str | None = None) -> RespostaBruta:
         import httpx
         from google.genai import errors
 
@@ -223,6 +239,9 @@ class ProviderGemini:
             response_mime_type="application/json",
             response_json_schema=json_schema,
             max_output_tokens=MAX_TOKENS_SAIDA,
+            thinking_config=(
+                self._types.ThinkingConfig(thinking_level=raciocinio.upper()) if raciocinio else None
+            ),
         )
         try:
             resposta = self._cliente.models.generate_content(model=modelo, contents=prompt, config=config)

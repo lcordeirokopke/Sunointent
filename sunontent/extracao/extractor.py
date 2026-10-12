@@ -2,7 +2,8 @@
 
 - `extrair`: primeira rodada, documento inteiro numa chamada; os ids são renumerados C01, C02...
   na ordem devolvida.
-- `corrigir`: rodadas seguintes, só os claims recusados, com o motivo; mantém os ids.
+- `corrigir`: rodadas seguintes, só os claims recusados, com o motivo; mantém os ids. Mostra ao
+  modelo só os chunks em volta dos claims recusados, com o raciocínio reduzido.
 - `ancorar`: resolve âncora e números de todas as propostas (extracao/ancoragem.py) e separa as
   que não resolvem, com o motivo, para a E3 devolver ao modelo.
 
@@ -25,6 +26,7 @@ DESCRICAO_TIPO = {
     "cvm_fato_relevante": "fato relevante publicado na CVM",
     "b3_release": "release de resultados trimestrais",
 }
+VIZINHOS = 1  # chunks de cada lado do chunk de um claim recusado, mostrados na correção
 
 
 def blocos(documento: DocumentoProcessado) -> list[dict]:
@@ -43,20 +45,51 @@ def blocos(documento: DocumentoProcessado) -> list[dict]:
     return saida
 
 
+def chunks_da_correcao(documento: DocumentoProcessado, pedido: list[tuple[ClaimProposto, str]]) -> list[str] | None:
+    """Chunks que a correção mostra ao modelo, em ordem do documento: para cada claim recusado, o chunk
+    citado, o chunk onde o trecho foi encontrado (quando ancora) e VIZINHOS chunks de cada lado.
+    None (documento inteiro) se algum claim cita um chunk que não existe."""
+    ids = [c.chunk_id for c in documento.chunks]
+    escolhidos: set[int] = set()
+    for claim, _ in pedido:
+        if claim.chunk_id not in ids:
+            return None
+        centros = {ids.index(claim.chunk_id)}
+        try:
+            ancora = ancoragem.localizar(documento, claim.literal_fonte, claim.chunk_id)
+        except ancoragem.NaoResolvido:
+            pass
+        else:
+            posicao = (ancora.pagina, ancora.offset_inicio)
+            centros.update(
+                i for i, c in enumerate(documento.chunks)
+                if (c.pagina_inicio, c.offset_inicio) <= posicao <= (c.pagina_fim, c.offset_fim)
+            )
+        for centro in centros:
+            escolhidos.update(range(max(0, centro - VIZINHOS), min(len(ids), centro + VIZINHOS + 1)))
+    return [ids[i] for i in sorted(escolhidos)]
+
+
 def montar_prompt(
-    raiz: Path, documento: DocumentoProcessado, correcoes: list[tuple[ClaimProposto, str]] | None = None
+    raiz: Path,
+    documento: DocumentoProcessado,
+    correcoes: list[tuple[ClaimProposto, str]] | None = None,
+    chunks: list[str] | None = None,
 ) -> str:
+    """Prompt do extractor. `chunks` limita o documento mostrado a esses blocos (correção); None mostra todos."""
     ambiente = jinja2.Environment(
         loader=jinja2.FileSystemLoader(Path(raiz) / "prompts"),
         undefined=jinja2.StrictUndefined,
         keep_trailing_newline=True,
         autoescape=False,
     )
+    todos = blocos(documento)
     return ambiente.get_template("extractor.j2").render(
         tipo_documento_descricao=DESCRICAO_TIPO[documento.tipo_documento],
         emissor=documento.emissor,
         data_documento=documento.data_documento.isoformat(),
-        blocos=blocos(documento),
+        blocos=todos if chunks is None else [b for b in todos if b["chunk_id"] in chunks],
+        parcial=chunks is not None,
         correcoes=[
             {
                 "claim": claim,
@@ -100,14 +133,18 @@ def corrigir(
     registrar_span: Callable[[Span], None],
 ) -> dict[str, ClaimProposto]:
     """Propostas com os claims recusados substituídos pela versão corrigida. Id fora da lista é ignorado;
-    claim recusado que o modelo não devolver fica como estava e volta a ser recusado."""
+    claim recusado que o modelo não devolver fica como estava e volta a ser recusado.
+
+    O prompt mostra só os chunks em volta dos claims recusados (`chunks_da_correcao`), e a chamada usa o
+    nível de raciocínio `extractor_correcao` de config/models.yaml."""
     pedido = [(propostas[claim_id], motivo) for claim_id, motivo in sorted(correcoes.items())]
     saida = llm.chamar(
         "extractor",
-        montar_prompt(raiz, documento, pedido),
+        montar_prompt(raiz, documento, pedido, chunks_da_correcao(documento, pedido)),
         SaidaExtractor,
         run_id=run_id,
         registrar_span=registrar_span,
+        raciocinio="extractor_correcao",
     )
     atualizadas = dict(propostas)
     for claim in saida.claims:

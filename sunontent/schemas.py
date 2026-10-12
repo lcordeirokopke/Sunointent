@@ -16,6 +16,7 @@ TipoClaim = Literal["decisao", "projecao", "condicionante", "resultado", "risco"
 # Vocabulário fixo de tags do claim; a E4 prioriza por elas (docs/fluxos/extracao.md, Tags).
 Tag = Literal["impacto_pratico", "metodologico", "contexto_macro", "indicador_chave", "governanca"]
 NoLLM = Literal["extractor", "adapter", "synthesizer", "judge"]
+DecisaoQuarentena = Literal["aceitar", "descartar"]
 TIPO_DOCUMENTO_POR_FONTE: dict[str, TipoDocumento] = {
     "copom": "copom_ata",
     "cvm": "cvm_fato_relevante",
@@ -197,6 +198,15 @@ class SaidaExtractor(BaseModel):
     """Schema da resposta do extractor."""
 
     claims: list[ClaimProposto]
+
+
+class ClaimQuarentena(BaseModel):
+    """Claim ainda reprovado depois da última rodada do loop E2/E3, à espera de revisão humana
+    (docs/fluxos/extracao.md, Quarentena). `motivo` é o da última recusa."""
+
+    proposto: ClaimProposto
+    motivo: str = Field(min_length=1)
+    rodada: int = Field(ge=1)
 
 
 class Span(BaseModel):

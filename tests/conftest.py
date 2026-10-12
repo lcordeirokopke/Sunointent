@@ -20,8 +20,9 @@ import pytest
 
 from sunontent import retentativa
 from sunontent.llm import ClienteLLM, Preco, RespostaBruta
-from sunontent.persistencia import Coleta
+from sunontent.persistencia import Coleta, ItemQuarentena
 from sunontent.retentativa import FalhaRetriavel, FalhaTerminal
+from sunontent.schemas import Chunk, DocumentoProcessado, Numero, Pagina
 
 HOSTS_LOCAIS = {"localhost", "127.0.0.1", "::1"}
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -85,6 +86,9 @@ class RepositorioMemoria:
     spans: dict[str, object] = field(default_factory=dict)
     validacoes: dict[tuple, dict] = field(default_factory=dict)
     factsheets: dict[str, object] = field(default_factory=dict)
+    quarentena: dict[tuple, object] = field(default_factory=dict)
+    decisoes_quarentena: dict[tuple, dict] = field(default_factory=dict)
+    claims_humanos: dict[tuple, object] = field(default_factory=dict)
 
     def registrar_run(self, run_id: str) -> None:
         self.runs[run_id] = {"coleta_id": None}
@@ -161,7 +165,7 @@ class RepositorioMemoria:
         paginas = {(run_id, p.pagina): {"texto_limpo": p.texto_limpo, "ocr": p.ocr} for p in documento.paginas}
         chunks = {(run_id, c.chunk_id): c.model_dump() for c in documento.chunks}
         numeros = {
-            (run_id, n.ancora.pagina, n.ancora.offset_inicio, n.ancora.offset_fim): n.model_dump()
+            (run_id, n.ancora.pagina, n.ancora.offset_inicio, n.ancora.offset_fim): {**n.model_dump(), "origem": "pipeline"}
             for n in documento.tabela_numeros
         }
         for destino, novos in ((self.paginas, paginas), (self.chunks, chunks), (self.numeros, numeros)):
@@ -197,6 +201,63 @@ class RepositorioMemoria:
                 if (run_id, n.ancora.pagina, n.ancora.offset_inicio, n.ancora.offset_fim) not in self.numeros:
                     raise FalhaTerminal(f"claim_numeros.numero_id nulo: {claim.id} {n.bruto!r}")
         self.factsheets.setdefault(run_id, factsheet)
+
+    def gravar_quarentena(self, run_id, itens) -> None:
+        self._entrar("gravar_quarentena")
+        if run_id not in self.runs:
+            raise FalhaTerminal(f"run {run_id} não existe em runs")
+        for item in itens:
+            self.quarentena.setdefault((run_id, item.proposto.id), item)
+
+    def carregar_documento_processado(self, run_id):
+        self._entrar("carregar_documento_processado")
+        meta = self.documentos_processados.get(run_id)
+        if meta is None:
+            raise FalhaTerminal(f"run {run_id} não tem documento processado")
+        return DocumentoProcessado(
+            doc_id=meta["doc_id"], doc_sha256=meta["doc_sha256"], tipo_documento=meta["tipo_documento"],
+            emissor=meta["emissor"], data_documento=meta["data_documento"],
+            paginas=[Pagina(pagina=k[1], **v) for k, v in sorted(self.paginas.items()) if k[0] == run_id],
+            chunks=[Chunk(**v) for k, v in self.chunks.items() if k[0] == run_id],
+            tabela_numeros=[
+                Numero(**{c: v for c, v in valor.items() if c != "origem"})
+                for k, valor in sorted(self.numeros.items()) if k[0] == run_id
+            ],
+        )
+
+    def carregar_quarentena(self, run_id):
+        self._entrar("carregar_quarentena")
+        return [
+            ItemQuarentena(item, self.decisoes_quarentena.get(chave, {}).get("decisao"))
+            for chave, item in sorted(self.quarentena.items()) if chave[0] == run_id
+        ]
+
+    def gravar_decisao_quarentena(self, run_id, claim_id, decisao, autor, claim, numeros_novos) -> None:
+        """Mesmas regras do Supabase: uma decisão por claim; aceitar exige o FactSheet e grava tudo ou nada."""
+        self._entrar("gravar_decisao_quarentena")
+        chave = (run_id, claim_id)
+        if chave not in self.quarentena:
+            raise FalhaTerminal(f"claim {claim_id} não está em claims_quarentena")
+        gravada = self.decisoes_quarentena.get(chave)
+        if gravada is not None:
+            if gravada["decisao"] != decisao:
+                raise FalhaTerminal(f"o claim {claim_id} do run {run_id} já foi revisado: {gravada['decisao']}")
+            return
+        if claim is not None:
+            if run_id not in self.factsheets:
+                raise FalhaTerminal(f"run {run_id} não tem FactSheet assinado; o claim {claim_id} não pode ser aceito")
+            novos = {
+                (run_id, n.ancora.pagina, n.ancora.offset_inicio, n.ancora.offset_fim): {**n.model_dump(), "origem": "humano"}
+                for n in numeros_novos
+            }
+            for n in claim.numeros:
+                posicao = (run_id, n.ancora.pagina, n.ancora.offset_inicio, n.ancora.offset_fim)
+                if posicao not in self.numeros and posicao not in novos:
+                    raise FalhaTerminal(f"claim_numeros.numero_id nulo: {claim.id} {n.bruto!r}")
+            for posicao, valor in novos.items():
+                self.numeros.setdefault(posicao, valor)
+            self.claims_humanos[chave] = claim
+        self.decisoes_quarentena[chave] = {"decisao": decisao, "autor": autor}
 
     def criar_run(self, manifest) -> None:
         self._entrar("criar_run")
@@ -242,15 +303,17 @@ class ProviderFalso:
     """Provider de LLM com respostas prontas, consumidas em ordem.
 
     Cada resposta é uma string (o JSON devolvido), um RespostaBruta ou uma exceção (levantada).
-    Guarda os prompts recebidos em `prompts`.
+    Guarda os prompts recebidos em `prompts` e o nível de raciocínio de cada chamada em `raciocinios`.
     """
 
     def __init__(self, respostas):
         self.respostas = list(respostas)
         self.prompts: list[str] = []
+        self.raciocinios: list[str | None] = []
 
-    def gerar(self, modelo, prompt, json_schema):
+    def gerar(self, modelo, prompt, json_schema, raciocinio=None):
         self.prompts.append(prompt)
+        self.raciocinios.append(raciocinio)
         resposta = self.respostas.pop(0)
         if isinstance(resposta, Exception):
             raise resposta
@@ -260,10 +323,12 @@ class ProviderFalso:
 
 
 def cliente_falso(respostas) -> ClienteLLM:
-    """ClienteLLM do extractor com o ProviderFalso; preço de 1 US$ por milhão nos dois sentidos, cotação 5."""
+    """ClienteLLM do extractor com o ProviderFalso; preço de 1 US$ por milhão nos dois sentidos, cotação 5,
+    raciocínio low na correção."""
     return ClienteLLM(
         ProviderFalso(respostas),
         {"extractor": "modelo-falso"},
         {"modelo-falso": Preco(Decimal(1), Decimal(1))},
         Decimal(5),
+        raciocinio={"extractor_correcao": "low"},
     )

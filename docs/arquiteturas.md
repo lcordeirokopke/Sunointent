@@ -376,7 +376,7 @@ O modelo nunca escreve página, offset nem valor: o que ele cita e não existe n
 2. Para cada `Numero` do claim: confere presença na `tabela_numeros`, com valor **e** unidade. Confusão de `pp` com `pct` é o erro clássico aqui e é semanticamente grave: "subiu 0,50 p.p." e "subiu 0,50%" são coisas diferentes.
 3. Confere que `literal_fonte` é substring real do texto da página, não paráfrase.
 4. Confere que o texto do claim e a lista de números dizem o mesmo, lendo o texto com o parser da E1.
-5. Se algum claim reprovar, devolve **só os claims ruins** para a etapa 2 com o motivo, e não o documento inteiro. O loop tem no máximo 3 rodadas (a extração e 2 correções); se ainda houver claim reprovado, o run aborta com erro terminal.
+5. Se algum claim reprovar, devolve **só os claims ruins** para a etapa 2 com o motivo, e não o documento inteiro. O loop tem no máximo 3 rodadas (a extração e 2 correções); se ainda houver claim reprovado, ele vai para a quarentena, à espera de revisão humana, e o FactSheet é assinado só com os claims válidos. Sem nenhum claim válido, o run aborta com erro terminal. Detalhado em `docs/fluxos/extracao.md`, Quarentena.
 
 **Decide:** claim por claim, aprova ou devolve. Sem nota, sem gradiente: booleano.
 
@@ -688,7 +688,7 @@ Isso não é otimização, é o que sustenta a conta de custo desta arquitetura.
 
 Se você usar LangGraph, isso significa usar o checkpointer com um thread por célula no fan-out, e não um único thread para o documento.
 
-O checkpointer é o `PostgresSaver` (`langgraph-checkpoint-postgres`) no Postgres do Supabase do site, no schema `langgraph`, que fica fora dos schemas expostos pela Data API. A conexão do checkpointer é criada por `sunontent/persistencia.py` a partir de `SUPABASE_DB_URL`, é separada da conexão das tabelas do projeto, usa `search_path = langgraph`, `autocommit=True` e `row_factory=dict_row`, e passa pelo session pooler (porta 5432) ou pela conexão direta, porque o modo transação do pooler não suporta prepared statements. `setup()` cria as tabelas na primeira execução. O `thread_id` de cada célula é `<run_id>:<celula_id>`; enquanto o grafo não tem células, o `thread_id` é o próprio `run_id` (`docs/fluxos/execucao.md`). O checkpoint não tem cópia local: as saídas de cada etapa são gravadas pelas funções do projeto no Supabase e em `data/runs/<run_id>/`. Na retomada, o checkpoint decide qual nó roda; antes de chamar o modelo, cada nó confere nas tabelas se a sua linha já existe e a reaproveita.
+O checkpointer é o `PostgresSaver` (`langgraph-checkpoint-postgres`) no Postgres do Supabase do site, no schema `langgraph`, que fica fora dos schemas expostos pela Data API. A conexão do checkpointer é criada por `sunontent/persistencia.py` a partir de `SUPABASE_DB_URL`, é separada da conexão das tabelas do projeto, usa `search_path = langgraph`, `autocommit=True` e `row_factory=dict_row`, e passa pelo session pooler (porta 5432) ou pela conexão direta, porque o modo transação do pooler não suporta prepared statements. `setup()` cria as tabelas na primeira execução. O `thread_id` de cada célula é `<run_id>:<celula_id>`; enquanto o grafo não tem células, o `thread_id` é o próprio `run_id` (`docs/execucao.md`). O checkpoint não tem cópia local: as saídas de cada etapa são gravadas pelas funções do projeto no Supabase e em `data/runs/<run_id>/`. Na retomada, o checkpoint decide qual nó roda; antes de chamar o modelo, cada nó confere nas tabelas se a sua linha já existe e a reaproveita.
 
 ---
 
@@ -789,7 +789,7 @@ Escopo aqui: prompt injection vinda do documento fonte. Um PDF é entrada não c
 
 Span por chamada de LLM, custo e tokens por célula, persistência do scorecard, e replay de uma execução.
 
-Durante o run, o `__main__.py` escreve no terminal o início e o fim de cada nó do grafo (`etapa <no>: iniciada` e `etapa <no>: concluída`), que o dashboard usa para mostrar a etapa em andamento (`docs/fluxos/execucao.md`, Linhas de etapa no terminal).
+Durante o run, o `__main__.py` escreve no terminal o início e o fim de cada nó do grafo (`etapa <no>: iniciada` e `etapa <no>: concluída`), que o dashboard usa para mostrar a etapa em andamento (`docs/execucao.md`, Linhas de etapa no terminal).
 
 A rastreabilidade do Entregável 4 é uma capacidade de harness, não uma feature de dashboard: **se o trace não guardar qual âncora foi usada em qual bloco, nenhuma UI consegue mostrar isso depois.** Decida a granularidade do trace antes de construir o dashboard, não depois.
 

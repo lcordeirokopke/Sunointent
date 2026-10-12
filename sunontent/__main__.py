@@ -143,9 +143,12 @@ def executar(
     )
     persistencia.concluir_run(repositorio, raiz_dados, manifest)
     claims = len(resultado["factsheet"].claims)
+    # Com o run concluído, as correções que restam são os claims que foram para a quarentena.
+    em_quarentena = len(resultado["correcoes"])
     print(
         f"concluído: {documento.doc_id} ({documento.doc_sha256[:12]}), {claims} claims,"
-        f" {cliente_llm.custo_total_tokens} tokens, R$ {cliente_llm.custo_total_brl:.4f}"
+        + (f" {em_quarentena} em quarentena," if em_quarentena else "")
+        + f" {cliente_llm.custo_total_tokens} tokens, R$ {cliente_llm.custo_total_brl:.4f}"
     )
     return 0
 

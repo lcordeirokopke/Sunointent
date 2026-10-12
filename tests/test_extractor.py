@@ -282,6 +282,32 @@ def test_corrigir_troca_so_os_claims_pedidos(documentos):
     assert novas == {"C01": proposto("a corrigido"), "C02": propostas["C02"]}
     prompt = llm_falso._provider.prompts[0]
     assert "## C01" in prompt and "motivo X" in prompt and "## C02" not in prompt
+    assert llm_falso._provider.raciocinios == ["low"]
+
+
+def blocos_do_prompt(prompt):
+    return [linha.split()[2] for linha in prompt.splitlines() if linha.startswith("### Bloco ")]
+
+
+def test_correcao_mostra_so_os_chunks_em_volta_do_claim_recusado(documentos):
+    doc = documentos["copom"]
+    decisao = "O Copom decidiu reduzir a taxa básica de juros para 13,75% a.a."
+    pedido = [(proposto("trecho inventado", chunk_id="K19"), "motivo")]
+    assert extractor.chunks_da_correcao(doc, pedido) == ["K18", "K19", "K20"]
+    # Citou o chunk errado, mas o trecho existe uma vez no documento: entram os dois lugares.
+    pedido = [(proposto(decisao, chunk_id="K03"), "motivo")]
+    assert extractor.chunks_da_correcao(doc, pedido) == ["K02", "K03", "K04", "K18", "K19", "K20"]
+    # Chunk que não existe: o documento inteiro.
+    assert extractor.chunks_da_correcao(doc, [(proposto("x", chunk_id="K99"), "motivo")]) is None
+    prompt = extractor.montar_prompt(RAIZ, doc, pedido, ["K18", "K19", "K20"])
+    assert blocos_do_prompt(prompt) == ["K18", "K19", "K20"]
+    assert len(blocos_do_prompt(extractor.montar_prompt(RAIZ, doc))) == len(doc.chunks)
+
+
+def test_extracao_usa_o_raciocinio_padrao_do_modelo(documentos):
+    llm_falso = cliente_falso([json.dumps({"claims": [proposto("x").model_dump()]})])
+    extractor.extrair(llm_falso, RAIZ, documentos["copom"], run_id="r", registrar_span=lambda s: None)
+    assert llm_falso._provider.raciocinios == [None]
 
 
 # Cliente LLM
@@ -369,6 +395,13 @@ def test_no_sem_modelo_ou_modelo_sem_preco_e_terminal():
 def test_config_do_repositorio_tem_preco_para_cada_modelo():
     cliente = ClienteLLM.de_config(RAIZ, ProviderFalso([]))
     assert cliente.custo_brl("gemini-3.8-flash", 1_000_000, 0) == Decimal("4.050000")
+    assert cliente._raciocinio == {"extractor_correcao": "low"}
+
+
+def test_nivel_de_raciocinio_invalido_e_terminal():
+    with pytest.raises(FalhaTerminal, match="nível de raciocínio inválido"):
+        ClienteLLM(ProviderFalso([]), {"extractor": "m"}, {"m": Preco(Decimal(1), Decimal(1))}, Decimal(5),
+                   raciocinio={"extractor_correcao": "baixo"})
 
 
 def test_sem_chave_do_gemini_e_terminal():
@@ -430,5 +463,8 @@ def test_gemini_cobre_os_fatos_anotados(documentos, raiz_completa, fonte):
     (factsheet,) = repo.factsheets.values()
     print(f"\n{fonte}: {len(factsheet.claims)} claims, {cliente.custo_total_tokens} tokens,"
           f" R$ {cliente.custo_total_brl:.4f}, rodadas {max(k[1] for k in repo.validacoes)}")
+    for numero, span in enumerate(repo.spans.values(), start=1):  # uma chamada por rodada, mais as retentativas
+        print(f"  chamada {numero}: entrada {span.tokens_entrada}, saída {span.tokens_saida},"
+              f" R$ {span.custo_brl:.4f}, {span.duracao_ms / 1000:.0f} s{' (falhou)' if span.falha_classe else ''}")
     faltando = fatos_sem_cobertura(documentos[fonte], factsheet, anotacao(fonte)["fatos"])
     assert not faltando, json.dumps(faltando, ensure_ascii=False, indent=2)

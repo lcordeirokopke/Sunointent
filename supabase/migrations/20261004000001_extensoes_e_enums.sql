@@ -23,6 +23,13 @@ create type unidade_numero as enum ('pct', 'pp', 'BRL', 'BRL_mi', 'x', 'contagem
 -- Claim.tipo (docs/arquiteturas.md, Claim)
 create type tipo_claim as enum ('decisao', 'projecao', 'condicionante', 'resultado', 'risco');
 
+-- Quem produziu a linha de numeros ou claims: o pipeline (E1 e E2/E3) ou a revisão humana da
+-- quarentena (docs/fluxos/extracao.md, Quarentena).
+create type origem_dado as enum ('pipeline', 'humano');
+
+-- Decisão humana sobre um claim em quarentena (docs/fluxos/extracao.md, Quarentena).
+create type decisao_quarentena as enum ('aceitar', 'descartar');
+
 -- Slide.papel (docs/arquiteturas.md, Peça final)
 create type papel_slide as enum ('gancho', 'corpo', 'conclusao');
 

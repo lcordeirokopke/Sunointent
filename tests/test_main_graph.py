@@ -71,7 +71,7 @@ def test_manifest_le_versoes_e_hashes_da_config(raiz):
                          modo="normal", fonte="copom", k=2)
     assert m.level_specs == {"iniciante": 1, "intermediario": 1, "avancado": 1}
     assert m.glossario_versao == 1
-    assert m.prompts == {"extractor": 2}  # templates vazios ficam de fora
+    assert m.prompts == {"extractor": 3}  # templates vazios ficam de fora
     assert set(m.arquivos_sha256) == {
         "config/models.yaml", "config/glossario.yaml", "prompts/extractor.j2",
         "config/levels/iniciante.yaml", "config/levels/intermediario.yaml", "config/levels/avancado.yaml",
@@ -96,7 +96,7 @@ def test_template_com_conteudo_exige_cabecalho_de_versao(raiz):
 def test_template_com_cabecalho_entra_no_manifest(raiz):
     (raiz / "prompts" / "adapter.j2").write_text("{# versao: 3 #}\nolá", encoding="utf-8")
     m = manifesto.montar(raiz, run_id="x", timestamp=MOMENTO, modo="normal", fonte="copom", k=2)
-    assert m.prompts == {"adapter": 3, "extractor": 2}
+    assert m.prompts == {"adapter": 3, "extractor": 3}
     assert "prompts/adapter.j2" in m.arquivos_sha256
 
 
@@ -363,14 +363,38 @@ def test_claim_recusado_volta_para_o_extractor_e_e_corrigido(raiz, repo):
     assert factsheet.claims[0].literal_fonte.startswith("O Copom decidiu reduzir")
 
 
-def test_claim_que_nao_converge_aborta_o_run_depois_de_3_rodadas(raiz, repo):
-    errado = json.dumps({"claims": [claim("O Copom decidiu reduzir a taxa básica de juros", ["13,75%"])]})
-    llm = cliente_falso([errado] * 3)
-    assert rodar(raiz, repo, dev=True, llm=llm) == 1
+ERRADO = claim("O Copom decidiu reduzir a taxa básica de juros", ["13,75%"])  # o número está fora do trecho
+VOTACAO = {
+    **claim("Votaram por essa decisão os seguintes membros do Comitê", tipo="decisao"),
+    "id": "C02", "texto": "A decisão foi unânime.", "tags": ["governanca"],
+}
+
+
+def test_claim_que_nao_converge_vai_para_a_quarentena_e_o_run_conclui(raiz, repo, capsys):
+    correcao = json.dumps({"claims": [ERRADO]}, ensure_ascii=False)
+    llm = cliente_falso([json.dumps({"claims": [ERRADO, VOTACAO]}, ensure_ascii=False), correcao, correcao])
+    assert rodar(raiz, repo, dev=True, llm=llm) == 0
+    (run_id, run), = repo.runs.items()
+    assert run["status"] == "concluido"
+    assert {chave[1] for chave in repo.validacoes} == {1, 2, 3}
+    (factsheet,) = repo.factsheets.values()
+    assert factsheet.assinado and [c.id for c in factsheet.claims] == ["C02"]
+    item = repo.quarentena[(run_id, "C01")]
+    assert item.rodada == 3 and "13,75%" in item.motivo and item.proposto.literal_fonte == ERRADO["literal_fonte"]
+    local = json.loads((raiz / "data" / "runs" / run_id / "quarentena.json").read_text(encoding="utf-8"))
+    assert [i["proposto"]["id"] for i in local] == ["C01"]
+    saida = capsys.readouterr().out
+    assert "1 claims, 1 em quarentena," in saida
+    assert etapas(saida)[-2:] == ["etapa quarentena: iniciada", "etapa quarentena: concluída"]
+
+
+def test_sem_claim_valido_grava_a_quarentena_e_aborta(raiz, repo):
+    errado = json.dumps({"claims": [ERRADO]}, ensure_ascii=False)
+    assert rodar(raiz, repo, dev=True, llm=cliente_falso([errado] * 3)) == 1
     (run_id, run), = repo.runs.items()
     assert run["status"] == "abortado" and run["erro_classe"] == "terminal"
-    assert "3 rodadas" in run["erro_mensagem"] and "C01" in run["erro_mensagem"] and "13,75%" in run["erro_mensagem"]
-    assert {chave[1] for chave in repo.validacoes} == {1, 2, 3}
+    assert "nenhum claim válido" in run["erro_mensagem"] and "C01" in run["erro_mensagem"]
+    assert (run_id, "C01") in repo.quarentena
     assert not repo.factsheets
     assert len(repo.spans) == 3
     assert manifest_local(raiz)["custo_total_tokens"] == 3600

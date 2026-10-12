@@ -9,8 +9,8 @@ const ETAPAS = [
     descricao: "Lê o PDF, confere o doc_sha256 e gera o texto limpo, os chunks, os metadados e a tabela de números." },
   { id: "E2", nos: ["extract"], nome: "Extractor & Anchor",
     descricao: "O LLM extrai os claims do documento e cada um é ancorado no texto da página de origem." },
-  { id: "E3", nos: ["validate"], nome: "Validador de Âncoras",
-    descricao: "Confere âncoras e números de cada claim. Reprovado volta à E2; aprovado, o FactSheet é assinado." },
+  { id: "E3", nos: ["validate", "quarentena"], nome: "Validador de Âncoras",
+    descricao: "Confere âncoras e números de cada claim. Reprovado volta à E2; aprovado, o FactSheet é assinado. Reprovado depois da última rodada vai para a quarentena, à espera de revisão humana." },
   { id: "E4", nos: ["adapt"], nome: "Audience Adapter",
     descricao: "Adapta o FactSheet para os 3 níveis: iniciante, intermediário e avançado." },
   { id: "E5", nos: ["synth"], nome: "Format Synthesizer",
@@ -205,7 +205,8 @@ function implementada(etapa) {
 
 function noDaEtapa(etapa, run) {
   if (etapa.id === "E0") return run?.modo === "dev" ? "referencia" : "coleta";
-  return etapa.nos[0];
+  // Etapa com mais de um nó (E3: validate e quarentena): o estado é o do último nó que rodou.
+  return [...etapa.nos].reverse().find((no) => run?.etapas[no]) ?? etapa.nos[0];
 }
 
 function infoEtapa(etapa, run) {
@@ -213,8 +214,9 @@ function infoEtapa(etapa, run) {
   const no = noDaEtapa(etapa, run);
   const et = run?.etapas[no];
   if (!et) return { estado: "pendente", no };
-  const duracao = et.total + (et.inicioAtual != null ? Date.now() - et.inicioAtual : 0);
-  return { estado: et.estado, no, duracao, vezes: et.vezes, linhas: et.linhas };
+  const ets = etapa.nos.map((n) => run.etapas[n]).filter(Boolean);
+  const duracao = ets.reduce((soma, e) => soma + e.total + (e.inicioAtual != null ? Date.now() - e.inicioAtual : 0), 0);
+  return { estado: et.estado, no, duracao, vezes: (run.etapas[etapa.nos[0]] ?? et).vezes, linhas: ets.flatMap((e) => e.linhas) };
 }
 
 function nomeEtapa(etapa, run) {
@@ -424,7 +426,7 @@ function dadosEtapa(etapa, run) {
     case "E2":
       return cartaoSpans(d.spans, m) + cartaoClaims(d.factsheet);
     case "E3":
-      return cartaoValidacoes(d.validacoes, d.factsheet);
+      return cartaoValidacoes(d.validacoes, d.factsheet) + cartaoQuarentena(d.quarentena);
     default:
       return "";
   }
@@ -491,7 +493,7 @@ function cartaoClaims(factsheet) {
   if (!factsheet?.claims?.length) return "";
   const linhas = factsheet.claims.map((c) => `
     <tr>
-      <td class="num">${esc(c.id)}</td>
+      <td class="num">${esc(c.id)}${c.origem === "humano" ? `<div style="margin-top:4px">${selo("normal", "humano")}</div>` : ""}</td>
       <td>${esc(c.texto)}<div class="literal">${esc(c.literal_fonte)}</div></td>
       <td>${selo("normal", c.tipo)}<div class="etiquetas" style="margin-top:4px">${(c.tags ?? []).map((t) => selo("", t)).join("")}</div></td>
       <td class="num">${(c.numeros ?? []).map((n) => esc(n.bruto)).join("<br>")}</td>
@@ -500,6 +502,32 @@ function cartaoClaims(factsheet) {
   return `<div class="cartao"><h3>Claims do FactSheet</h3><div class="tabela-rolagem"><table>
     <thead><tr><th>ID</th><th>Claim e trecho da fonte</th><th>Tipo</th><th>Números</th><th>Âncora</th></tr></thead>
     <tbody>${linhas}</tbody></table></div></div>`;
+}
+
+// Claims reprovados depois da última rodada do loop E2/E3. Só leitura: a revisão é feita pelas funções
+// de sunontent/extracao/quarentena.py.
+function cartaoQuarentena(itens) {
+  if (!itens?.length) return "";
+  const pendentes = itens.filter((q) => !q.decisao).length;
+  const linhas = itens.map((q) => {
+    const p = q.proposto ?? {};
+    const decisao = q.decisao
+      ? `${selo(q.decisao === "aceitar" ? "ok" : "erro", q.decisao === "aceitar" ? "aceito" : "descartado")}
+         <div class="motivo">${esc(q.autor)} · ${esc(fmtData(q.decidido_em))}</div>`
+      : selo("", "aguardando revisão");
+    return `<tr>
+      <td class="num">${esc(q.claim_id)}</td>
+      <td>${esc(p.texto)}<div class="literal">${esc(p.literal_fonte)}</div></td>
+      <td class="num">${(p.numeros ?? []).map((n) => esc(n)).join("<br>")}</td>
+      <td><span class="motivo">${esc(q.motivo)}</span></td>
+      <td>${decisao}</td>
+    </tr>`;
+  }).join("");
+  return `<div class="cartao"><div class="cabecalho-etapa"><h3>Quarentena</h3>
+      ${selo(pendentes ? "erro" : "ok", pendentes ? `${pendentes} aguardando revisão` : "todos revisados")}</div>
+    <div class="tabela-rolagem"><table>
+      <thead><tr><th>ID</th><th>Claim proposto e trecho citado</th><th>Números</th><th>Motivo da última recusa</th><th>Decisão</th></tr></thead>
+      <tbody>${linhas}</tbody></table></div></div>`;
 }
 
 // Resultado
@@ -535,6 +563,7 @@ function renderResultado() {
         ${metrica("Fonte", esc(m.fonte))}
         ${metrica("doc_id", esc(m.doc_id), true)}
         ${metrica("Claims", d.factsheet ? fmtInt(d.factsheet.claims.length) : "")}
+        ${d.quarentena?.length ? metrica("Em quarentena", fmtInt(d.quarentena.filter((q) => !q.decisao).length)) : ""}
         ${metrica("Rodadas E2/E3", fmtInt(d.validacoes.length || ""))}
         ${metrica("Tokens", fmtInt(m.custo_total_tokens))}
         ${metrica("Custo", fmtBRL(m.custo_total_brl))}
@@ -544,6 +573,7 @@ function renderResultado() {
     ${d.documento ? cartaoDocumento(d.documento) : ""}
     ${cartaoClaims(d.factsheet)}
     ${d.validacoes.length ? cartaoValidacoes(d.validacoes, d.factsheet) : ""}
+    ${cartaoQuarentena(d.quarentena)}
     ${d.spans.length ? cartaoSpans(d.spans, m) : ""}
     <div class="cartao"><h3>Manifest: versões usadas no run</h3>
       <div class="metricas" style="margin-bottom:12px">
@@ -575,11 +605,12 @@ function renderHistorico() {
       <td>${selo(r.status, ROTULO_ESTADO[r.status] ?? r.status)}</td>
       <td class="num">${esc(r.doc_id ?? "")}</td>
       <td class="num">${fmtInt(r.claims)}</td>
+      <td class="num">${fmtInt(r.quarentena)}</td>
       <td class="num">${fmtInt(r.custo_total_tokens)}</td>
       <td class="num">${fmtBRL(r.custo_total_brl)}</td>
     </tr>`).join("");
   alvo.innerHTML = `<div class="cartao"><div class="tabela-rolagem"><table>
-    <thead><tr><th>Run</th><th>Início</th><th>Fonte</th><th>Modo</th><th>Status</th><th>Documento</th><th>Claims</th><th>Tokens</th><th>Custo</th></tr></thead>
+    <thead><tr><th>Run</th><th>Início</th><th>Fonte</th><th>Modo</th><th>Status</th><th>Documento</th><th>Claims</th><th>Em quarentena</th><th>Tokens</th><th>Custo</th></tr></thead>
     <tbody>${linhas}</tbody></table></div></div>`;
 }
 

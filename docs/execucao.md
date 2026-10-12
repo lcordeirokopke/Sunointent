@@ -7,12 +7,12 @@ Este documento descreve como um run começa, como o grafo é montado e executado
 | Peça | Papel |
 | ---- | ----- |
 | `sunontent/__main__.py` | Ponto de entrada (`python -m sunontent [fonte] [--dev]`). Lê o `.env`, confere as credenciais do Supabase e do Gemini, gera o `run_id`, monta o manifest, registra o run, executa o grafo escrevendo as linhas de etapa no terminal e fecha o run como `concluido` ou `abortado`, com o custo do run. |
-| `sunontent/graph.py` | Monta o grafo LangGraph: as duas entradas (E0 ou referência), a E1, a E2, a E3, o loop E2/E3, as constantes `K` e `RODADAS_EXTRACAO` e `construir_grafo(checkpointer)`. A ordem das etapas fica só aqui. |
+| `sunontent/graph.py` | Monta o grafo LangGraph: as duas entradas (E0 ou referência), a E1, a E2, a E3, o loop E2/E3 e a quarentena, as constantes `K` e `RODADAS_EXTRACAO` e `construir_grafo(checkpointer)`. A ordem das etapas fica só aqui. |
 | `sunontent/manifesto.py` | Lê `config/` e `prompts/` e devolve o `RunManifest` sem os campos do documento. |
 | `sunontent/schemas.py` | `RunManifest`, `PipelineState` e os tipos `Nivel`, `Fonte` e `Modo`. |
 | `sunontent/llm.py` | `conferir_credenciais` (`GOOGLE_API_KEY`) e `criar_cliente`: um `ClienteLLM` por run, que acumula os tokens e o custo do run. |
 | `sunontent/persistencia.py` | Funções do run: `criar_run`, `concluir_run`, `abortar_run`, `gravar_manifest_local`, `criar_repositorio_supabase` e `checkpointer_postgres`. Única porta de gravação no Supabase e em `data/`. |
-| `sunontent/nodes/` | Nós finos: `coleta` e `referencia` (entradas), `leitura` (E1), `extract` (E2) e `validate` (E3). Não tratam erro: a `Falha` sobe até o `__main__.py`. |
+| `sunontent/nodes/` | Nós finos: `coleta` e `referencia` (entradas), `leitura` (E1), `extract` (E2), `validate` (E3) e `quarentena`. Não tratam erro: a `Falha` sobe até o `__main__.py`. |
 
 ## Ciclo de vida do run
 
@@ -32,7 +32,9 @@ flowchart TD
     E1 --> E2["no extract: E2"]
     E2 --> E3["no validate: E3"]
     E3 -->|"claim reprovado e rodada menor que 3"| E2
+    E3 -->|"claim reprovado na rodada 3"| QUA["no quarentena"]
     E3 --> FIM{"resultado"}
+    QUA --> FIM
     FIM -->|"FactSheet assinado"| OK["status concluido, manifest.json com os campos do documento e o custo, codigo 0"]
     FIM -->|"Falha"| AB["abortar_run: status abortado com erro_classe e erro_mensagem, codigo 1"]
     FIM -->|"outra excecao"| AB2["abortar_run como terminal, mensagem Tipo: texto, e a excecao sobe"]
@@ -55,12 +57,14 @@ START -> (modo normal) coleta     -> leitura -> extract -> validate -> END
       -> (modo dev)    referencia -> leitura -> extract -> validate -> END
                                                   ^           |
                                                   +-----------+  claim reprovado e rodada < 3
+                                                              |
+                                                              +--> quarentena -> END  claim reprovado e rodada = 3
 ```
 
 - A aresta condicional de `START` lê `state.manifest.modo`: `dev` entra pelo nó `referencia`, e `normal` entra pelo nó `coleta` (E0).
 - As duas entradas entregam um `DocumentoFonte` em `documento_fonte` e seguem para o nó `leitura` (E1), que entrega o `DocumentoProcessado` em `documento`.
-- O nó `extract` (E2) coloca o FactSheet não assinado no estado, e o nó `validate` (E3) o confere. Sem claim reprovado, o FactSheet é assinado e o grafo termina. Com claim reprovado, `depois_da_validacao` volta ao `extract` enquanto `rodada < RODADAS_EXTRACAO` (3); na terceira rodada, levanta `FalhaTerminal` com os claims e os motivos. O loop está detalhado em `docs/fluxos/extracao.md`.
-- O grafo termina na E3: a E4 em diante ainda não existe no grafo.
+- O nó `extract` (E2) coloca o FactSheet não assinado no estado, e o nó `validate` (E3) o confere. Sem claim reprovado, o FactSheet é assinado e o grafo termina. Com claim reprovado, `depois_da_validacao` volta ao `extract` enquanto `rodada < RODADAS_EXTRACAO` (3); na terceira rodada, segue para o nó `quarentena`, que grava os reprovados em quarentena e assina o FactSheet com os válidos (sem nenhum válido, levanta `FalhaTerminal`). O loop e a quarentena estão detalhados em `docs/fluxos/extracao.md`.
+- O grafo termina na E3 ou na quarentena: a E4 em diante ainda não existe no grafo.
 - `K = 2` é uma constante de `graph.py`. O valor lido no início do run entra no manifest.
 - `construir_grafo(checkpointer=None)` aceita qualquer checkpointer do LangGraph. O `__main__.py` passa o `PostgresSaver`, e os testes passam o `InMemorySaver`.
 - `PipelineState` tem `run_id`, `manifest`, `documento_fonte` (entradas), `documento` (E1), `factsheet` (não assinado na E2, assinado na E3) e os campos do loop E2/E3: `rodada`, `propostas`, `pendencias` e `correcoes`.
@@ -79,7 +83,8 @@ etapa leitura: iniciada
 concluído: cvm_fato_relevante_24708_1574050 (53d8fb099247), 7 claims, 11074 tokens, R$ 0.1578
 ```
 
-- O nome é o do nó em `graph.py` (`coleta`, `referencia`, `leitura`, `extract`, `validate`). No loop E2/E3, `extract` e `validate` aparecem uma vez por rodada.
+- O nome é o do nó em `graph.py` (`coleta`, `referencia`, `leitura`, `extract`, `validate`, `quarentena`). No loop E2/E3, `extract` e `validate` aparecem uma vez por rodada.
+- Com claims em quarentena, a linha final diz quantos: `..., 22 claims, 1 em quarentena, ...`.
 - A etapa que falha não tem a linha `concluída`: a exceção sobe e a linha seguinte é `abortado (<classe>): <mensagem>`.
 - O dashboard (`docs/fluxos/dashboard.md`) lê essas linhas para mostrar em que etapa o run está.
 

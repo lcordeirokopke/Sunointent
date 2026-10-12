@@ -2,7 +2,7 @@
 
 Os claims que a E2 não ancorou também reprovam, com o motivo da E2. Grava o resultado de cada
 rodada em validacoes_ancora; com todos aprovados, assina e grava o FactSheet. Com algum
-reprovado, devolve os motivos em `correcoes`; o graph.py decide se volta à E2 ou aborta.
+reprovado, devolve os motivos em `correcoes`; o graph.py decide se volta à E2 ou vai para a quarentena.
 Dependências vêm de config["configurable"]: repositorio e raiz_dados.
 """
 

@@ -253,6 +253,60 @@ def test_consulta_le_o_run_completo_do_dashboard(repositorio, ambiente, tmp_path
     assert consulta.detalhar_run("cvm_20261004T142205Z_ffffff") is None
 
 
+def test_quarentena_e_revisao_humana(repositorio, ambiente, tmp_path):
+    """Número que a E1 não leu: o claim vai para a quarentena e o humano o aceita com o número."""
+    import psycopg
+
+    from sunontent.extracao import extractor, quarentena
+    from sunontent.schemas import ClaimProposto, ClaimQuarentena, FactSheet
+
+    run_id, documento = run_com_referencia(repositorio, ambiente["SUPABASE_DB_URL"])
+    persistencia.gravar_documento_processado(repositorio, tmp_path, run_id, documento)
+    with psycopg.connect(ambiente["SUPABASE_DB_URL"]) as conexao:  # a E1 "não leu" o 11%
+        conexao.execute("delete from numeros where run_id = %s and bruto = '11%%'", (run_id,))
+
+    medidas = ClaimProposto(
+        id="C01", chunk_id="K01", texto="A Companhia adotará todas as medidas cabíveis.",
+        literal_fonte="A Companhia adotará todas as medidas cabíveis", numeros=[], tipo="risco", tags=["governanca"])
+    receita = ClaimProposto(
+        id="C02", chunk_id="K01", texto="A remuneração representou cerca de 11% da receita líquida.",
+        literal_fonte="representou aproximadamente 11% (onze por cento) da receita", numeros=["11%"],
+        tipo="resultado", tags=["indicador_chave"])
+    claims, _ = extractor.ancorar(documento, {"C01": medidas})
+    itens = [ClaimQuarentena(proposto=receita, motivo="o número '11%' não está dentro do literal_fonte", rodada=3)]
+    for _ in range(2):  # a repetição não duplica linhas
+        persistencia.gravar_quarentena(repositorio, tmp_path, run_id, itens)
+    persistencia.gravar_factsheet(repositorio, tmp_path, run_id, FactSheet(
+        doc_id=documento.doc_id, tipo_documento=documento.tipo_documento, emissor=documento.emissor,
+        data_documento=documento.data_documento, claims=claims, tabela_numeros=documento.tabela_numeros,
+        assinado=True))
+
+    (item,) = persistencia.carregar_quarentena(repositorio, run_id)
+    assert item.claim == itens[0] and item.decisao is None
+    (sugerido,) = quarentena.preparar_revisao(repositorio, run_id, "C02").numeros
+    assert sugerido.novo and sugerido.numero.bruto == "11%"
+    claim = quarentena.aceitar_da_quarentena(repositorio, tmp_path, run_id, "C02", [sugerido.numero], autor="Ana")
+    # Repetir a mesma decisão (resposta perdida e nova tentativa) não tem efeito; outra decisão é recusada.
+    repositorio.gravar_decisao_quarentena(run_id, "C02", "aceitar", "Ana", claim, [sugerido.numero])
+    with pytest.raises(FalhaTerminal, match="já foi revisado"):
+        repositorio.gravar_decisao_quarentena(run_id, "C02", "descartar", "Ana", None, [])
+
+    with psycopg.connect(ambiente["SUPABASE_DB_URL"]) as conexao:
+        origens = conexao.execute(
+            "select c.claim_id, c.origem::text, n.origem::text from claims c left join claim_numeros cn"
+            " on cn.run_id = c.run_id and cn.claim_id = c.claim_id left join numeros n on n.id = cn.numero_id"
+            " where c.run_id = %s order by c.claim_id", (run_id,)).fetchall()
+        with pytest.raises(psycopg.Error, match="imutável"):
+            conexao.execute("delete from decisoes_quarentena where run_id = %s", (run_id,))
+    assert origens == [("C01", "pipeline", None), ("C02", "humano", "humano")]
+    assert sugerido.numero in persistencia.carregar_documento_processado(repositorio, run_id).tabela_numeros
+
+    detalhe = persistencia.ConsultaSupabase(ambiente["SUPABASE_DB_URL"]).detalhar_run(run_id)
+    assert [(c["id"], c["origem"]) for c in detalhe["factsheet"]["claims"]] == [("C01", "pipeline"), ("C02", "humano")]
+    (q,) = detalhe["quarentena"]
+    assert (q["claim_id"], q["decisao"], q["autor"], q["proposto"]["id"]) == ("C02", "aceitar", "Ana", "C02")
+
+
 def test_consulta_nao_grava(ambiente):
     consulta = persistencia.ConsultaSupabase(ambiente["SUPABASE_DB_URL"])
     with pytest.raises(FalhaTerminal, match="read-only"):

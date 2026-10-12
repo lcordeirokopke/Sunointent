@@ -26,7 +26,7 @@ Cada run chama o Gemini na E2 e grava no Supabase do site. A ordem de grandeza d
 
 ## Botões
 
-- **Executar run**: `python -m sunontent [fonte]`. O `__main__.py` monta o manifest, registra o run no Supabase e chama `graph.construir_grafo(checkpointer)`. Cada run passa pela E0 (download da publicação mais recente), E1, E2 e E3, e termina com o FactSheet assinado; a E4 em diante ainda não existe no grafo.
+- **Executar run**: `python -m sunontent [fonte]`. O `__main__.py` monta o manifest, registra o run no Supabase e chama `graph.construir_grafo(checkpointer)`. Cada run passa pela E0 (download da publicação mais recente), E1, E2 e E3, e termina com o FactSheet assinado, com ou sem claims em quarentena; a E4 em diante ainda não existe no grafo.
 - **Modo dev**: o mesmo com `--dev`, entrando pelo nó `referencia` com o documento de `tests/fixtures/referencia/`, sem download. A E2 chama o Gemini nos dois modos.
 - **Parar**: encerra o processo. O run em andamento fica com status `em_andamento` no Supabase, porque o `__main__.py` não chega a registrar o aborto.
 - **Fonte**: Todas (sem fonte, os três runs em sequência), Copom, CVM ou B3.
@@ -43,7 +43,7 @@ Os dados dos runs vêm do Supabase, a fonte da verdade, pela `ConsultaSupabase` 
 
 ## Como o dashboard sabe a etapa
 
-O `__main__.py` escreve `etapa <no>: iniciada` e `etapa <no>: concluída` para cada nó (ver `docs/fluxos/execucao.md`, "Linhas de etapa no terminal"). `app/execucao.py` classifica cada linha:
+O `__main__.py` escreve `etapa <no>: iniciada` e `etapa <no>: concluída` para cada nó (ver `docs/execucao.md`, "Linhas de etapa no terminal"). `app/execucao.py` classifica cada linha:
 
 | Linha | Evento |
 | ----- | ------ |
@@ -58,9 +58,9 @@ Quando o processo termina, o servidor acrescenta o evento `fim` com o código de
 
 ## Abas
 
-- **Fluxo**: os cartões E0 a E8 com estado e duração, o contador de rodadas do loop E2/E3 e as arestas do grafo. As subabas mostram o terminal completo ou uma etapa: descrição, estado, duração, os dados do run gravados por ela e as linhas do terminal daquela etapa.
-- **Resultado**: um run lido do Supabase: resumo, documento processado, claims do FactSheet com o trecho da fonte, validações por rodada, chamadas de LLM e as versões do manifest.
-- **Histórico**: os runs da tabela `runs`, do mais recente ao mais antigo; um clique abre o resultado.
+- **Fluxo**: os cartões E0 a E8 com estado e duração, o contador de rodadas do loop E2/E3 e as arestas do grafo. As subabas mostram o terminal completo ou uma etapa: descrição, estado, duração, os dados do run gravados por ela e as linhas do terminal daquela etapa. O cartão da E3 cobre os nós `validate` e `quarentena`: soma as durações, junta as linhas e mostra o estado do último que rodou.
+- **Resultado**: um run lido do Supabase: resumo, documento processado, claims do FactSheet com o trecho da fonte (os aceitos na revisão da quarentena marcados como `humano`), validações por rodada, a quarentena com o motivo e a decisão de cada claim, chamadas de LLM e as versões do manifest. A quarentena é só leitura: a revisão é feita pelas funções de `sunontent/extracao/quarentena.py` (`docs/fluxos/extracao.md`, Quarentena).
+- **Histórico**: os runs da tabela `runs`, do mais recente ao mais antigo, com os claims e os claims em quarentena ainda sem decisão; um clique abre o resultado.
 
 Uma etapa é mostrada como implementada quando o seu nó existe no grafo devolvido por `/api/grafo`, que chama `graph.construir_grafo()`. As etapas E4 a E8 aparecem como não implementadas até os nós `adapt`, `synth`, `evaluate`, `router` e `revisao` existirem.
 
@@ -76,6 +76,6 @@ A URL guarda a aba: `#fluxo/E3`, `#resultado/<run_id>`, `#historico`.
 | `GET /api/execucao/eventos?desde=N` | SSE com os eventos a partir de `N`; termina depois do `fim`. |
 | `POST /api/execucao/parar` | Encerra o processo. |
 | `GET /api/runs` | Resumo dos runs (`ConsultaSupabase.listar_runs`). |
-| `GET /api/runs/<run_id>` | Run, documento resumido, FactSheet, validações e spans (`ConsultaSupabase.detalhar_run`). 404 se o run não existe. |
+| `GET /api/runs/<run_id>` | Run, documento resumido, FactSheet, validações, quarentena e spans (`ConsultaSupabase.detalhar_run`). 404 se o run não existe. |
 
 As duas rotas de runs respondem 503 com a mensagem quando o banco recusa a conexão ou a consulta.

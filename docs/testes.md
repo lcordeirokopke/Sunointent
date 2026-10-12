@@ -53,6 +53,7 @@ tests/
 ├── test_numeros.py                # parser de número brasileiro
 ├── test_extracao.py               # E1: leitura, normalização, chunks, metadados, números e gravação
 ├── test_extractor.py              # E2, E3, cliente LLM e cobertura com a Gemini API (marker gemini)
+├── test_quarentena.py             # quarentena do loop E2/E3 e revisão humana
 ├── test_main_graph.py             # manifest, grafo (E0 a E3) e __main__
 ├── test_app.py                    # dashboard: linhas do terminal e API com processo e consulta simulados
 ├── test_persistencia_supabase.py  # integração com o Supabase local
@@ -108,7 +109,8 @@ tests/
 
 - o prompt traz o documento por bloco e por página, sem a linha de versão do template, e sem a seção de correção na primeira rodada;
 - bloco que atravessa página é separado por página;
-- a primeira rodada renumera os ids na ordem; a correção troca só os claims pedidos e mostra o motivo no prompt.
+- a primeira rodada renumera os ids na ordem; a correção troca só os claims pedidos e mostra o motivo no prompt;
+- a correção mostra só os chunks em volta do claim recusado (o citado, o encontrado e os vizinhos), ou o documento inteiro se o chunk citado não existe, e pede o raciocínio `extractor_correcao`; a extração usa o raciocínio padrão do modelo.
 
 ### Cliente LLM
 
@@ -116,7 +118,7 @@ tests/
 - resposta fora do schema reinjeta o erro de validação e conta os tokens; 3 respostas inválidas viram terminal;
 - falha de infraestrutura repete com espera crescente, sem gastar o contador de parse; 4 falhas viram terminal;
 - bloqueio de conteúdo e erro 4xx são terminais, sem repetir;
-- nó sem modelo e modelo sem preço são terminais; o `config/models.yaml` do repositório tem preço para cada modelo;
+- nó sem modelo, modelo sem preço e nível de raciocínio inválido são terminais; o `config/models.yaml` do repositório tem preço para cada modelo e o raciocínio da correção;
 - sem `GOOGLE_API_KEY`, erro terminal.
 
 ### Persistência
@@ -126,13 +128,26 @@ tests/
 
 ### Gemini de verdade
 
-`test_gemini_cobre_os_fatos_anotados` (marker `gemini`) roda o `__main__` em modo `--dev` para cada fonte, com a Gemini API de verdade e o repositório em memória, e exige o FactSheet assinado e todos os fatos anotados cobertos. Imprime claims, tokens, custo e rodadas. Custa da ordem de R$ 0,15 a R$ 0,60 por documento e leva alguns minutos. Como a resposta do modelo varia, uma falha aqui pede para ler os claims gerados (`data/runs/<run_id>/factsheet.json` no `tmp_path` do teste) antes de mexer no prompt ou na anotação.
+`test_gemini_cobre_os_fatos_anotados` (marker `gemini`) roda o `__main__` em modo `--dev` para cada fonte, com a Gemini API de verdade e o repositório em memória, e exige o FactSheet assinado e todos os fatos anotados cobertos. Imprime claims, tokens, custo e rodadas, e os tokens, o custo e a duração de cada chamada (com `-s`). Custa da ordem de R$ 0,15 a R$ 0,60 por documento e leva alguns minutos. Como a resposta do modelo varia, uma falha aqui pede para ler os claims gerados (`data/runs/<run_id>/factsheet.json` no `tmp_path` do teste) antes de mexer no prompt ou na anotação.
 
 ### No grafo
 
-`test_main_graph.py` confere, com o `ProviderFalso`: o FactSheet assinado e gravado, a rodada em `validacoes_ancora`, o span e o custo no run e no manifest local; o claim recusado que volta para a E2 com o motivo no prompt e é corrigido; o claim que não converge e aborta o run depois de 3 rodadas; o extractor sem claims, que aborta; e o run que não começa sem a `GOOGLE_API_KEY`.
+`test_main_graph.py` confere, com o `ProviderFalso`: o FactSheet assinado e gravado, a rodada em `validacoes_ancora`, o span e o custo no run e no manifest local; o claim recusado que volta para a E2 com o motivo no prompt e é corrigido; o claim que não converge e, depois de 3 rodadas, vai para a quarentena, com o run concluído e o FactSheet assinado só com o claim válido; o run sem nenhum claim válido, que grava a quarentena e aborta; o extractor sem claims, que aborta; e o run que não começa sem a `GOOGLE_API_KEY`.
 
 `test_persistencia_supabase.py` confere no Supabase local o span com o custo somado uma só vez em `runs`, a rodada em `validacoes_ancora` e o `claim_numeros` ligado à sua linha em `numeros`.
+
+### Quarentena e revisão humana
+
+`test_quarentena.py`, sobre o documento de referência do Copom:
+
+- `separar` assina o FactSheet com os válidos e põe os reprovados em quarentena, com motivo e rodada;
+- número que a E1 não leu é localizado no trecho e interpretado (valor e unidade) para confirmar; número que a E1 leu é reaproveitado;
+- formato que o `numeros.py` não interpreta pede valor e unidade a quem revisa;
+- trecho corrigido é ancorado de novo;
+- aceitar recusa número fora do trecho, bruto que não confere com o texto e número sobreposto a um que a E1 leu, e passa pelas regras da E3;
+- com o grafo: o claim cujo número a E1 não leu vai para a quarentena e o humano o aceita (o número entra em `numeros` com origem humano e a revisão seguinte o lê na tabela); o humano corrige o trecho de um claim sem âncora; descartar grava só a decisão; a segunda decisão é recusada; a revisão exige autor e claim em quarentena; aceitar que não passa na E3 não grava nada; run abortado não aceita claim.
+
+`test_persistencia_supabase.py::test_quarentena_e_revisao_humana` faz o mesmo caminho no Supabase local: a quarentena sem duplicar, a leitura do documento e da quarentena, a aceitação com número novo (`origem = humano` em `claims` e `numeros`), a mesma decisão repetida sem efeito, a outra decisão recusada, o trigger que bloqueia o delete e a leitura do dashboard.
 
 ## conftest.py
 
@@ -144,7 +159,7 @@ Não contém testes, só infraestrutura compartilhada:
 - `RepositorioMemoria`: substitui o Supabase. Guarda runs, documentos, objetos do bucket e coletas; aceita falhas injetadas por método e simula a perda de resposta depois do commit.
 - `repositorio` e `run_id`: fixtures com um run `copom_...` já registrado.
 - `referencia(fonte)`: devolve bytes e metadados do documento congelado, ou `None` se ainda não existir.
-- `RepositorioMemoria` também guarda spans (sem somar duas vezes o mesmo), validações e FactSheets, e recusa número de claim que não está em `numeros`, como o Supabase.
+- `RepositorioMemoria` também guarda spans (sem somar duas vezes o mesmo), validações e FactSheets, e recusa número de claim que não está em `numeros`, como o Supabase. Guarda ainda a quarentena e as decisões da revisão, com as mesmas regras: uma decisão por claim, e aceitar só com FactSheet assinado.
 - `ProviderFalso` e `cliente_falso`: o LLM simulado.
 
 ## test_ingestao.py
