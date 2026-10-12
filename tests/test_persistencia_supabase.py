@@ -53,6 +53,35 @@ def novo_run(db_url: str) -> str:
     return run_id
 
 
+def run_com_referencia(repositorio, db_url: str):
+    """Run --dev da CVM com o documento de referência vinculado, como a E1 o encontra, e o documento processado."""
+    import json
+    from pathlib import Path
+
+    import psycopg
+
+    from sunontent.extracao import leitura
+    from sunontent.schemas import DocumentoFonte
+
+    referencia = Path(__file__).parent / "fixtures" / "referencia"
+    meta = json.loads((referencia / "cvm.json").read_text(encoding="utf-8"))
+    run_id = f"cvm_20261004T142205Z_{secrets.token_hex(3)}"
+    with psycopg.connect(db_url) as conexao:
+        conexao.execute(
+            "insert into runs (run_id, \"timestamp\", modo, fonte, modelos, prompts, level_specs,"
+            " glossario_versao, arquivos_sha256, \"K\")"
+            " values (%s, now(), 'dev', 'cvm', '{\"extractor\": \"m\"}', '{}', '{}', 1, '{}', 2)",
+            (run_id,),
+        )
+    persistencia.registrar_documento_referencia(
+        repositorio, run_id=run_id, fonte="cvm", tipo_documento="cvm_fato_relevante",
+        doc_sha256=meta["doc_sha256"], tamanho_bytes=(referencia / "cvm.pdf").stat().st_size,
+        doc_id=meta["doc_id"], url_origem=meta["url_origem"],
+        coletado_em=datetime(2026, 10, 8, 22, 30, 23, tzinfo=timezone.utc),
+    )
+    return run_id, leitura.processar(DocumentoFonte(caminho=referencia / "cvm.pdf", **meta), "cvm")
+
+
 def test_coleta_completa_e_reaproveitamento(repositorio, ambiente, tmp_path):
     dados = b"%PDF-1.7\n% integracao " + secrets.token_bytes(16) + b"\n%%EOF\n"
     sha = comum.sha256_hex(dados)
@@ -94,18 +123,9 @@ def test_coleta_completa_e_reaproveitamento(repositorio, ambiente, tmp_path):
 
 
 def test_documento_processado_grava_paginas_chunks_e_numeros(repositorio, ambiente, tmp_path):
-    import json
-    from pathlib import Path
-
     import psycopg
 
-    from sunontent.extracao import leitura
-    from sunontent.schemas import DocumentoFonte
-
-    referencia = Path(__file__).parent / "fixtures" / "referencia"
-    meta = json.loads((referencia / "cvm.json").read_text(encoding="utf-8"))
-    documento = leitura.processar(DocumentoFonte(caminho=referencia / "cvm.pdf", **meta), "cvm")
-    run_id = novo_run(ambiente["SUPABASE_DB_URL"])
+    run_id, documento = run_com_referencia(repositorio, ambiente["SUPABASE_DB_URL"])
 
     for _ in range(2):  # a repetição não duplica linhas
         persistencia.gravar_documento_processado(repositorio, tmp_path, run_id, documento)
@@ -113,34 +133,42 @@ def test_documento_processado_grava_paginas_chunks_e_numeros(repositorio, ambien
     with psycopg.connect(ambiente["SUPABASE_DB_URL"]) as conexao:
         contagem = {
             tabela: conexao.execute(f"select count(*) from {tabela} where run_id = %s", (run_id,)).fetchone()[0]
-            for tabela in ("documento_paginas", "chunks", "numeros")
+            for tabela in ("documentos_processados", "documento_paginas", "chunks", "numeros")
         }
+        metadados = conexao.execute(
+            "select emissor, data_documento from documentos_processados where run_id = %s", (run_id,)
+        ).fetchone()
         valor = conexao.execute(
             "select valor, unidade from numeros where run_id = %s and bruto = 'R$ 390.000.000,00'", (run_id,)
         ).fetchone()
     assert contagem == {
+        "documentos_processados": 1,
         "documento_paginas": len(documento.paginas),
         "chunks": len(documento.chunks),
         "numeros": len(documento.tabela_numeros),
     }
     assert (str(valor[0]), valor[1]) == ("390000000.00", "BRL")
+    assert metadados == (documento.emissor, documento.data_documento)
+
+
+def test_documento_que_nao_e_o_do_run_e_recusado(repositorio, ambiente, tmp_path):
+    """A FK composta de documentos_processados recusa a saída da E1 de outro documento."""
+    run_id, documento = run_com_referencia(repositorio, ambiente["SUPABASE_DB_URL"])
+    outro = documento.model_copy(update={"doc_sha256": "0" * 64})
+    with pytest.raises(FalhaTerminal, match="banco recusou"):
+        persistencia.gravar_documento_processado(repositorio, tmp_path, run_id, outro)
 
 
 def test_span_validacao_e_factsheet(repositorio, ambiente, tmp_path):
-    import json
     import uuid
     from decimal import Decimal
-    from pathlib import Path
 
     import psycopg
 
-    from sunontent.extracao import extractor, leitura
-    from sunontent.schemas import ClaimProposto, DocumentoFonte, FactSheet, Span
+    from sunontent.extracao import extractor
+    from sunontent.schemas import ClaimProposto, FactSheet, Span
 
-    referencia = Path(__file__).parent / "fixtures" / "referencia"
-    meta = json.loads((referencia / "cvm.json").read_text(encoding="utf-8"))
-    documento = leitura.processar(DocumentoFonte(caminho=referencia / "cvm.pdf", **meta), "cvm")
-    run_id = novo_run(ambiente["SUPABASE_DB_URL"])
+    run_id, documento = run_com_referencia(repositorio, ambiente["SUPABASE_DB_URL"])
     persistencia.gravar_documento_processado(repositorio, tmp_path, run_id, documento)
 
     span = Span(span_id=str(uuid.uuid4()), run_id=run_id, no="extractor", modelo="m", tokens_entrada=100,
@@ -173,3 +201,59 @@ def test_span_validacao_e_factsheet(repositorio, ambiente, tmp_path):
     assert (custo[0], custo[1]) == (120, Decimal("0.5"))
     assert validacoes == 1
     assert vinculo == [("11%",)]
+
+
+# Leitura do dashboard (ConsultaSupabase)
+
+
+def test_consulta_le_o_run_completo_do_dashboard(repositorio, ambiente, tmp_path):
+    """Roda as consultas do dashboard contra o schema das migrations: uma coluna renomeada quebra aqui."""
+    import uuid
+    from decimal import Decimal
+
+    from sunontent.extracao import extractor
+    from sunontent.schemas import ClaimProposto, FactSheet, Span
+
+    run_id, documento = run_com_referencia(repositorio, ambiente["SUPABASE_DB_URL"])
+    persistencia.gravar_documento_processado(repositorio, tmp_path, run_id, documento)
+    for _ in range(2):
+        span = Span(span_id=str(uuid.uuid4()), run_id=run_id, no="extractor", modelo="m", tokens_entrada=100,
+                    tokens_saida=20, custo_brl=Decimal("0.5"), duracao_ms=10)
+        persistencia.gravar_span(repositorio, tmp_path, span)
+    proposto = ClaimProposto(
+        id="C01", chunk_id="K01", texto="A remuneração representou cerca de 11% da receita líquida.",
+        literal_fonte="representou aproximadamente 11% (onze por cento) da receita", numeros=["11%"],
+        tipo="resultado", tags=["indicador_chave"])
+    claims, _ = extractor.ancorar(documento, {"C01": proposto})
+    persistencia.gravar_validacao(repositorio, tmp_path, run_id, 1, [("C01", "motivo de teste")])
+    persistencia.gravar_validacao(repositorio, tmp_path, run_id, 2, [("C01", None)])
+    persistencia.gravar_factsheet(repositorio, tmp_path, run_id, FactSheet(
+        doc_id=documento.doc_id, tipo_documento=documento.tipo_documento, emissor=documento.emissor,
+        data_documento=documento.data_documento, claims=claims, tabela_numeros=documento.tabela_numeros,
+        assinado=True))
+    repositorio.concluir_run(run_id)
+
+    consulta = persistencia.ConsultaSupabase(ambiente["SUPABASE_DB_URL"])
+    resumo = next(r for r in consulta.listar_runs() if r["run_id"] == run_id)
+    assert (resumo["status"], resumo["claims"], resumo["custo_total_tokens"]) == ("concluido", 1, 240)
+
+    detalhe = consulta.detalhar_run(run_id)
+    assert detalhe["manifest"]["modelos"] == {"extractor": "m"} and detalhe["manifest"]["coleta_id"] is None
+    assert detalhe["documento"] == {
+        "doc_id": documento.doc_id, "doc_sha256": documento.doc_sha256,
+        "tipo_documento": "cvm_fato_relevante", "emissor": documento.emissor,
+        "data_documento": documento.data_documento, "paginas": len(documento.paginas), "paginas_ocr": 0,
+        "chunks": len(documento.chunks), "numeros": len(documento.tabela_numeros),
+    }
+    (claim,) = detalhe["factsheet"]["claims"]
+    assert claim["id"] == "C01" and claim["tags"] == ["indicador_chave"]
+    assert [n["bruto"] for n in claim["numeros"]] == ["11%"] and claim["ancora"] == claims[0].ancora.model_dump()
+    assert [(v["rodada"], v["claims"][0]["passou"]) for v in detalhe["validacoes"]] == [(1, False), (2, True)]
+    assert len(detalhe["spans"]) == 2 and detalhe["spans"][0]["criado_em"] <= detalhe["spans"][1]["criado_em"]
+    assert consulta.detalhar_run("cvm_20261004T142205Z_ffffff") is None
+
+
+def test_consulta_nao_grava(ambiente):
+    consulta = persistencia.ConsultaSupabase(ambiente["SUPABASE_DB_URL"])
+    with pytest.raises(FalhaTerminal, match="read-only"):
+        consulta._executar(lambda conexao: conexao.execute("delete from validacoes_ancora where false"))

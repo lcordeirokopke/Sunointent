@@ -5,12 +5,14 @@ Funções da E0 e do run (docs/fluxos/ingestao.md, docs/arquiteturas.md):
 - transação de `documentos`, `coletas` e vínculo em `runs`, com releitura de `runs.coleta_id`;
 - registro do documento de referência do modo --dev, sem coleta;
 - criação e fechamento da linha de `runs`, e o manifest.json local;
-- saída da E1: páginas, chunks e números numa transação, e data/runs/<run_id>/documento.json;
+- saída da E1: metadados (documentos_processados), páginas, chunks e números numa transação, e
+  data/runs/<run_id>/documento.json;
 - spans de LLM, com o custo somado em runs na mesma instrução, e data/runs/<run_id>/spans/;
 - E3: resultado de cada rodada em validacoes_ancora e o FactSheet assinado (factsheets, claims e
   claim_numeros numa transação), e data/runs/<run_id>/validacoes/ e factsheet.json;
 - cópia local em data/sources/<fonte>/ e data/runs/<run_id>/;
-- conexão do checkpointer do LangGraph.
+- conexão do checkpointer do LangGraph;
+- leitura dos runs para o dashboard (app/), em conexão só de leitura (ConsultaSupabase).
 
 As funções recebem o repositório (Supabase ou, nos testes, em memória) e a pasta raiz de dados
 por parâmetro.
@@ -89,7 +91,10 @@ class Repositorio(Protocol):
         ...
 
     def gravar_documento_processado(self, run_id: str, documento: DocumentoProcessado) -> None:
-        """Numa transação: `documento_paginas`, `chunks` e `numeros`. Linhas que já existem ficam como estão."""
+        """Numa transação: `documentos_processados`, `documento_paginas`, `chunks` e `numeros`.
+
+        Linhas que já existem ficam como estão. O documento precisa ser o vinculado ao run (doc_id e doc_sha256).
+        """
         ...
 
     def gravar_span(self, span: Span) -> None:
@@ -503,6 +508,10 @@ class RepositorioSupabase:
         self._executar(transacao)
 
     def gravar_documento_processado(self, run_id: str, documento: DocumentoProcessado) -> None:
+        metadados = (
+            run_id, documento.doc_id, documento.doc_sha256, documento.tipo_documento, documento.emissor,
+            documento.data_documento,
+        )
         paginas = [(run_id, p.pagina, p.texto_limpo, p.ocr) for p in documento.paginas]
         chunks = [
             (run_id, c.chunk_id, c.pagina_inicio, c.offset_inicio, c.pagina_fim, c.offset_fim, c.secao, c.texto)
@@ -515,6 +524,11 @@ class RepositorioSupabase:
 
         def transacao(conexao):
             with conexao.transaction(), conexao.cursor() as cursor:
+                cursor.execute(
+                    "insert into documentos_processados (run_id, doc_id, doc_sha256, tipo_documento, emissor,"
+                    " data_documento) values (%s, %s, %s, %s::tipo_documento, %s, %s) on conflict (run_id) do nothing",
+                    metadados,
+                )
                 cursor.executemany(
                     "insert into documento_paginas (run_id, pagina, texto_limpo, ocr) values (%s, %s, %s, %s)"
                     " on conflict (run_id, pagina) do nothing",
@@ -664,6 +678,145 @@ class RepositorioSupabase:
         self._executar(lambda conexao: conexao.execute("select 1"))
 
 
+class ConsultaSupabase:
+    """Leitura dos runs para o dashboard (app/). Não grava: toda transação abre com BEGIN READ ONLY.
+
+    O read_only fica na conexão do psycopg, e não em `options` da URL, porque o pooler do Supabase
+    descarta os parâmetros de inicialização da sessão.
+
+    Uma conexão por consulta, como no RepositorioSupabase. Devolve dicionários com os tipos do psycopg
+    (datetime, date, Decimal); a serialização para JSON fica com o servidor do dashboard.
+    """
+
+    def __init__(self, db_url: str, connect_timeout_s: int = 10):
+        self._db_url = db_url
+        self._connect_timeout_s = connect_timeout_s
+
+    def _executar(self, consulta):
+        import psycopg
+        from psycopg.rows import dict_row
+
+        try:
+            with psycopg.connect(
+                self._db_url, connect_timeout=self._connect_timeout_s, row_factory=dict_row
+            ) as conexao:
+                conexao.read_only = True
+                return consulta(conexao)
+        except psycopg.OperationalError as erro:
+            raise FalhaRetriavel(f"banco: {erro}") from erro
+        except psycopg.Error as erro:
+            raise FalhaTerminal(f"banco recusou a consulta: {erro}") from erro
+
+    def verificar_conexao(self) -> None:
+        self._executar(lambda conexao: conexao.execute("select 1"))
+
+    def listar_runs(self, limite: int = 200) -> list[dict]:
+        """Resumo dos runs, do mais recente ao mais antigo. `claims` é nulo sem FactSheet assinado."""
+
+        def consulta(conexao):
+            return conexao.execute(
+                'select r.run_id, r."timestamp", r.modo, r.fonte, r.status, r.doc_id, r.custo_total_tokens,'
+                " r.custo_total_brl, r.erro_classe, r.erro_mensagem,"
+                " nullif((select count(*) from claims c where c.run_id = r.run_id), 0) as claims"
+                ' from runs r order by r."timestamp" desc, r.run_id limit %s',
+                (limite,),
+            ).fetchall()
+
+        return self._executar(consulta)
+
+    def detalhar_run(self, run_id: str) -> dict | None:
+        """Run, documento processado (resumido), FactSheet, validações por rodada e spans. None se o run não existe."""
+
+        def consulta(conexao):
+            manifest = conexao.execute(
+                'select run_id, "timestamp", modo, fonte, status, doc_id, doc_sha256, coleta_id, url_origem,'
+                ' coletado_em, modelos, prompts, level_specs, glossario_versao, arquivos_sha256, "K",'
+                " custo_total_tokens, custo_total_brl, erro_classe, erro_mensagem from runs where run_id = %s",
+                (run_id,),
+            ).fetchone()
+            if manifest is None:
+                return None
+            return {
+                "manifest": manifest,
+                "documento": self._documento(conexao, run_id),
+                "factsheet": self._factsheet(conexao, run_id),
+                "validacoes": self._validacoes(conexao, run_id),
+                "spans": conexao.execute(
+                    "select span_id, no, nivel, celula_id, tentativa, modelo, tokens_entrada, tokens_saida,"
+                    " custo_brl, duracao_ms, falha_classe, falha_mensagem, criado_em"
+                    " from llm_spans where run_id = %s order by criado_em, span_id",
+                    (run_id,),
+                ).fetchall(),
+            }
+
+        return self._executar(consulta)
+
+    @staticmethod
+    def _documento(conexao, run_id: str) -> dict | None:
+        """Metadados e contagens da saída da E1. None se a E1 não gravou o documento do run."""
+        return conexao.execute(
+            "select d.doc_id, d.doc_sha256, d.tipo_documento, d.emissor, d.data_documento,"
+            " (select count(*) from documento_paginas p where p.run_id = d.run_id) as paginas,"
+            " (select count(*) from documento_paginas p where p.run_id = d.run_id and p.ocr) as paginas_ocr,"
+            " (select count(*) from chunks c where c.run_id = d.run_id) as chunks,"
+            " (select count(*) from numeros n where n.run_id = d.run_id) as numeros"
+            " from documentos_processados d where d.run_id = %s",
+            (run_id,),
+        ).fetchone()
+
+    @staticmethod
+    def _factsheet(conexao, run_id: str) -> dict | None:
+        factsheet = conexao.execute(
+            "select doc_id, tipo_documento, emissor, data_documento, assinado from factsheets where run_id = %s",
+            (run_id,),
+        ).fetchone()
+        if factsheet is None:
+            return None
+        numeros: dict[str, list[dict]] = {}
+        for n in conexao.execute(
+            "select claim_id, bruto, valor, unidade, pagina, offset_inicio, offset_fim from claim_numeros"
+            " where run_id = %s order by claim_id, ordem",
+            (run_id,),
+        ):
+            numeros.setdefault(n["claim_id"], []).append(
+                {"bruto": n["bruto"], "valor": n["valor"], "unidade": n["unidade"], "ancora": _ancora(n)}
+            )
+        claims = [
+            {
+                "id": c["claim_id"],
+                "texto": c["texto"],
+                "tipo": c["tipo"],
+                "tags": c["tags"],
+                "literal_fonte": c["literal_fonte"],
+                "ancora": _ancora(c),
+                "numeros": numeros.get(c["claim_id"], []),
+            }
+            for c in conexao.execute(
+                "select claim_id, texto, tipo, tags, literal_fonte, pagina, offset_inicio, offset_fim"
+                " from claims where run_id = %s order by claim_id",
+                (run_id,),
+            )
+        ]
+        return {**factsheet, "claims": claims}
+
+    @staticmethod
+    def _validacoes(conexao, run_id: str) -> list[dict]:
+        rodadas: dict[int, list[dict]] = {}
+        for v in conexao.execute(
+            "select rodada, claim_id, passou, motivo from validacoes_ancora where run_id = %s"
+            " order by rodada, claim_id",
+            (run_id,),
+        ):
+            rodadas.setdefault(v["rodada"], []).append(
+                {"claim_id": v["claim_id"], "passou": v["passou"], "motivo": v["motivo"]}
+            )
+        return [{"rodada": rodada, "claims": claims} for rodada, claims in rodadas.items()]
+
+
+def _ancora(linha: dict) -> dict:
+    return {"pagina": linha["pagina"], "offset_inicio": linha["offset_inicio"], "offset_fim": linha["offset_fim"]}
+
+
 VARIAVEIS_SUPABASE = ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_DB_URL")
 
 
@@ -685,6 +838,14 @@ def criar_repositorio_supabase(ambiente: Mapping[str, str]) -> RepositorioSupaba
     repositorio = RepositorioSupabase(cliente, ambiente["SUPABASE_DB_URL"])
     repositorio.verificar_conexao()
     return repositorio
+
+
+def criar_consulta_supabase(ambiente: Mapping[str, str]) -> ConsultaSupabase:
+    """Confere as credenciais e testa a conexão de leitura do dashboard."""
+    conferir_credenciais(ambiente)
+    consulta = ConsultaSupabase(ambiente["SUPABASE_DB_URL"])
+    consulta.verificar_conexao()
+    return consulta
 
 
 @contextmanager

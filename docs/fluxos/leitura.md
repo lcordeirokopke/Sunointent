@@ -84,5 +84,6 @@ Todos os números do documento entram na tabela, não só os que virarão claims
 
 ## Saída
 
-- `documento_paginas`, `chunks` e `numeros`, numa transação, com `on conflict do nothing`: repetir a gravação não duplica linhas. A cópia local é `data/runs/<run_id>/documento.json`, gravada depois do Supabase.
+- `documentos_processados` (uma linha por run: `doc_id`, `doc_sha256`, `tipo_documento`, `emissor` e `data_documento`), `documento_paginas`, `chunks` e `numeros`, numa transação, com `on conflict do nothing`: repetir a gravação não duplica linhas. A cópia local é `data/runs/<run_id>/documento.json`, gravada depois do Supabase.
+- `documentos_processados` aponta para `runs` por `(run_id, doc_id, doc_sha256)`: o banco recusa a saída da E1 de um documento que não é o vinculado ao run pela E0 ou pela referência do `--dev`. As páginas do run apontam para `documentos_processados`.
 - O `DocumentoProcessado` valida a si mesmo: páginas contíguas a partir de 1, o `bruto` de cada número igual ao texto na âncora, e o texto de cada chunk igual ao intervalo das páginas.

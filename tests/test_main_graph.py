@@ -380,3 +380,26 @@ def test_extractor_sem_claims_aborta_o_run(raiz, repo):
     assert rodar(raiz, repo, dev=True, llm=cliente_falso(['{"claims": []}'])) == 1
     (run,) = repo.runs.values()
     assert "nenhum claim" in run["erro_mensagem"]
+
+
+# __main__: linhas de etapa no terminal
+
+
+def etapas(saida):
+    return [linha for linha in saida.splitlines() if linha.startswith("etapa ")]
+
+
+def test_run_escreve_inicio_e_fim_de_cada_etapa(raiz, repo, capsys):
+    parafraseado = claim("O Copom cortou a Selic para 13,75% ao ano.", ["13,75%"])
+    llm = cliente_falso([json.dumps({"claims": [parafraseado]}), RESPOSTA_COPOM])
+    assert rodar(raiz, repo, dev=True, llm=llm) == 0
+    assert etapas(capsys.readouterr().out) == [
+        f"etapa {no}: {estado}"
+        for no in ("referencia", "leitura", "extract", "validate", "extract", "validate")
+        for estado in ("iniciada", "concluída")
+    ]
+
+
+def test_etapa_que_falha_fica_sem_a_linha_de_fim(raiz, repo, capsys):
+    assert rodar(raiz, repo, dev=False, http=cliente({})) == 1
+    assert etapas(capsys.readouterr().out) == ["etapa coleta: iniciada"]

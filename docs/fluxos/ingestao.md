@@ -276,7 +276,3 @@ tests/fixtures/
 | Modo desenvolvimento com hash do documento diferente do `doc_sha256` do `<fonte>.json`               | Terminal   | Para com mensagem indicando o arquivo, o hash esperado e o hash encontrado. O `.json` não é corrigido automaticamente. |
 
 Todos os erros desta tabela vêm de `ingestao/` e acontecem sem existir célula nenhuma, então abortam o run do documento inteiro: o run termina com status `abortado` e com `erro_classe` e `erro_mensagem` preenchidos, ou, se o Supabase está inacessível, esse registro fica só em `data/runs/<run_id>/manifest.json`. As linhas do download, do formato, do tamanho e de `data/sources/` vêm dos scripts por fonte, no modo normal; as duas linhas do Supabase vêm dos scripts por fonte e do `ingestao/referencia.py`, que gravam por `sunontent/persistencia.py`; as duas últimas, do `ingestao/referencia.py`, no modo desenvolvimento. Não é o estado `ERRO_INFRA`, que é por célula. A conferência das credenciais do Supabase é do `__main__.py` e para a execução sem criar linha em `runs`.
-
-## Pendências
-
-- `<fonte>.anotacao.yaml` de cada fonte ainda não existe em `tests/fixtures/referencia/`. Ele só é necessário para o teste de cobertura da E2.

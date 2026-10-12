@@ -78,6 +78,7 @@ class RepositorioMemoria:
     falhas: dict[str, list[Exception]] = field(default_factory=dict)
     perder_resposta_da_transacao: int = 0
     chamadas: dict[str, int] = field(default_factory=dict)
+    documentos_processados: dict[str, dict] = field(default_factory=dict)
     paginas: dict[tuple, dict] = field(default_factory=dict)
     chunks: dict[tuple, dict] = field(default_factory=dict)
     numeros: dict[tuple, dict] = field(default_factory=dict)
@@ -143,10 +144,20 @@ class RepositorioMemoria:
         run.update(doc_id=doc_id, doc_sha256=doc_sha256, url_origem=url_origem, coletado_em=coletado_em)
 
     def gravar_documento_processado(self, run_id, documento) -> None:
-        """Mesmas regras do Supabase: o run existe, linhas repetidas ficam como estão, tudo ou nada."""
+        """Mesmas regras do Supabase: o documento é o vinculado ao run, linhas repetidas ficam como estão, tudo ou nada."""
         self._entrar("gravar_documento_processado")
-        if run_id not in self.runs:
+        run = self.runs.get(run_id)
+        if run is None:
             raise FalhaTerminal(f"run {run_id} não existe em runs")
+        coleta = run.get("coleta")
+        vinculado = (coleta.doc_id, coleta.doc_sha256) if coleta else (run.get("doc_id"), run.get("doc_sha256"))
+        if vinculado != (documento.doc_id, documento.doc_sha256):
+            raise FalhaTerminal(f"documento {documento.doc_id} não é o vinculado ao run {run_id}")
+        self.documentos_processados.setdefault(run_id, {
+            "doc_id": documento.doc_id, "doc_sha256": documento.doc_sha256,
+            "tipo_documento": documento.tipo_documento, "emissor": documento.emissor,
+            "data_documento": documento.data_documento,
+        })
         paginas = {(run_id, p.pagina): {"texto_limpo": p.texto_limpo, "ocr": p.ocr} for p in documento.paginas}
         chunks = {(run_id, c.chunk_id): c.model_dump() for c in documento.chunks}
         numeros = {

@@ -62,6 +62,21 @@ def _com_custo(manifest: RunManifest, cliente_llm: llm.ClienteLLM) -> RunManifes
     )
 
 
+def _rodar_grafo(grafo, estado: PipelineState, config: dict) -> dict:
+    """Roda o grafo e escreve uma linha no início e no fim de cada etapa. Devolve o estado final.
+
+    Formato: `etapa <no>: iniciada` e `etapa <no>: concluída`. A etapa que falha não tem a linha de fim: a exceção
+    sobe e o `abortado (...)` vem em seguida. O dashboard (app/) lê essas linhas.
+    """
+    resultado = None
+    for modo, evento in grafo.stream(estado, config, stream_mode=["tasks", "values"]):
+        if modo == "values":
+            resultado = evento
+        else:
+            print(f"etapa {evento['name']}: {'concluída' if 'result' in evento else 'iniciada'}", flush=True)
+    return resultado
+
+
 def executar(
     fonte: Fonte,
     *,
@@ -101,7 +116,8 @@ def executar(
         configuravel["cliente_http"] = cliente_http
 
     try:
-        resultado = graph.construir_grafo(checkpointer).invoke(
+        resultado = _rodar_grafo(
+            graph.construir_grafo(checkpointer),
             PipelineState(run_id=run_id, manifest=manifest),
             {"configurable": configuravel},
         )

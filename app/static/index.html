@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sunontent: fluxo do pipeline</title>
+  <link rel="stylesheet" href="/static/estilo.css">
+</head>
+<body>
+  <header class="topo">
+    <div class="marca">
+      <span class="marca-icone" aria-hidden="true">◆</span>
+      <div>
+        <h1>Sunontent</h1>
+        <p>Fluxo do pipeline, do documento ao FactSheet</p>
+      </div>
+    </div>
+    <div class="estado-geral" id="estado-geral" data-estado="ocioso">
+      <span class="ponto"></span><span id="estado-geral-texto">ocioso</span>
+    </div>
+  </header>
+
+  <section class="controles" aria-label="Iniciar o pipeline">
+    <div class="campo">
+      <span class="rotulo">Fonte</span>
+      <div class="segmentado" id="fontes" role="radiogroup" aria-label="Fonte">
+        <button type="button" role="radio" data-fonte="" aria-checked="true">Todas</button>
+        <button type="button" role="radio" data-fonte="copom" aria-checked="false">Copom</button>
+        <button type="button" role="radio" data-fonte="cvm" aria-checked="false">CVM</button>
+        <button type="button" role="radio" data-fonte="b3" aria-checked="false">B3</button>
+      </div>
+    </div>
+    <div class="acoes">
+      <button type="button" class="botao primario" id="btn-executar" title="Roda o __main__.py: baixa a publicação mais recente e executa o graph.py">
+        <span aria-hidden="true">▶</span> Executar run
+      </button>
+      <button type="button" class="botao dev" id="btn-dev" title="Roda o __main__.py com --dev: usa o documento de referência de tests/fixtures/referencia/">
+        <span aria-hidden="true">⚑</span> Modo dev
+      </button>
+      <button type="button" class="botao perigo" id="btn-parar" disabled title="Interrompe o processo em andamento">
+        <span aria-hidden="true">■</span> Parar
+      </button>
+    </div>
+    <code class="comando" id="comando">$ python -m sunontent</code>
+  </section>
+
+  <nav class="abas" role="tablist" aria-label="Seções">
+    <button type="button" role="tab" class="aba" data-aba="fluxo" aria-selected="true">Fluxo</button>
+    <button type="button" role="tab" class="aba" data-aba="resultado" aria-selected="false">Resultado</button>
+    <button type="button" role="tab" class="aba" data-aba="historico" aria-selected="false">Histórico</button>
+  </nav>
+
+  <main>
+    <!-- Fluxo -->
+    <section class="painel" id="painel-fluxo" role="tabpanel">
+      <div class="runs-execucao" id="runs-execucao" hidden></div>
+
+      <div class="pipeline" id="pipeline" aria-label="Etapas do pipeline"></div>
+
+      <details class="grafo-detalhe">
+        <summary>Arestas do grafo (<code>graph.py</code>)</summary>
+        <div id="grafo-arestas" class="grafo-arestas"></div>
+      </details>
+
+      <nav class="subabas" id="subabas" role="tablist" aria-label="Etapas"></nav>
+      <div class="subpainel" id="subpainel"></div>
+    </section>
+
+    <!-- Resultado -->
+    <section class="painel" id="painel-resultado" role="tabpanel" hidden>
+      <div class="barra-resultado">
+        <label for="sel-run" class="rotulo">Run</label>
+        <select id="sel-run"></select>
+      </div>
+      <div id="resultado"></div>
+    </section>
+
+    <!-- Histórico -->
+    <section class="painel" id="painel-historico" role="tabpanel" hidden>
+      <div class="barra-resultado">
+        <span class="rotulo">Runs gravados no Supabase</span>
+        <button type="button" class="botao fantasma" id="btn-atualizar">↻ Atualizar</button>
+      </div>
+      <div id="historico"></div>
+    </section>
+  </main>
+
+  <div class="aviso" id="aviso" role="status" aria-live="polite" hidden></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

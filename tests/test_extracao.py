@@ -383,10 +383,20 @@ def test_saida_igual_ao_snapshot(processados, fonte):
 # Gravação
 
 
+def vincular(repositorio, run_id, doc):
+    """O que a E0 ou a referência fazem antes da E1: vincular o documento ao run."""
+    repositorio.runs[run_id].update(doc_id=doc.doc_id, doc_sha256=doc.doc_sha256)
+    return doc
+
+
 def test_gravacao_no_repositorio_e_na_copia_local(processados, repositorio, run_id, tmp_path):
-    doc = processados["copom"]
+    doc = vincular(repositorio, run_id, processados["copom"])
     caminho = persistencia.gravar_documento_processado(repositorio, tmp_path, run_id, doc)
     assert caminho == tmp_path / "runs" / run_id / "documento.json"
+    assert repositorio.documentos_processados[run_id] == {
+        "doc_id": doc.doc_id, "doc_sha256": doc.doc_sha256, "tipo_documento": doc.tipo_documento,
+        "emissor": doc.emissor, "data_documento": doc.data_documento,
+    }
     assert len(repositorio.paginas) == len(doc.paginas)
     assert len(repositorio.chunks) == len(doc.chunks)
     assert len(repositorio.numeros) == len(doc.tabela_numeros)
@@ -395,10 +405,17 @@ def test_gravacao_no_repositorio_e_na_copia_local(processados, repositorio, run_
 
 
 def test_gravacao_repetida_nao_duplica(processados, repositorio, run_id, tmp_path):
-    doc = processados["cvm"]
+    doc = vincular(repositorio, run_id, processados["cvm"])
     for _ in range(2):
         persistencia.gravar_documento_processado(repositorio, tmp_path, run_id, doc)
     assert len(repositorio.paginas) == len(doc.paginas) and len(repositorio.numeros) == len(doc.tabela_numeros)
+
+
+def test_documento_que_nao_e_o_do_run_e_recusado(processados, repositorio, run_id, tmp_path):
+    vincular(repositorio, run_id, processados["copom"])
+    with pytest.raises(FalhaTerminal, match="não é o vinculado"):
+        persistencia.gravar_documento_processado(repositorio, tmp_path, run_id, processados["cvm"])
+    assert not repositorio.documentos_processados and not (tmp_path / "runs").exists()
 
 
 def test_supabase_fora_antes_da_copia_local_nao_grava_localmente(processados, repositorio, run_id, tmp_path):
@@ -410,5 +427,5 @@ def test_supabase_fora_antes_da_copia_local_nao_grava_localmente(processados, re
 
 def test_falha_passageira_do_supabase_e_repetida(processados, repositorio, run_id, tmp_path):
     repositorio.falhas["gravar_documento_processado"] = [FalhaRetriavel("oscilou")]
-    persistencia.gravar_documento_processado(repositorio, tmp_path, run_id, processados["cvm"])
+    persistencia.gravar_documento_processado(repositorio, tmp_path, run_id, vincular(repositorio, run_id, processados["cvm"]))
     assert repositorio.chamadas["gravar_documento_processado"] == 2 and repositorio.paginas

@@ -45,6 +45,7 @@ create table runs (
   check ((doc_id is null) = (doc_sha256 is null)),
   check ((doc_sha256 is null) = (url_origem is null) and (doc_sha256 is null) = (coletado_em is null)),
   check (status <> 'concluido' or doc_sha256 is not null),
+  unique (run_id, doc_id, doc_sha256),  -- alvo da FK composta de documentos_processados
   check ((status = 'abortado') = (erro_classe is not null)),
   check ((erro_classe is null) = (erro_mensagem is null)),
   -- Documento conhecido: modo normal tem coleta, --dev não tem.

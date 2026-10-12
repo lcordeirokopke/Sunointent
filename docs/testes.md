@@ -1,6 +1,6 @@
 # Testes
 
-Os testes ficam em `tests/` e rodam com `pytest` a partir da raiz do repositório. Hoje cobrem a E0 (coleta dos PDFs de Copom, CVM e B3), a E1 (leitura), a E2 (extractor e ancoragem), a E3 (validador de âncoras), o cliente LLM, o manifest do run, o grafo e o `__main__`.
+Os testes ficam em `tests/` e rodam com `pytest` a partir da raiz do repositório. Hoje cobrem a E0 (coleta dos PDFs de Copom, CVM e B3), a E1 (leitura), a E2 (extractor e ancoragem), a E3 (validador de âncoras), o cliente LLM, o manifest do run, o grafo, o `__main__`, o dashboard (`app/`) e as consultas de leitura do dashboard.
 
 ## Para que servem
 
@@ -18,14 +18,16 @@ Quase tudo é simulado. O código do projeto roda de verdade; o mundo externo (i
 | Parte | Como é simulada | Onde |
 |---|---|---|
 | Internet (BCB, CVM, B3) | `httpx.MockTransport` devolve respostas prontas de `tests/fixtures/http/`, inclusive 503, 429, timeout e 404 | `test_ingestao.py` |
-| Supabase | `RepositorioMemoria`: classe em memória com as mesmas regras do banco usadas pela E0, que também injeta falhas por método | `conftest.py` |
+| Supabase | `RepositorioMemoria`: classe em memória com as mesmas regras do banco usadas pelo pipeline (E0 a E3), que também injeta falhas por método | `conftest.py` |
+| Leitura do Supabase pelo dashboard | `ConsultaFalsa`: devolve runs prontos ou levanta a falha pedida | `test_app.py` |
+| Processo do pipeline iniciado pelo dashboard | script Python que escreve as mesmas linhas do `__main__.py` | `test_app.py` |
 | Storage do Supabase | `_StorageFalso`: só devolve o erro que o teste pede | `test_ingestao.py` |
 | Espera do backoff | `monkeypatch` troca `retentativa._dormir` por uma lista; o teste confere o tamanho da lista e que as esperas crescem, sem esperar de verdade | `conftest.py` |
 | Disco | `tmp_path` do pytest no lugar de `data/` | todos |
 | Checkpointer do LangGraph | `InMemorySaver` | `test_main_graph.py` |
 | Gemini API | `ProviderFalso`: devolve respostas prontas em ordem (JSON, `RespostaBruta` ou exceção) e guarda os prompts recebidos; `cliente_falso` monta o `ClienteLLM` com ele | `conftest.py` |
 
-Rodam de verdade: `copom.py`, `cvm.py`, `b3.py`, `comum.py`, `retentativa.py`, `manifesto.py`, `graph.py` e `__main__.py` (parsing, validação de `%PDF-`, hash, limite de tamanho, classificação dos erros, ordem das gravações), o grafo LangGraph, a leitura e o hash dos arquivos de `config/` e `prompts/` (copiados para o `tmp_path`) e a escrita de arquivos no disco dentro do `tmp_path`.
+Rodam de verdade: `copom.py`, `cvm.py`, `b3.py`, `comum.py`, `retentativa.py`, `manifesto.py`, `graph.py` e `__main__.py` (parsing, validação de `%PDF-`, hash, limite de tamanho, classificação dos erros, ordem das gravações), o grafo LangGraph, o servidor do dashboard (`app/servidor.py` e `app/execucao.py`, com um processo filho de verdade), a leitura e o hash dos arquivos de `config/` e `prompts/` (copiados para o `tmp_path`) e a escrita de arquivos no disco dentro do `tmp_path`.
 
 Usam serviços reais só `test_persistencia_supabase.py`, contra o Supabase **local** do CLI, e o teste de cobertura com marker `gemini`, que chama a Gemini API.
 
@@ -52,6 +54,7 @@ tests/
 ├── test_extracao.py               # E1: leitura, normalização, chunks, metadados, números e gravação
 ├── test_extractor.py              # E2, E3, cliente LLM e cobertura com a Gemini API (marker gemini)
 ├── test_main_graph.py             # manifest, grafo (E0 a E3) e __main__
+├── test_app.py                    # dashboard: linhas do terminal e API com processo e consulta simulados
 ├── test_persistencia_supabase.py  # integração com o Supabase local
 └── fixtures/
     ├── http/                      # respostas simuladas por fonte (listagem e página de erro)
@@ -72,7 +75,9 @@ tests/
 - hash diferente, arquivo ausente, PDF sem camada de texto e arquivo que não é PDF: aborto terminal com mensagem clara;
 - snapshot `<fonte>.documento.json`: a saída precisa ser exatamente igual. Depois de uma mudança intencional, `REGERAR_DOCUMENTO=1 pytest tests/test_extracao.py` regrava os arquivos, e a diferença deve ser revisada.
 
-`test_main_graph.py` confere a E1 no grafo nos dois modos, a cópia local `documento.json` e o aborto do run quando a E1 falha. O teste de `test_persistencia_supabase.py` confere a gravação transacional e idempotente de `documento_paginas`, `chunks` e `numeros`.
+`test_main_graph.py` confere a E1 no grafo nos dois modos, a cópia local `documento.json` e o aborto do run quando a E1 falha. O teste de `test_persistencia_supabase.py` confere a gravação transacional e idempotente de `documentos_processados`, `documento_paginas`, `chunks` e `numeros`, e que o banco recusa o documento processado de outro documento.
+
+`test_extracao.py` também confere a gravação no repositório em memória, que segue a mesma regra do banco: a E1 só grava o documento vinculado ao run (`test_documento_que_nao_e_o_do_run_e_recusado`).
 
 ## E2 e E3: extração e validação
 
@@ -236,11 +241,32 @@ Cobre o manifest, o grafo e o `__main__`, com repositório e checkpointer em mem
 - `test_credenciais_ausentes_param_antes_de_tudo`: sem `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_DB_URL`, a execução para com erro listando as três.
 - `test_cli_recusa_fonte_desconhecida`: fonte inválida na linha de comando encerra; `cvm --dev` é lido corretamente.
 
+### Linhas de etapa no terminal
+
+- `test_run_escreve_inicio_e_fim_de_cada_etapa`: um run `--dev` com uma correção escreve `iniciada` e `concluída` para `referencia`, `leitura` e duas rodadas de `extract` e `validate`, nessa ordem.
+- `test_etapa_que_falha_fica_sem_a_linha_de_fim`: com a coleta falhando, só aparece `etapa coleta: iniciada`.
+
+## test_app.py
+
+Cobre o dashboard sem rodar o pipeline e sem banco: o processo é trocado por um script Python que escreve as mesmas linhas do `__main__.py`, e a `ConsultaSupabase` por uma `ConsultaFalsa` que devolve runs prontos ou levanta a falha pedida. As consultas de verdade são testadas em `test_persistencia_supabase.py`.
+
+- `test_classifica_as_linhas_do_main`: `run`, `etapa`, `concluído`, `abortado` e `erro` viram eventos com os campos extraídos; o resto é `log`.
+- `test_comando_do_pipeline`: o comando é `python -m sunontent [fonte] [--dev]`; fonte desconhecida é recusada.
+- `test_grafo_vem_do_graph_py`: `/api/grafo` devolve os nós e as arestas de `construir_grafo()`, inclusive `validate -> extract`.
+- `test_execucao_transmite_as_linhas_classificadas`: a execução recusa uma segunda enquanto roda, separa stdout e stderr, termina com o evento `fim` e o SSE devolve todos os eventos em ordem.
+- `test_fonte_desconhecida_e_recusada`, `test_parar_sem_execucao_e_recusado` e `test_run_inexistente_responde_404`: respostas 422, 409 e 404.
+- `test_runs_vem_da_consulta`: `/api/runs` e `/api/runs/<run_id>` devolvem o que a consulta devolve.
+- `test_supabase_fora_do_ar_responde_503_com_a_mensagem`: uma `Falha` do banco vira 503 com a mensagem, nas duas rotas.
+
 ## test_persistencia_supabase.py
 
-Integração com o Supabase local do CLI (`supabase start`). Cobre o que o repositório em memória não reproduz: constraints, triggers de imutabilidade e o bucket `documentos`. Tem o marker `supabase` e é pulado se as três variáveis de ambiente não estiverem definidas ou se o Supabase local estiver fora do ar. A limpeza é feita com `supabase db reset`.
+Integração com o Supabase local do CLI (`supabase start`, que roda o Postgres, o Storage e a API do Supabase em containers do Docker). Cobre o que o repositório em memória não reproduz: constraints, chaves estrangeiras, triggers de imutabilidade e o bucket `documentos`. Os testes da E1 em diante usam `run_com_referencia`: um run `--dev` da CVM com o documento de referência vinculado, como a E1 o encontra. Tem o marker `supabase` e é pulado se as três variáveis de ambiente não estiverem definidas ou se o Supabase local estiver fora do ar. A limpeza é feita com `supabase db reset`.
 
 - `test_coleta_completa_e_reaproveitamento`: em dois runs seguidos, envia o documento, registra a coleta e confere que o documento é reaproveitado; um envio direto de objeto existente é aceito sem sobrescrever; um run já vinculado tem a transação recusada; e `update` em `documentos` e `delete` em `coletas` são barrados pelo trigger de imutabilidade.
+- `test_documento_processado_grava_paginas_chunks_e_numeros` e `test_span_validacao_e_factsheet`: gravação da E1 e da E3, descritas nas seções da E1 e da E2 e E3.
+- `test_documento_que_nao_e_o_do_run_e_recusado`: a FK composta de `documentos_processados` recusa a saída da E1 de um documento que não é o vinculado ao run.
+- `test_consulta_le_o_run_completo_do_dashboard`: grava um run `--dev` completo (documento de referência, saída da E1, dois spans, duas rodadas de validação, FactSheet assinado) e confere o que a `ConsultaSupabase` devolve ao dashboard: o resumo com claims e tokens, o documento resumido, o claim com números e âncora, as rodadas em ordem e os spans em ordem de gravação. Roda as consultas contra o schema das migrations: uma coluna renomeada ou removida quebra aqui.
+- `test_consulta_nao_grava`: a conexão da consulta recusa um `delete` (transação só de leitura).
 
 ## Como rodar
 

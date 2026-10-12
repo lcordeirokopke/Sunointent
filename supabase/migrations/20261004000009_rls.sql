@@ -4,6 +4,7 @@
 alter table documentos            enable row level security;
 alter table coletas               enable row level security;
 alter table runs                  enable row level security;
+alter table documentos_processados enable row level security;
 alter table documento_paginas     enable row level security;
 alter table chunks                enable row level security;
 alter table factsheets            enable row level security;

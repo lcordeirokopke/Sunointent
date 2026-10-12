@@ -335,7 +335,7 @@ Detalhada em `docs/fluxos/ingestao.md`. No modo normal, baixa a publicação mai
 
 **Decide:** nada. É determinístico ponta a ponta e é a única etapa que pode ser testada com igualdade exata contra um fixture.
 
-**Gera:** `DocumentoProcessado` com chunks posicionados, `tabela_numeros` e metadados. Grava o texto limpo por página em `documento_paginas`, os chunks em `chunks` e a `tabela_numeros` em `numeros`.
+**Gera:** `DocumentoProcessado` com chunks posicionados, `tabela_numeros` e metadados. Grava os metadados (`doc_id`, `doc_sha256`, tipo, emissor e data) em `documentos_processados`, o texto limpo por página em `documento_paginas`, os chunks em `chunks` e a `tabela_numeros` em `numeros`.
 
 **Natureza:** determinístico. Zero LLM, zero token. Detalhada em `docs/fluxos/leitura.md`.
 
@@ -543,6 +543,8 @@ As duas razões, em ordem de importância:
 
 **O que faz:** o humano vê as 9 peças lado a lado, com a rastreabilidade (cada bloco linkado ao claim, cada claim linkado à página do PDF) e o painel de métricas, e marca publica ou descarta por célula. O dashboard lê tudo do Supabase: as tabelas do run e o PDF do bucket privado `documentos`, aberto por URL assinada de curta duração gerada no servidor do dashboard. A chave de serviço nunca chega ao navegador.
 
+O dashboard fica em `app/` (FastAPI, com HTML, CSS e JS sem build) e escuta só em `127.0.0.1`. Hoje ele inicia o pipeline, mostra as etapas ao vivo e lê os runs do Supabase pela `ConsultaSupabase` de `sunontent/persistencia.py`, em conexão só de leitura; a revisão por célula entra quando existirem as células. Detalhado em `docs/fluxos/dashboard.md`.
+
 **Decide:** publicar ou não. A decisão é registrada, não descartada: é o dado que permite medir depois se o avaliador concorda com o julgamento editorial humano.
 
 **Gera:** uma linha em `decisoes_humanas` por célula, gravada no Supabase e na cópia local. A decisão é final.
@@ -647,7 +649,13 @@ class PipelineState(BaseModel):
     manifest: RunManifest                          # versões de prompt, LevelSpec e pin de modelo
     documento_fonte: DocumentoFonte | None = None  # E0 ou nó de referência
     documento: DocumentoProcessado | None = None   # E1
-    factsheet: FactSheet | None = None             # E3, assinado
+    factsheet: FactSheet | None = None             # E2 (não assinado) e E3 (assinado)
+    # Loop E2/E3 (docs/fluxos/extracao.md): rodada atual, claims como o extractor os propôs,
+    # os que a E2 não ancorou e os que a E3 devolveu para correção, com o motivo.
+    rodada: int = 0
+    propostas: dict[str, ClaimProposto] = {}
+    pendencias: dict[str, str] = {}
+    correcoes: dict[str, str] = {}
     adaptados: dict[Nivel, ConteudoAdaptado] = {}  # E4
     celulas: dict[str, CelulaState] = {}           # 9 entradas depois da E4, chaveadas por celula_id
 ```
@@ -781,6 +789,8 @@ Escopo aqui: prompt injection vinda do documento fonte. Um PDF é entrada não c
 
 Span por chamada de LLM, custo e tokens por célula, persistência do scorecard, e replay de uma execução.
 
+Durante o run, o `__main__.py` escreve no terminal o início e o fim de cada nó do grafo (`etapa <no>: iniciada` e `etapa <no>: concluída`), que o dashboard usa para mostrar a etapa em andamento (`docs/fluxos/execucao.md`, Linhas de etapa no terminal).
+
 A rastreabilidade do Entregável 4 é uma capacidade de harness, não uma feature de dashboard: **se o trace não guardar qual âncora foi usada em qual bloco, nenhuma UI consegue mostrar isso depois.** Decida a granularidade do trace antes de construir o dashboard, não depois.
 
 ## 8. Cost & rate governance
@@ -797,7 +807,7 @@ E manter `ERRO_INFRA` como estado de célula distinto de `REPROVADA`. Os dois ch
 
 Versão de prompt, versão de LevelSpec, pin de modelo com snapshot, e um **run manifest** que amarra tudo isso ao resultado. Sem isso, reprodutibilidade é aspiracional: o mesmo documento com o mesmo código gera outro resultado porque o provider atualizou o modelo por baixo. As instruções de reprodutibilidade do Entregável 6 são, na prática, este componente.
 
-As credenciais ficam no `.env`, fora do git. O `.env.example` versionado lista as variáveis sem valores: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_DB_URL` (conexão do checkpointer e das transações pelo session pooler ou pela conexão direta, nunca pelo pooler de transação, que não aceita prepared statements). e `GOOGLE_API_KEY` (Gemini API, usada pelo extractor).
+As credenciais ficam no `.env`, fora do git. O `.env.example` versionado lista as variáveis sem valores: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_DB_URL` (conexão do checkpointer e das transações pelo session pooler ou pela conexão direta, nunca pelo pooler de transação, que não aceita prepared statements) e `GOOGLE_API_KEY` (Gemini API, usada pelo extractor).
 
 ---
 

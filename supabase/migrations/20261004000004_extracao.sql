@@ -3,9 +3,23 @@
 -- com offsets de caractere no texto limpo da página. chunks guarda um intervalo: offset_inicio
 -- relativo a pagina_inicio e offset_fim relativo a pagina_fim. A página é 1-indexada, como no PDF aberto por um humano.
 
+-- Metadados do DocumentoProcessado, um por run (docs/arquiteturas.md, E1. Leitura). Gravado pela E1 na
+-- mesma transação das páginas, dos chunks e dos números. Emissor e data vêm de extracao/metadados.py e
+-- pertencem ao run, não ao PDF: mudam se o código da E1 mudar. A FK composta garante que a E1 gravou o
+-- documento vinculado ao run pela E0 ou pela referência do --dev.
+create table documentos_processados (
+  run_id         text primary key,
+  doc_id         text not null,
+  doc_sha256     char(64) not null,
+  tipo_documento tipo_documento not null,
+  emissor        text not null,
+  data_documento date not null,
+  foreign key (run_id, doc_id, doc_sha256) references runs (run_id, doc_id, doc_sha256)
+);
+
 -- Texto limpo por página. Necessário para reverificar âncoras (docs/arquiteturas.md, E3. Validador de Âncoras).
 create table documento_paginas (
-  run_id      text not null references runs (run_id),
+  run_id      text not null references documentos_processados (run_id),
   pagina      int not null check (pagina >= 1),
   texto_limpo text not null,
   ocr         boolean not null default false,  -- página lida por OCR (docs/arquiteturas.md, E1. Leitura); sempre false enquanto o OCR não existe

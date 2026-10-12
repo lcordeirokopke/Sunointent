@@ -10,3 +10,5 @@ python-dotenv
 httpx
 pymupdf
 google-genai
+fastapi
+uvicorn
