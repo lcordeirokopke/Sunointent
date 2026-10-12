@@ -53,7 +53,7 @@ Nenhum nó importa outro nó: a passagem da E0 ou do nó de referência para a E
 
 ```mermaid
 flowchart TD
-    CLI["python -m sunontent fonte"] --> MODO{"parametro --dev?"}
+    CLI["python -m sunontent [fonte]"] --> MODO{"parametro --dev?"}
 
     MODO -->|"nao: modo normal"| E0["E0. Coleta: ingestao/fonte.py"]
     E0 --> WEB[("site da fonte")]

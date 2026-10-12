@@ -3,19 +3,23 @@
 - Trava: interrompe o pytest antes da coleta se SUPABASE_URL ou SUPABASE_DB_URL apontarem
   para um host diferente de localhost, 127.0.0.1 ou ::1. O .env não é carregado aqui.
 - Marker `supabase`: testes de integração com a cópia local do Supabase CLI.
+- Marker `gemini`: testes que chamam a Gemini API de verdade (custam tokens); só rodam com `-m gemini`.
 - Repositório em memória no lugar do Supabase e retentativa sem espera.
+- `ProviderFalso`: provider de LLM com respostas prontas, no lugar do Gemini.
 """
 
 import json
 import os
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from urllib.parse import urlparse
 
 import pytest
 
 from sunontent import retentativa
+from sunontent.llm import ClienteLLM, Preco, RespostaBruta
 from sunontent.persistencia import Coleta
 from sunontent.retentativa import FalhaRetriavel, FalhaTerminal
 
@@ -27,6 +31,9 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "supabase: integração com a cópia local do Supabase CLI (supabase start)"
     )
+    config.addinivalue_line(
+        "markers", "gemini: chama a Gemini API de verdade (GOOGLE_API_KEY); só roda com -m gemini"
+    )
     for variavel in ("SUPABASE_URL", "SUPABASE_DB_URL"):
         valor = os.environ.get(variavel)
         if not valor:
@@ -37,6 +44,16 @@ def pytest_configure(config):
                 f"{variavel} aponta para {host!r}. Os testes só usam o Supabase local "
                 f"({', '.join(sorted(HOSTS_LOCAIS))})."
             )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Testes `gemini` gastam tokens: ficam de fora, a menos que o -m os peça."""
+    if "gemini" in (config.getoption("-m") or ""):
+        return
+    pular = pytest.mark.skip(reason="chama a Gemini API; rode com -m gemini")
+    for item in items:
+        if "gemini" in item.keywords:
+            item.add_marker(pular)
 
 
 @pytest.fixture(autouse=True)
@@ -64,6 +81,9 @@ class RepositorioMemoria:
     paginas: dict[tuple, dict] = field(default_factory=dict)
     chunks: dict[tuple, dict] = field(default_factory=dict)
     numeros: dict[tuple, dict] = field(default_factory=dict)
+    spans: dict[str, object] = field(default_factory=dict)
+    validacoes: dict[tuple, dict] = field(default_factory=dict)
+    factsheets: dict[str, object] = field(default_factory=dict)
 
     def registrar_run(self, run_id: str) -> None:
         self.runs[run_id] = {"coleta_id": None}
@@ -137,6 +157,36 @@ class RepositorioMemoria:
             for chave, valor in novos.items():
                 destino.setdefault(chave, valor)
 
+    def gravar_span(self, span) -> None:
+        """Mesma regra do Supabase: span repetido não soma de novo o custo do run."""
+        self._entrar("gravar_span")
+        run = self.runs.get(span.run_id)
+        if run is None:
+            raise FalhaTerminal(f"run {span.run_id} não existe em runs")
+        if span.span_id in self.spans:
+            return
+        self.spans[span.span_id] = span
+        run["custo_total_tokens"] = run.get("custo_total_tokens", 0) + span.tokens_entrada + span.tokens_saida
+        run["custo_total_brl"] = run.get("custo_total_brl", Decimal(0)) + span.custo_brl
+
+    def gravar_validacao(self, run_id, rodada, resultados) -> None:
+        self._entrar("gravar_validacao")
+        if run_id not in self.runs:
+            raise FalhaTerminal(f"run {run_id} não existe em runs")
+        for claim_id, motivo in resultados:
+            self.validacoes.setdefault((run_id, rodada, claim_id), {"passou": motivo is None, "motivo": motivo})
+
+    def gravar_factsheet(self, run_id, factsheet) -> None:
+        """Mesmas regras do Supabase: todo número do claim existe em numeros na mesma posição."""
+        self._entrar("gravar_factsheet")
+        if run_id not in self.runs:
+            raise FalhaTerminal(f"run {run_id} não existe em runs")
+        for claim in factsheet.claims:
+            for n in claim.numeros:
+                if (run_id, n.ancora.pagina, n.ancora.offset_inicio, n.ancora.offset_fim) not in self.numeros:
+                    raise FalhaTerminal(f"claim_numeros.numero_id nulo: {claim.id} {n.bruto!r}")
+        self.factsheets.setdefault(run_id, factsheet)
+
     def criar_run(self, manifest) -> None:
         self._entrar("criar_run")
         self.runs.setdefault(manifest.run_id, {"coleta_id": None, "manifest": manifest,
@@ -175,3 +225,34 @@ def referencia(fonte: str) -> tuple[bytes, dict] | None:
     if not (pdf.exists() and meta.exists()):
         return None
     return pdf.read_bytes(), json.loads(meta.read_text(encoding="utf-8"))
+
+
+class ProviderFalso:
+    """Provider de LLM com respostas prontas, consumidas em ordem.
+
+    Cada resposta é uma string (o JSON devolvido), um RespostaBruta ou uma exceção (levantada).
+    Guarda os prompts recebidos em `prompts`.
+    """
+
+    def __init__(self, respostas):
+        self.respostas = list(respostas)
+        self.prompts: list[str] = []
+
+    def gerar(self, modelo, prompt, json_schema):
+        self.prompts.append(prompt)
+        resposta = self.respostas.pop(0)
+        if isinstance(resposta, Exception):
+            raise resposta
+        if isinstance(resposta, str):
+            return RespostaBruta(resposta, 1000, 200)
+        return resposta
+
+
+def cliente_falso(respostas) -> ClienteLLM:
+    """ClienteLLM do extractor com o ProviderFalso; preço de 1 US$ por milhão nos dois sentidos, cotação 5."""
+    return ClienteLLM(
+        ProviderFalso(respostas),
+        {"extractor": "modelo-falso"},
+        {"modelo-falso": Preco(Decimal(1), Decimal(1))},
+        Decimal(5),
+    )

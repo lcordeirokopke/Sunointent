@@ -2,7 +2,7 @@
 
 Sem a fonte, roda as três em sequência (copom, cvm e b3), um run por fonte.
 
-Lê os parâmetros, confere as credenciais do Supabase, gera o run_id, registra o run e escolhe a
+Lê os parâmetros, confere as credenciais do Supabase e do Gemini, gera o run_id, registra o run e escolhe a
 entrada do grafo (E0 no modo normal, nó de referência no --dev). Ver docs/fluxos/ingestao.md.
 """
 
@@ -14,7 +14,7 @@ from collections.abc import Callable, Sequence
 from datetime import datetime
 from pathlib import Path
 
-from sunontent import graph, manifesto, persistencia
+from sunontent import graph, llm, manifesto, persistencia
 from sunontent.ingestao import comum
 from sunontent.retentativa import Falha
 from sunontent.schemas import Fonte, PipelineState, RunManifest
@@ -52,12 +52,23 @@ def _abortar(
         print(f"o aborto não foi registrado: {falha.mensagem}", file=sys.stderr)
 
 
+def _com_custo(manifest: RunManifest, cliente_llm: llm.ClienteLLM) -> RunManifest:
+    """Manifest com o custo acumulado pelas chamadas de LLM do run, para a cópia local."""
+    return manifest.model_copy(
+        update={
+            "custo_total_tokens": cliente_llm.custo_total_tokens,
+            "custo_total_brl": cliente_llm.custo_total_brl,
+        }
+    )
+
+
 def executar(
     fonte: Fonte,
     *,
     dev: bool,
     repositorio: persistencia.Repositorio,
     checkpointer,
+    cliente_llm: llm.ClienteLLM,
     raiz: Path = RAIZ,
     cliente_http=None,
     relogio: Callable[[], datetime] = comum.agora_utc,
@@ -81,7 +92,9 @@ def executar(
     configuravel = {
         "thread_id": run_id,
         "repositorio": repositorio,
+        "raiz": raiz,
         "raiz_dados": raiz_dados,
+        "llm": cliente_llm,
         "pasta_referencia": raiz / "tests" / "fixtures" / "referencia",
     }
     if cliente_http is not None:
@@ -93,15 +106,17 @@ def executar(
             {"configurable": configuravel},
         )
     except Falha as falha:
-        _abortar(repositorio, raiz_dados, manifest, falha.classe, falha.mensagem)
+        _abortar(repositorio, raiz_dados, _com_custo(manifest, cliente_llm), falha.classe, falha.mensagem)
         return 1
     except Exception as erro:
         # Bug fora do contrato de falhas: registra como terminal, com o tipo da exceção, e propaga.
-        _abortar(repositorio, raiz_dados, manifest, "terminal", f"{type(erro).__name__}: {erro}")
+        _abortar(
+            repositorio, raiz_dados, _com_custo(manifest, cliente_llm), "terminal", f"{type(erro).__name__}: {erro}"
+        )
         raise
 
     documento = resultado["documento_fonte"]
-    manifest = manifest.model_copy(
+    manifest = _com_custo(manifest, cliente_llm).model_copy(
         update={
             "doc_id": documento.doc_id,
             "doc_sha256": documento.doc_sha256,
@@ -111,7 +126,11 @@ def executar(
         }
     )
     persistencia.concluir_run(repositorio, raiz_dados, manifest)
-    print(f"concluído: {documento.doc_id} ({documento.doc_sha256[:12]})")
+    claims = len(resultado["factsheet"].claims)
+    print(
+        f"concluído: {documento.doc_id} ({documento.doc_sha256[:12]}), {claims} claims,"
+        f" {cliente_llm.custo_total_tokens} tokens, R$ {cliente_llm.custo_total_brl:.4f}"
+    )
     return 0
 
 
@@ -122,9 +141,17 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         load_dotenv(RAIZ / ".env")
         repositorio = persistencia.criar_repositorio_supabase(os.environ)
+        llm.conferir_credenciais(os.environ)
         with persistencia.checkpointer_postgres(os.environ["SUPABASE_DB_URL"]) as checkpointer:
+            # Um cliente por run, para que o custo acumulado seja só daquele run.
             codigos = [
-                executar(fonte, dev=parametros.dev, repositorio=repositorio, checkpointer=checkpointer)
+                executar(
+                    fonte,
+                    dev=parametros.dev,
+                    repositorio=repositorio,
+                    checkpointer=checkpointer,
+                    cliente_llm=llm.criar_cliente(RAIZ, os.environ),
+                )
                 for fonte in ([parametros.fonte] if parametros.fonte else FONTES)
             ]
             return int(any(codigos))

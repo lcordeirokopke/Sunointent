@@ -6,6 +6,9 @@ Funções da E0 e do run (docs/fluxos/ingestao.md, docs/arquiteturas.md):
 - registro do documento de referência do modo --dev, sem coleta;
 - criação e fechamento da linha de `runs`, e o manifest.json local;
 - saída da E1: páginas, chunks e números numa transação, e data/runs/<run_id>/documento.json;
+- spans de LLM, com o custo somado em runs na mesma instrução, e data/runs/<run_id>/spans/;
+- E3: resultado de cada rodada em validacoes_ancora e o FactSheet assinado (factsheets, claims e
+  claim_numeros numa transação), e data/runs/<run_id>/validacoes/ e factsheet.json;
 - cópia local em data/sources/<fonte>/ e data/runs/<run_id>/;
 - conexão do checkpointer do LangGraph.
 
@@ -23,7 +26,7 @@ from pathlib import Path
 from typing import Mapping, Protocol
 
 from sunontent.retentativa import Falha, FalhaRetriavel, FalhaTerminal, com_retentativa
-from sunontent.schemas import DocumentoFonte, DocumentoProcessado, RunManifest
+from sunontent.schemas import DocumentoFonte, DocumentoProcessado, FactSheet, RunManifest, Span
 
 BUCKET_DOCUMENTOS = "documentos"
 
@@ -87,6 +90,18 @@ class Repositorio(Protocol):
 
     def gravar_documento_processado(self, run_id: str, documento: DocumentoProcessado) -> None:
         """Numa transação: `documento_paginas`, `chunks` e `numeros`. Linhas que já existem ficam como estão."""
+        ...
+
+    def gravar_span(self, span: Span) -> None:
+        """Insere em `llm_spans` e soma tokens e custo em `runs` na mesma instrução. Span repetido não soma de novo."""
+        ...
+
+    def gravar_validacao(self, run_id: str, rodada: int, resultados: list[tuple[str, str | None]]) -> None:
+        """Linhas de `validacoes_ancora` da rodada: (claim_id, motivo), motivo None quando passou. Repetição não duplica."""
+        ...
+
+    def gravar_factsheet(self, run_id: str, factsheet: FactSheet) -> None:
+        """Numa transação: `factsheets`, `claims` e `claim_numeros`, cada número ligado à sua linha em `numeros`."""
         ...
 
     def criar_run(self, manifest: RunManifest) -> None:
@@ -203,6 +218,47 @@ def gravar_documento_processado(
     texto = json.dumps(documento.model_dump(mode="json"), ensure_ascii=False, indent=2) + "\n"
     _gravar_atomico(destino, texto.encode("utf-8"))
     return destino
+
+
+def _gravar_json(destino: Path, conteudo) -> Path:
+    texto = json.dumps(conteudo, ensure_ascii=False, indent=2) + "\n"
+    _gravar_atomico(destino, texto.encode("utf-8"))
+    return destino
+
+
+def gravar_span(repositorio: Repositorio, raiz_dados: Path, span: Span) -> Path:
+    """Grava o span (e o custo do run) no Supabase e, depois, em data/runs/<run_id>/spans/<span_id>.json."""
+    com_retentativa(lambda: repositorio.gravar_span(span), f"gravação do span {span.span_id} do run {span.run_id}")
+    destino = Path(raiz_dados) / "runs" / span.run_id / "spans" / f"{span.span_id}.json"
+    return _gravar_json(destino, span.model_dump(mode="json"))
+
+
+def gravar_validacao(
+    repositorio: Repositorio, raiz_dados: Path, run_id: str, rodada: int, resultados: list[tuple[str, str | None]]
+) -> Path:
+    """Grava a rodada da E3 no Supabase e, depois, em data/runs/<run_id>/validacoes/<rodada>.json."""
+    com_retentativa(
+        lambda: repositorio.gravar_validacao(run_id, rodada, resultados),
+        f"gravação da validação {rodada} do run {run_id}",
+    )
+    destino = Path(raiz_dados) / "runs" / run_id / "validacoes" / f"{rodada}.json"
+    conteudo = {
+        "rodada": rodada,
+        "claims": [
+            {"claim_id": claim_id, "passou": motivo is None, "motivo": motivo} for claim_id, motivo in resultados
+        ],
+    }
+    return _gravar_json(destino, conteudo)
+
+
+def gravar_factsheet(repositorio: Repositorio, raiz_dados: Path, run_id: str, factsheet: FactSheet) -> Path:
+    """Grava o FactSheet assinado no Supabase e, depois, em data/runs/<run_id>/factsheet.json, sem a
+    tabela_numeros, que já está em documento.json."""
+    if not factsheet.assinado:
+        raise FalhaTerminal(f"FactSheet do run {run_id} não está assinado; só a E3 grava o FactSheet")
+    com_retentativa(lambda: repositorio.gravar_factsheet(run_id, factsheet), f"gravação do FactSheet do run {run_id}")
+    destino = Path(raiz_dados) / "runs" / run_id / "factsheet.json"
+    return _gravar_json(destino, factsheet.model_dump(mode="json", exclude={"tabela_numeros"}))
 
 
 def criar_run(repositorio: Repositorio, manifest: RunManifest) -> None:
@@ -474,6 +530,85 @@ class RepositorioSupabase:
                     "insert into numeros (run_id, bruto, valor, unidade, pagina, offset_inicio, offset_fim)"
                     " values (%s, %s, %s, %s::unidade_numero, %s, %s, %s)"
                     " on conflict (run_id, pagina, offset_inicio, offset_fim) do nothing",
+                    numeros,
+                )
+
+        self._executar(transacao)
+
+    def gravar_span(self, span: Span) -> None:
+        def instrucao(conexao):
+            conexao.execute(
+                "with s as (insert into llm_spans (span_id, run_id, no, nivel, celula_id, tentativa, modelo,"
+                " tokens_entrada, tokens_saida, custo_brl, duracao_ms, falha_classe, falha_mensagem)"
+                " values (%s, %s, %s, %s::nivel, %s, %s, %s, %s, %s, %s, %s, %s::classe_falha, %s)"
+                " on conflict (span_id) do nothing"
+                " returning run_id, tokens_entrada + tokens_saida as tokens, custo_brl)"
+                " update runs set custo_total_tokens = runs.custo_total_tokens + s.tokens,"
+                " custo_total_brl = runs.custo_total_brl + s.custo_brl from s where runs.run_id = s.run_id",
+                (
+                    span.span_id,
+                    span.run_id,
+                    span.no,
+                    span.nivel,
+                    span.celula_id,
+                    span.tentativa,
+                    span.modelo,
+                    span.tokens_entrada,
+                    span.tokens_saida,
+                    span.custo_brl,
+                    span.duracao_ms,
+                    span.falha_classe,
+                    span.falha_mensagem,
+                ),
+            )
+
+        self._executar(instrucao)
+
+    def gravar_validacao(self, run_id: str, rodada: int, resultados: list[tuple[str, str | None]]) -> None:
+        linhas = [(run_id, rodada, claim_id, motivo is None, motivo) for claim_id, motivo in resultados]
+
+        def transacao(conexao):
+            with conexao.transaction(), conexao.cursor() as cursor:
+                cursor.executemany(
+                    "insert into validacoes_ancora (run_id, rodada, claim_id, passou, motivo)"
+                    " values (%s, %s, %s, %s, %s) on conflict (run_id, rodada, claim_id) do nothing",
+                    linhas,
+                )
+
+        self._executar(transacao)
+
+    def gravar_factsheet(self, run_id: str, factsheet: FactSheet) -> None:
+        claims = [
+            (run_id, c.id, c.texto, c.tipo, c.tags, c.literal_fonte, c.ancora.pagina, c.ancora.offset_inicio,
+             c.ancora.offset_fim)
+            for c in factsheet.claims
+        ]
+        numeros = [
+            (run_id, c.id, ordem, n.bruto, n.valor, n.unidade, n.ancora.pagina, n.ancora.offset_inicio,
+             n.ancora.offset_fim, run_id, n.ancora.pagina, n.ancora.offset_inicio, n.ancora.offset_fim)
+            for c in factsheet.claims
+            for ordem, n in enumerate(c.numeros, start=1)
+        ]
+
+        def transacao(conexao):
+            with conexao.transaction(), conexao.cursor() as cursor:
+                cursor.execute(
+                    "insert into factsheets (run_id, doc_id, tipo_documento, emissor, data_documento, assinado)"
+                    " values (%s, %s, %s::tipo_documento, %s, %s, %s) on conflict (run_id) do nothing",
+                    (run_id, factsheet.doc_id, factsheet.tipo_documento, factsheet.emissor,
+                     factsheet.data_documento, factsheet.assinado),
+                )
+                cursor.executemany(
+                    "insert into claims (run_id, claim_id, texto, tipo, tags, literal_fonte, pagina, offset_inicio,"
+                    " offset_fim) values (%s, %s, %s, %s::tipo_claim, %s, %s, %s, %s, %s)"
+                    " on conflict (run_id, claim_id) do nothing",
+                    claims,
+                )
+                cursor.executemany(
+                    "insert into claim_numeros (run_id, claim_id, ordem, bruto, valor, unidade, pagina,"
+                    " offset_inicio, offset_fim, numero_id) values (%s, %s, %s, %s, %s, %s::unidade_numero, %s,"
+                    " %s, %s, (select id from numeros where run_id = %s and pagina = %s and offset_inicio = %s"
+                    " and offset_fim = %s)) on conflict (run_id, claim_id, ordem) do nothing",
                     numeros,
                 )
 

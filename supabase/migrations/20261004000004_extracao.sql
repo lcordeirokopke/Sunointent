@@ -45,8 +45,7 @@ create table factsheets (
 );
 
 -- FactSheet.tabela_numeros: TODOS os números do fonte, com âncora. Gravada pela E1.
--- A documentação indexa por bruto (docs/arquiteturas.md, FactSheet), mas o mesmo bruto pode
--- aparecer em páginas diferentes; aqui a unicidade é por posição.
+-- O mesmo bruto pode aparecer em posições diferentes; a unicidade é por posição.
 create table numeros (
   id            bigint generated always as identity primary key,
   run_id        text not null,
@@ -78,10 +77,9 @@ create table claims (
   check (offset_fim >= offset_inicio)
 );
 
--- Claim.numeros: lista embutida de Numero no claim.
--- PENDENTE: a documentação diz que o claim referencia entradas da tabela_numeros
--- (docs/arquiteturas.md, E2. Extractor & Anchor), mas o schema embute o Numero completo (docs/arquiteturas.md, Claim).
--- Aqui guarda o Numero do claim e, quando houver, o vínculo com a entrada da tabela.
+-- Claim.numeros: o Numero completo de cada número do claim e o vínculo com a sua entrada em numeros.
+-- A E2 resolve cada número pelo bruto dentro do literal_fonte (docs/fluxos/extracao.md), então todo
+-- número de claim é uma entrada da tabela_numeros, na mesma posição.
 create table claim_numeros (
   run_id        text not null,
   claim_id      text not null,
@@ -92,14 +90,14 @@ create table claim_numeros (
   pagina        int not null,
   offset_inicio int not null,
   offset_fim    int not null,
-  numero_id     bigint references numeros (id),
+  numero_id     bigint not null references numeros (id),
   primary key (run_id, claim_id, ordem),
   foreign key (run_id, claim_id) references claims (run_id, claim_id)
 );
 
--- Rodadas de correção E3 -> E2 (docs/arquiteturas.md, E3. Validador de Âncoras). Gravadas antes de
+-- Rodadas do loop E2/E3 (docs/fluxos/extracao.md): uma linha por claim proposto em cada rodada, com o
+-- motivo da recusa. A rodada 1 é a extração; até 2 correções, depois o run aborta. Gravadas antes de
 -- existir o FactSheet assinado, por isso ligadas a runs.
--- PENDENTE: o schema do pedido de correção e o limite do loop E2/E3 não estão definidos.
 create table validacoes_ancora (
   run_id   text not null references runs (run_id),
   rodada   int not null check (rodada >= 1),

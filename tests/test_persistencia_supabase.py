@@ -124,3 +124,52 @@ def test_documento_processado_grava_paginas_chunks_e_numeros(repositorio, ambien
         "numeros": len(documento.tabela_numeros),
     }
     assert (str(valor[0]), valor[1]) == ("390000000.00", "BRL")
+
+
+def test_span_validacao_e_factsheet(repositorio, ambiente, tmp_path):
+    import json
+    import uuid
+    from decimal import Decimal
+    from pathlib import Path
+
+    import psycopg
+
+    from sunontent.extracao import extractor, leitura
+    from sunontent.schemas import ClaimProposto, DocumentoFonte, FactSheet, Span
+
+    referencia = Path(__file__).parent / "fixtures" / "referencia"
+    meta = json.loads((referencia / "cvm.json").read_text(encoding="utf-8"))
+    documento = leitura.processar(DocumentoFonte(caminho=referencia / "cvm.pdf", **meta), "cvm")
+    run_id = novo_run(ambiente["SUPABASE_DB_URL"])
+    persistencia.gravar_documento_processado(repositorio, tmp_path, run_id, documento)
+
+    span = Span(span_id=str(uuid.uuid4()), run_id=run_id, no="extractor", modelo="m", tokens_entrada=100,
+                tokens_saida=20, custo_brl=Decimal("0.5"), duracao_ms=10)
+    for _ in range(2):  # o span repetido não soma de novo
+        persistencia.gravar_span(repositorio, tmp_path, span)
+
+    proposto = ClaimProposto(
+        id="C01", chunk_id="K01", texto="A remuneração representou cerca de 11% da receita líquida.",
+        literal_fonte="representou aproximadamente 11% (onze por cento) da receita", numeros=["11%"],
+        tipo="resultado", tags=["indicador_chave"])
+    claims, pendencias = extractor.ancorar(documento, {"C01": proposto})
+    assert not pendencias
+    factsheet = FactSheet(
+        doc_id=documento.doc_id, tipo_documento=documento.tipo_documento, emissor=documento.emissor,
+        data_documento=documento.data_documento, claims=claims, tabela_numeros=documento.tabela_numeros,
+        assinado=True)
+    for _ in range(2):  # a repetição não duplica linhas
+        persistencia.gravar_validacao(repositorio, tmp_path, run_id, 1, [("C01", None)])
+        persistencia.gravar_factsheet(repositorio, tmp_path, run_id, factsheet)
+
+    with psycopg.connect(ambiente["SUPABASE_DB_URL"]) as conexao:
+        custo = conexao.execute(
+            "select custo_total_tokens, custo_total_brl from runs where run_id = %s", (run_id,)).fetchone()
+        validacoes = conexao.execute(
+            "select count(*) from validacoes_ancora where run_id = %s and passou", (run_id,)).fetchone()[0]
+        vinculo = conexao.execute(
+            "select n.bruto from claim_numeros cn join numeros n on n.id = cn.numero_id where cn.run_id = %s",
+            (run_id,)).fetchall()
+    assert (custo[0], custo[1]) == (120, Decimal("0.5"))
+    assert validacoes == 1
+    assert vinculo == [("11%",)]

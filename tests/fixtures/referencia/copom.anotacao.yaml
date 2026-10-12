@@ -1,0 +1,74 @@
+# Fatos que o extractor (E2) precisa transformar em claim. Anotado à mão sobre copom.pdf.
+# trechos: onde o fato aparece no documento; quando o mesmo fato está em mais de um lugar (por
+# exemplo, resumo de destaques e texto detalhado), cada lugar é uma alternativa.
+# trecho: texto do documento numa única página (espaço e quebra de linha flexíveis).
+# numeros: brutos que os claims ancorados no trecho precisam trazer, juntos.
+# Um fato está coberto quando, em alguma alternativa, algum claim tem âncora que cruza o trecho e
+# os claims que cruzam o trecho, somados, trazem todos os números listados (docs/testes.md, E2 e E3).
+documento: copom_ata_281
+doc_sha256: f03423dc25625aa14ae29c10fdacf7b4665b6714ab0667c0dc86a6f77c43665c
+fatos:
+  - id: F01
+    descricao: O Copom reduziu a taxa básica de juros (Selic) para 13,75% a.a.
+    trechos:
+      - trecho: "O Copom decidiu reduzir a taxa básica de juros para 13,75% a.a."
+        numeros: ["13,75%"]
+  - id: F02
+    descricao: A decisão foi unânime entre os membros do Comitê.
+    trechos:
+      - trecho: "Votaram por essa decisão os seguintes membros do Comitê"
+        numeros: []
+  - id: F03
+    descricao: As expectativas Focus de inflação para 2026 e 2027 estão em 4,9% e 4,3%, acima da meta.
+    trechos:
+      - trecho: "situando-se em 4,9% e 4,3%, respectivamente"
+        numeros: ["4,9%", "4,3%"]
+  - id: F04
+    descricao: A projeção de inflação para o 1º trimestre de 2028 (horizonte relevante) é 3,2%.
+    trechos:
+      - trecho: "situa-se em 3,2% no cenário de referência"
+        numeros: ["3,2%"]
+      - trecho: "e para o primeiro trimestre de 2028, atual horizonte relevante de política monetária, são, respectivamente, 5,2%, 3,9%, e 3,2%"
+        numeros: ["3,2%"]
+  - id: F05
+    descricao: As projeções de inflação para 2026 e 2027 são 5,2% e 3,9%.
+    trechos:
+      - trecho: "são, respectivamente, 5,2%, 3,9%, e 3,2%"
+        numeros: ["5,2%", "3,9%"]
+  - id: F06
+    descricao: A inflação cheia e as medidas subjacentes desaceleraram, abaixo do teto da meta mas ainda acima do centro.
+    trechos:
+      - trecho: "a inflação cheia e a média de medidas subjacentes desaceleraram"
+        numeros: []
+      - trecho: "Pelas duas métricas, o índice acumulado em 12 meses situa-se abaixo do limite superior do intervalo de tolerância"
+        numeros: []
+  - id: F07
+    descricao: O PIB do 2º trimestre de 2026 confirmou a desaceleração da atividade.
+    trechos:
+      - trecho: "confirmou a desaceleração apontada por outros indicadores"
+        numeros: []
+  - id: F08
+    descricao: Com expectativas desancoradas, é preciso restrição monetária maior e por mais tempo.
+    trechos:
+      - trecho: "exige-se uma restrição monetária maior e por mais tempo"
+        numeros: []
+  - id: F09
+    descricao: Os riscos para a inflação estão mais elevados que o usual, com assimetria altista.
+    trechos:
+      - trecho: "permanecem mais elevados que o usual, com assimetria altista"
+        numeros: []
+  - id: F10
+    descricao: O Copom não deve reagir aos efeitos primários de choques de oferta, só aos de segunda ordem.
+    trechos:
+      - trecho: "não deve reagir aos efeitos primários de choques dessa natureza"
+        numeros: []
+  - id: F11
+    descricao: A magnitude do ciclo de calibração será ajustada à evolução do cenário.
+    trechos:
+      - trecho: "a magnitude do ciclo de calibração será ajustada à luz da evolução do cenário"
+        numeros: []
+  - id: F12
+    descricao: A política monetária deve manter caráter restritivo porque a inflação segue pressionada pela demanda.
+    trechos:
+      - trecho: "exigindo que a política monetária mantenha caráter restritivo"
+        numeros: []

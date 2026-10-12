@@ -1,0 +1,35 @@
+# Fatos que o extractor (E2) precisa transformar em claim. Anotado à mão sobre cvm.pdf.
+# Formato e critério de cobertura: ver copom.anotacao.yaml.
+documento: cvm_fato_relevante_24708_1574050
+doc_sha256: 53d8fb099247fef68081c1ab7b2b04138402940dd8237db79dbc9e0eba88cb90
+fatos:
+  - id: F01
+    descricao: A ANP decidiu aplicar o Método do Capital Recuperado (RCM) aos ativos do Contrato Legado Malhas SE.
+    trechos:
+      - trecho: "pela aplicação do Método do Capital Recuperado"
+        numeros: []
+  - id: F02
+    descricao: A remuneração desses ativos representou cerca de 11% da receita líquida no 1º semestre de 2026.
+    trechos:
+      - trecho: "representou aproximadamente 11% (onze por cento) da receita"
+        numeros: ["11%"]
+  - id: F03
+    descricao: Esse valor equivale a aproximadamente R$ 390 milhões.
+    trechos:
+      - trecho: "ou aproximadamente R$ 390.000.000,00"
+        numeros: ["R$ 390.000.000,00"]
+  - id: F04
+    descricao: A decisão não afeta a receita dos Contratos Legados remanescentes.
+    trechos:
+      - trecho: "a decisão da ANP não impacta a"
+        numeros: []
+  - id: F05
+    descricao: A Companhia considera o método sem precedentes e com viés expropriatório.
+    trechos:
+      - trecho: "revestindo-se de viés"
+        numeros: []
+  - id: F06
+    descricao: A Companhia adotará todas as medidas cabíveis para proteger seus direitos.
+    trechos:
+      - trecho: "A Companhia adotará todas as medidas cabíveis"
+        numeros: []

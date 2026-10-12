@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
-from conftest import RepositorioMemoria
+from conftest import RepositorioMemoria, cliente_falso
 from sunontent import __main__ as principal
 from sunontent import graph, manifesto, persistencia
 from sunontent.retentativa import FalhaRetriavel, FalhaTerminal
@@ -20,6 +20,17 @@ RAIZ = Path(__file__).resolve().parent.parent
 MOMENTO = datetime(2026, 10, 6, 15, 0, 0, tzinfo=timezone.utc)
 REFERENCIA = RAIZ / "tests" / "fixtures" / "referencia"
 PDF = (REFERENCIA / "copom.pdf").read_bytes()
+
+
+def claim(literal, numeros=(), tipo="decisao", chunk_id="K19"):
+    return {
+        "id": "C01", "chunk_id": chunk_id, "texto": "O Copom reduziu a Selic para 13,75% a.a.",
+        "literal_fonte": literal, "numeros": list(numeros), "tipo": tipo, "tags": ["indicador_chave"],
+    }
+
+
+DECISAO = claim("O Copom decidiu reduzir a taxa básica de juros para 13,75% a.a.", ["13,75%"])
+RESPOSTA_COPOM = json.dumps({"claims": [DECISAO]}, ensure_ascii=False)
 
 
 @pytest.fixture
@@ -39,9 +50,10 @@ def repo():
     return RepositorioMemoria()
 
 
-def rodar(raiz, repo, *, dev, http=None):
+def rodar(raiz, repo, *, dev, http=None, llm=None):
     return principal.executar(
-        "copom", dev=dev, repositorio=repo, checkpointer=InMemorySaver(), raiz=raiz,
+        "copom", dev=dev, repositorio=repo, checkpointer=InMemorySaver(),
+        cliente_llm=llm or cliente_falso([RESPOSTA_COPOM]), raiz=raiz,
         cliente_http=http, relogio=lambda: MOMENTO,
     )
 
@@ -59,9 +71,9 @@ def test_manifest_le_versoes_e_hashes_da_config(raiz):
                          modo="normal", fonte="copom", k=2)
     assert m.level_specs == {"iniciante": 1, "intermediario": 1, "avancado": 1}
     assert m.glossario_versao == 1
-    assert m.prompts == {}  # templates vazios ficam de fora
+    assert m.prompts == {"extractor": 2}  # templates vazios ficam de fora
     assert set(m.arquivos_sha256) == {
-        "config/models.yaml", "config/glossario.yaml",
+        "config/models.yaml", "config/glossario.yaml", "prompts/extractor.j2",
         "config/levels/iniciante.yaml", "config/levels/intermediario.yaml", "config/levels/avancado.yaml",
     }
 
@@ -84,7 +96,7 @@ def test_template_com_conteudo_exige_cabecalho_de_versao(raiz):
 def test_template_com_cabecalho_entra_no_manifest(raiz):
     (raiz / "prompts" / "adapter.j2").write_text("{# versao: 3 #}\nolá", encoding="utf-8")
     m = manifesto.montar(raiz, run_id="x", timestamp=MOMENTO, modo="normal", fonte="copom", k=2)
-    assert m.prompts == {"adapter": 3}
+    assert m.prompts == {"adapter": 3, "extractor": 2}
     assert "prompts/adapter.j2" in m.arquivos_sha256
 
 
@@ -288,6 +300,8 @@ def test_sem_fonte_o_cli_roda_as_tres(monkeypatch, repo):
         return 1 if fonte == "cvm" else 0
 
     monkeypatch.setattr(principal, "executar", falso)
+    monkeypatch.setattr(principal.llm, "criar_cliente", lambda raiz, ambiente: None)
+    monkeypatch.setenv("GOOGLE_API_KEY", "chave-de-teste")
     monkeypatch.setattr(principal.persistencia, "criar_repositorio_supabase", lambda ambiente: repo)
     monkeypatch.setattr(principal.persistencia, "checkpointer_postgres", lambda url: nullcontext(None))
     monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://localhost/x")
@@ -297,3 +311,72 @@ def test_sem_fonte_o_cli_roda_as_tres(monkeypatch, repo):
     chamadas.clear()
     assert principal.main(["b3"]) == 0
     assert chamadas == [("b3", False)]
+
+
+def test_sem_chave_do_gemini_para_antes_de_criar_o_run(monkeypatch, repo):
+    from contextlib import nullcontext
+
+    monkeypatch.setattr(principal.persistencia, "criar_repositorio_supabase", lambda ambiente: repo)
+    monkeypatch.setattr(principal.persistencia, "checkpointer_postgres", lambda url: nullcontext(None))
+    monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://localhost/x")
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **k: None)
+    assert principal.main(["copom", "--dev"]) == 1
+    assert not repo.runs
+
+
+# E2 e E3 no grafo
+
+
+def test_modo_dev_assina_e_grava_o_factsheet(raiz, repo):
+    llm = cliente_falso([RESPOSTA_COPOM])
+    assert rodar(raiz, repo, dev=True, llm=llm) == 0
+    (run_id, run), = repo.runs.items()
+    (factsheet,) = repo.factsheets.values()
+    assert factsheet.assinado and [c.id for c in factsheet.claims] == ["C01"]
+    (c,) = factsheet.claims
+    assert c.ancora.pagina == 5 and [n.bruto for n in c.numeros] == ["13,75%"]
+    assert repo.validacoes == {(run_id, 1, "C01"): {"passou": True, "motivo": None}}
+    (span,) = repo.spans.values()
+    assert span.no == "extractor" and span.falha_classe is None
+    assert run["custo_total_tokens"] == 1200 and run["custo_total_brl"] == span.custo_brl
+    pasta = raiz / "data" / "runs" / run_id
+    local = json.loads((pasta / "factsheet.json").read_text(encoding="utf-8"))
+    assert local["assinado"] and "tabela_numeros" not in local
+    assert (pasta / "validacoes" / "1.json").exists()
+    assert (pasta / "spans" / f"{span.span_id}.json").exists()
+    manifest = manifest_local(raiz)
+    assert manifest["custo_total_tokens"] == 1200 and manifest["custo_total_brl"] == str(span.custo_brl)
+
+
+def test_claim_recusado_volta_para_o_extractor_e_e_corrigido(raiz, repo):
+    parafraseado = claim("O Copom cortou a Selic para 13,75% ao ano.", ["13,75%"])
+    llm = cliente_falso([json.dumps({"claims": [parafraseado]}), RESPOSTA_COPOM])
+    assert rodar(raiz, repo, dev=True, llm=llm) == 0
+    (run_id,) = repo.runs
+    assert not repo.validacoes[(run_id, 1, "C01")]["passou"]
+    assert "não foi encontrado" in repo.validacoes[(run_id, 1, "C01")]["motivo"]
+    assert repo.validacoes[(run_id, 2, "C01")]["passou"]
+    segundo_prompt = llm._provider.prompts[1]
+    assert "# Correção" in segundo_prompt and "O Copom cortou a Selic" in segundo_prompt
+    (factsheet,) = repo.factsheets.values()
+    assert factsheet.claims[0].literal_fonte.startswith("O Copom decidiu reduzir")
+
+
+def test_claim_que_nao_converge_aborta_o_run_depois_de_3_rodadas(raiz, repo):
+    errado = json.dumps({"claims": [claim("O Copom decidiu reduzir a taxa básica de juros", ["13,75%"])]})
+    llm = cliente_falso([errado] * 3)
+    assert rodar(raiz, repo, dev=True, llm=llm) == 1
+    (run_id, run), = repo.runs.items()
+    assert run["status"] == "abortado" and run["erro_classe"] == "terminal"
+    assert "3 rodadas" in run["erro_mensagem"] and "C01" in run["erro_mensagem"] and "13,75%" in run["erro_mensagem"]
+    assert {chave[1] for chave in repo.validacoes} == {1, 2, 3}
+    assert not repo.factsheets
+    assert len(repo.spans) == 3
+    assert manifest_local(raiz)["custo_total_tokens"] == 3600
+
+
+def test_extractor_sem_claims_aborta_o_run(raiz, repo):
+    assert rodar(raiz, repo, dev=True, llm=cliente_falso(['{"claims": []}'])) == 1
+    (run,) = repo.runs.values()
+    assert "nenhum claim" in run["erro_mensagem"]

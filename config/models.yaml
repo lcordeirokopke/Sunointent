@@ -1,1 +1,14 @@
-versao: 1
+versao: 2
+# Snapshot fixo do modelo de cada nó (docs/arquiteturas.md, 1. Model client / router).
+# O juiz (judge) precisa ser de família diferente do extractor.
+modelos:
+  extractor: gemini-3.8-flash
+# Preço em US$ por 1 milhão de tokens, por snapshot. Tokens de raciocínio contam como saída.
+# Fonte: ai.google.dev/gemini-api/docs/pricing, consultado em 2026-10-12; o preço do
+# gemini-3.8-flash é promocional até 2026-12-31.
+precos_usd_por_milhao:
+  gemini-3.8-flash:
+    entrada: "0.75"
+    saida: "3.75"
+# PENDENTE: cotação USD/BRL provisória, usada só para estimar llm_spans.custo_brl e runs.custo_total_brl.
+cotacao_usd_brl: "5.40"

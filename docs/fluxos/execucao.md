@@ -7,7 +7,7 @@ Este documento descreve como um run começa, como o grafo é montado e executado
 | Peça | Papel |
 | ---- | ----- |
 | `sunontent/__main__.py` | Ponto de entrada (`python -m sunontent [fonte] [--dev]`). Lê o `.env`, confere as credenciais, gera o `run_id`, monta o manifest, registra o run, executa o grafo e fecha o run como `concluido` ou `abortado`. |
-| `sunontent/graph.py` | Monta o grafo LangGraph: as duas entradas (E0 ou referência), a constante `K` e `construir_grafo(checkpointer)`. A ordem das etapas fica só aqui. |
+| `sunontent/graph.py` | Monta o grafo LangGraph: as duas entradas (E0 ou referência), a E1, a constante `K` e `construir_grafo(checkpointer)`. A ordem das etapas fica só aqui. |
 | `sunontent/manifesto.py` | Lê `config/` e `prompts/` e devolve o `RunManifest` sem os campos do documento. |
 | `sunontent/schemas.py` | `RunManifest`, `PipelineState` e os tipos `Nivel`, `Fonte` e `Modo`. |
 | `sunontent/persistencia.py` | Funções do run: `criar_run`, `concluir_run`, `abortar_run`, `gravar_manifest_local`, `criar_repositorio_supabase` e `checkpointer_postgres`. Única porta de gravação no Supabase e em `data/`. |
@@ -17,7 +17,7 @@ Este documento descreve como um run começa, como o grafo é montado e executado
 
 ```mermaid
 flowchart TD
-    CLI["python -m sunontent fonte"] --> ENV["le o .env e confere SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY e SUPABASE_DB_URL"]
+    CLI["python -m sunontent [fonte]"] --> ENV["le o .env e confere SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY e SUPABASE_DB_URL"]
     ENV -->|"ausente ou conexao recusada"| PARA["erro na tela, codigo 1, sem linha em runs"]
     ENV --> CK["abre o checkpointer: conexao propria, schema langgraph, setup()"]
     CK --> MAN["gera run_id e monta o RunManifest a partir de config/ e prompts/"]
@@ -26,14 +26,15 @@ flowchart TD
     RUN --> G{"graph.invoke: manifest.modo"}
     G -->|"normal"| E0["no coleta: E0"]
     G -->|"dev"| REF["no referencia"]
-    E0 --> FIM{"resultado"}
-    REF --> FIM
-    FIM -->|"documento_fonte entregue"| OK["status concluido, manifest.json com os campos do documento, codigo 0"]
+    E0 --> E1["no leitura: E1"]
+    REF --> E1
+    E1 --> FIM{"resultado"}
+    FIM -->|"documento processado entregue"| OK["status concluido, manifest.json com os campos do documento, codigo 0"]
     FIM -->|"Falha"| AB["abortar_run: status abortado com erro_classe e erro_mensagem, codigo 1"]
     FIM -->|"outra excecao"| AB2["abortar_run como terminal, mensagem Tipo: texto, e a excecao sobe"]
 ```
 
-1. **Parâmetros.** `fonte` é `copom`, `cvm` ou `b3`. `--dev` escolhe o documento de referência no lugar do download.
+1. **Parâmetros.** `fonte` é opcional e vale `copom`, `cvm` ou `b3`; sem ela, as três rodam em sequência, um run por fonte. `--dev` escolhe o documento de referência no lugar do download.
 2. **Credenciais.** O `.env` da raiz do repositório é carregado e as três variáveis de `.env.example` são conferidas. O banco recebe um `select 1` sem retentativa. Se algo falhar, a execução para com a mensagem na tela e código de saída 1, **sem criar linha em `runs`** e sem chamar `abortar_run`.
 3. **Checkpointer.** `PostgresSaver` em conexão própria (`autocommit`, `dict_row`, `search_path = langgraph`). O `setup()` cria as tabelas na primeira execução.
 4. **`run_id` e manifest.** O `run_id` tem o formato `<fonte>_<AAAAMMDDTHHMMSSZ>_<6 hex>`, por exemplo `copom_20261006T150000Z_9f2c1a`, e o instante é o mesmo do `timestamp` do manifest. Se a config for inválida, a execução para antes de existir linha em `runs`.
@@ -46,12 +47,12 @@ O código de saída é 0 para run concluído e 1 para run abortado ou para erro 
 ## O grafo
 
 ```
-START -> (modo normal) coleta      -> END
-      -> (modo dev)    referencia  -> END
+START -> (modo normal) coleta      -> leitura -> END
+      -> (modo dev)    referencia  -> leitura -> END
 ```
 
 - A aresta condicional de `START` lê `state.manifest.modo`: `dev` entra pelo nó `referencia`, e `normal` entra pelo nó `coleta` (E0).
-- As duas entradas entregam um `DocumentoFonte` em `documento_fonte` e terminam o grafo. As etapas seguintes ainda não existem no grafo.
+- As duas entradas entregam um `DocumentoFonte` em `documento_fonte` e seguem para o nó `leitura` (E1), que entrega o `DocumentoProcessado` em `documento` e termina o grafo. As etapas seguintes ainda não existem no grafo.
 - `K = 2` é uma constante de `graph.py`. O valor lido no início do run entra no manifest.
 - `construir_grafo(checkpointer=None)` aceita qualquer checkpointer do LangGraph. O `__main__.py` passa o `PostgresSaver`, e os testes passam o `InMemorySaver`.
 - `PipelineState` tem `run_id`, `manifest` e `documento_fonte`.

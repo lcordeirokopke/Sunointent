@@ -71,12 +71,14 @@ class Claim(BaseModel):
     texto: str              # a afirmação normalizada, uma frase
     numeros: list[Numero]   # pode ser vazia (claim qualitativo)
     tipo: Literal["decisao", "projecao", "condicionante", "resultado", "risco"]
-    tags: list[str]         # ["impacto_pratico"], ["metodologico"], ...
+    tags: list[Literal["impacto_pratico", "metodologico", "contexto_macro", "indicador_chave", "governanca"]]
     ancora: Ancora
     literal_fonte: str      # o trecho exato do documento, verbatim
 ```
 
-`tipo` e `tags` não são decorativos: os adapters usam `tags` para priorizar (o nível Iniciante prioriza `impacto_pratico`) e o avaliador usa `tipo` para exigir atribuição explícita em `projecao` (uma projeção do Copom não pode virar afirmação do artigo).
+`tipo` e `tags` não são decorativos: os adapters usam `tags` para priorizar (o nível Iniciante prioriza `impacto_pratico`) e o avaliador usa `tipo` para exigir atribuição explícita em `projecao` (uma projeção do Copom não pode virar afirmação do artigo). As tags vêm de um vocabulário fixo, definido em `docs/fluxos/extracao.md`.
+
+`texto` e `numeros` dizem o mesmo: todo número listado aparece no texto, e todo número do texto, exceto datas, está listado. Cada `Numero` do claim é uma entrada da `tabela_numeros`, na mesma posição, dentro do `literal_fonte`.
 
 ## DocumentoProcessado
 
@@ -117,11 +119,11 @@ class FactSheet(BaseModel):
     emissor: str
     data_documento: date
     claims: list[Claim]
-    tabela_numeros: dict[str, Numero]   # TODOS os números do fonte, indexados por bruto
+    tabela_numeros: list[Numero]        # TODOS os números do fonte, em ordem de posição
     assinado: bool = False              # True só depois da etapa 3
 ```
 
-`tabela_numeros` é o conjunto de referência da verificação numérica, e contém todo número do documento, não só os que entraram em claims. Um número que aparece na peça e existe no documento mas não em nenhum claim é um caso diferente de um número inventado, e o relatório de falha precisa distinguir os dois.
+`tabela_numeros` é o conjunto de referência da verificação numérica, e contém todo número do documento, não só os que entraram em claims. É a mesma lista do `DocumentoProcessado`: uma entrada por posição, porque o mesmo bruto pode aparecer mais de uma vez no documento. A busca por bruto é `FactSheet.numeros_por_bruto`. Um número que aparece na peça e existe no documento mas não em nenhum claim é um caso diferente de um número inventado, e o relatório de falha precisa distinguir os dois.
 
 ## Conteúdo adaptado (saída do adapter, antes do formato)
 
@@ -325,7 +327,7 @@ Detalhada em `docs/fluxos/ingestao.md`. No modo normal, baixa a publicação mai
 **O que faz:**
 
 1. Extrai texto por página preservando offset de caractere. O offset é o que permite a âncora existir; se a extração perder posição, a rastreabilidade do Entregável 4 morre aqui.
-2. OCR só como fallback, quando a página não tem camada de texto (comum em fatos relevantes escaneados).
+2. OCR só como fallback, quando a página não tem camada de texto (comum em fatos relevantes escaneados). O OCR ainda não está implementado: hoje a página sem camada de texto aborta o run com erro terminal.
 3. Normaliza o texto: remove cabeçalho/rodapé repetido, junta palavras hifenizadas quebradas por linha, colapsa espaço.
 4. Faz chunking por seção lógica, não por tamanho fixo. Ata do Copom tem estrutura numerada; release da B3 tem seções nomeadas. Chunk que corta uma tabela no meio gera claim sem número.
 5. **Varre todos os números e monta a `tabela_numeros`.** Parser de formato brasileiro: `12,5%` vira `Decimal("12.5") + unidade "pct"`, `R$ 1,2 bi` vira `Decimal("1200") + "BRL_mi"`, `0,50 p.p.` vira `Decimal("0.50") + "pp"`. Cada um com âncora.
@@ -343,35 +345,38 @@ Detalhada em `docs/fluxos/ingestao.md`. No modo normal, baixa a publicação mai
 
 **Representa:** a única etapa que **lê** o documento com julgamento. Decide o que, em 12 páginas de ata, merece existir como fato.
 
-**Recebe:** `DocumentoProcessado`.
+**Recebe:** `DocumentoProcessado`; nas rodadas de correção, também os claims devolvidos pela E3, com o motivo.
 
 **O que faz:**
 
-1. Percorre os chunks e emite claims atômicos: uma afirmação por claim, sem conjunção de dois fatos.
-2. Para cada claim, copia o `literal_fonte` verbatim e registra a âncora.
-3. Associa os números daquele claim, referenciando entradas da `tabela_numeros`.
-4. Classifica `tipo` e atribui `tags`.
+1. Numa única chamada, com o documento inteiro, o modelo emite claims atômicos: uma afirmação por claim, sem conjunção de dois fatos.
+2. Para cada claim, o modelo cita o `literal_fonte` verbatim e o bloco (`chunk_id`) de onde ele veio; o código localiza o trecho no texto limpo e registra a âncora.
+3. O modelo lista o bruto de cada número do claim; o código associa a entrada da `tabela_numeros` com esse bruto dentro do `literal_fonte`.
+4. O modelo classifica `tipo` e atribui `tags`.
+
+O modelo nunca escreve página, offset nem valor: o que ele cita e não existe no documento não resolve, e o claim volta para correção. Detalhada em `docs/fluxos/extracao.md`.
 
 **Decide:** a granularidade e a seleção. É a decisão de mais alto risco do pipeline: um fato importante que não se torna claim **não existe** para o resto do sistema, e nenhuma etapa posterior detecta a ausência, porque todas validam contra o FactSheet e não contra o documento.
 
 **Gera:** `FactSheet` com `assinado=False`. O FactSheet não assinado fica só no estado do grafo; a E2 grava só os spans em `llm_spans` e o custo em `runs` (cópia em `data/runs/<run_id>/`). O FactSheet é gravado uma vez, pela E3.
 
-**Natureza:** LLM com saída estruturada obrigatória.
+**Natureza:** LLM com saída estruturada obrigatória (`gemini-3.8-flash`), mais ancoragem determinística.
 
-**Como falha:** omissão silenciosa (o risco real), granularidade grossa demais (claim com dois fatos torna a verificação de entailment ambígua), e âncora inventada. Os dois últimos a etapa 3 pega. O primeiro exige teste com documento anotado à mão: um fixture de ata com a lista de fatos que **devem** aparecer, e assert de cobertura.
+**Como falha:** omissão silenciosa (o risco real), granularidade grossa demais (claim com dois fatos torna a verificação de entailment ambígua), e âncora inventada. Os dois últimos a etapa 3 pega: a âncora inventada não resolve, e o claim com números de outro fato reprova na conferência entre texto e números. O primeiro exige teste com documento anotado à mão: um fixture de ata com a lista de fatos que **devem** aparecer, e assert de cobertura.
 
 ## E3. Validador de Âncoras
 
 **Representa:** o ponto onde o FactSheet deixa de ser sugestão de um modelo e passa a ser referência confiável. Depois daqui, o resto do pipeline confia no FactSheet sem reverificar.
 
-**Recebe:** `FactSheet` não assinado + `tabela_numeros`.
+**Recebe:** `FactSheet` não assinado + `tabela_numeros`, e os claims que a E2 não conseguiu ancorar, que reprovam com o motivo da E2.
 
 **O que faz:**
 
 1. Para cada claim: confere que `ancora.pagina` existe e que o texto no intervalo de offset contém de fato o `literal_fonte`. Âncora que não resolve, reprova o claim.
 2. Para cada `Numero` do claim: confere presença na `tabela_numeros`, com valor **e** unidade. Confusão de `pp` com `pct` é o erro clássico aqui e é semanticamente grave: "subiu 0,50 p.p." e "subiu 0,50%" são coisas diferentes.
 3. Confere que `literal_fonte` é substring real do texto da página, não paráfrase.
-4. Se algum claim reprovar, devolve **só os claims ruins** para a etapa 2 com o motivo, e não o documento inteiro.
+4. Confere que o texto do claim e a lista de números dizem o mesmo, lendo o texto com o parser da E1.
+5. Se algum claim reprovar, devolve **só os claims ruins** para a etapa 2 com o motivo, e não o documento inteiro. O loop tem no máximo 3 rodadas (a extração e 2 correções); se ainda houver claim reprovado, o run aborta com erro terminal.
 
 **Decide:** claim por claim, aprova ou devolve. Sem nota, sem gradiente: booleano.
 
@@ -713,7 +718,7 @@ Invariantes:
 - O contador de retry de parse é **separado** do orçamento `K` de qualidade. Misturar os dois faz um JSON quebrado consumir o orçamento de reescrita.
 - Toda chamada emite um span com nó, modelo, tokens de entrada e saída, e custo.
 
-Config: `models.{extractor, adapter, synthesizer, judge}`, cada um pinado em snapshot, não só em família.
+Config: `models.{extractor, adapter, synthesizer, judge}`, cada um pinado em snapshot, não só em família, em `config/models.yaml`, junto com o preço em US$ por milhão de tokens de cada snapshot e a cotação USD/BRL usada para estimar o custo. Hoje só o extractor tem modelo (`gemini-3.8-flash`). A falha de infraestrutura repete com backoff até 4 tentativas, e a resposta fora do schema, até 3; detalhes em `docs/fluxos/extracao.md`.
 
 ## 2. Context assembly
 
@@ -792,7 +797,7 @@ E manter `ERRO_INFRA` como estado de célula distinto de `REPROVADA`. Os dois ch
 
 Versão de prompt, versão de LevelSpec, pin de modelo com snapshot, e um **run manifest** que amarra tudo isso ao resultado. Sem isso, reprodutibilidade é aspiracional: o mesmo documento com o mesmo código gera outro resultado porque o provider atualizou o modelo por baixo. As instruções de reprodutibilidade do Entregável 6 são, na prática, este componente.
 
-As credenciais ficam no `.env`, fora do git. O `.env.example` versionado lista as variáveis sem valores: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_DB_URL` (conexão do checkpointer e das transações pelo session pooler ou pela conexão direta, nunca pelo pooler de transação, que não aceita prepared statements).
+As credenciais ficam no `.env`, fora do git. O `.env.example` versionado lista as variáveis sem valores: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_DB_URL` (conexão do checkpointer e das transações pelo session pooler ou pela conexão direta, nunca pelo pooler de transação, que não aceita prepared statements). e `GOOGLE_API_KEY` (Gemini API, usada pelo extractor).
 
 ---
 

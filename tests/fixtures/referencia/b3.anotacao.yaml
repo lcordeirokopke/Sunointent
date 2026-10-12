@@ -1,0 +1,108 @@
+# Fatos que o extractor (E2) precisa transformar em claim. Anotado à mão sobre b3.pdf.
+# Formato e critério de cobertura: ver copom.anotacao.yaml.
+documento: b3_release_2026_2T
+doc_sha256: 2d4647af3c9b6558fe0db65f8bdedcd0bca1d16f29089f7d5aa7bc6cda1bd09b
+fatos:
+  - id: F01
+    descricao: A receita total foi de R$ 3,1 bilhões no 2T26, alta de 12,2% sobre o 2T25.
+    trechos:
+      - trecho: "A receita da B3 alcançou R$ 3,1 bilhões no 2T26, um crescimento de 12,2% em relação ao 2T25"
+        numeros: ["R$ 3,1 bilhões", "12,2%"]
+      - trecho: "Receita de R$3,1 bilhões (+12% vs. 2T25)"
+        numeros: ["R$3,1 bilhões", "12%"]
+  - id: F02
+    descricao: As receitas pró-cíclicas subiram 7,9% e as recorrentes, 17,3%.
+    trechos:
+      - trecho: "com alta de 7,9% na comparação anual, enquanto as receitas recorrentes avançaram 17,3%"
+        numeros: ["7,9%", "17,3%"]
+      - trecho: "refletindo os crescimentos de 8% das receitas pró-cíclicas e 17% do grupo de receitas recorrentes"
+        numeros: ["8%", "17%"]
+  - id: F03
+    descricao: O ADTV de renda variável foi de R$ 31,3 bilhões, alta de 20,1%.
+    trechos:
+      - trecho: "no mercado à vista totalizou R$31,3 bilhões, um crescimento de 20,1% em relação ao 2T25"
+        numeros: ["R$31,3 bilhões", "20,1%"]
+      - trecho: "de R$31,3 bilhões em Renda Variável (+20% vs. 2T25)"
+        numeros: ["R$31,3 bilhões", "20%"]
+      - trecho: "o volume financeiro médio diário (ADTV) apresentou alta de 20,1%"
+        numeros: ["20,1%"]
+  - id: F04
+    descricao: O ADV de derivativos foi de 11,1 milhões de contratos, queda de 8,3%.
+    trechos:
+      - trecho: "o volume médio diário negociado (ADV) totalizou 11,1 milhões de contratos, queda de 8,3% em relação ao 2T25"
+        numeros: ["8,3%"]
+      - trecho: "queda de 8,3% em relação ao 2T25, explicada majoritariamente pelo menor volume"
+        numeros: ["8,3%"]
+  - id: F05
+    descricao: O EBITDA recorrente foi de R$ 1.938,6 milhões, alta de 13,0%, com margem de 70,2%.
+    trechos:
+      - trecho: "O EBITDA recorrente totalizou R$1.938,6 milhões no 2T26, alta de 13,0% versus 2T25, com margem EBITDA recorrente de 70,2%"
+        numeros: ["R$1.938,6 milhões", "13,0%", "70,2%"]
+      - trecho: "EBITDA recorrente de R$1,9 bilhão, com margem recorrente de 70%"
+        numeros: ["R$1,9 bilhão", "70%"]
+  - id: F06
+    descricao: O lucro líquido atribuído aos acionistas foi de R$ 1.698,8 milhões, alta de 28,2%.
+    trechos:
+      - trecho: "O lucro líquido atribuído aos acionistas da B3 foi de R$1.698,8 milhões, alta de 28,2%"
+        numeros: ["R$1.698,8 milhões", "28,2%"]
+      - trecho: "O lucro líquido societário totalizou"
+        numeros: []
+  - id: F07
+    descricao: O lucro líquido recorrente foi de R$ 1,4 bilhão, alta de 8%.
+    trechos:
+      - trecho: "Lucro líquido recorrente de R$1,4 bilhão (+8% vs. 2T25)"
+        numeros: ["R$1,4 bilhão", "8%"]
+      - trecho: "o lucro líquido teria atingido R$1.376,6 milhões no trimestre, alta de 8,0%"
+        numeros: ["R$1.376,6 milhões", "8,0%"]
+  - id: F08
+    descricao: As despesas totais somaram R$ 975,6 milhões, alta de 15,5%.
+    trechos:
+      - trecho: "As despesas somaram R$975,6 milhões, alta de 15,5% em relação ao 2T25"
+        numeros: ["R$975,6 milhões", "15,5%"]
+      - trecho: "As despesas totalizaram R$975,6 milhões, alta de 15,5% em relação ao 2T25"
+        numeros: ["R$975,6 milhões", "15,5%"]
+  - id: F09
+    descricao: A B3 aprovou R$ 1.106,0 milhões em JCP, sendo R$ 750,0 milhões extraordinários.
+    trechos:
+      - trecho: "R$1.106,0 milhões, sendo R$356,0 milhões ordinários e R$750,0 milhões extraordinários"
+        numeros: ["R$1.106,0 milhões", "R$750,0 milhões"]
+      - trecho: "sendo R$356 milhões ordinários e R$750 milhões extraordinários"
+        numeros: ["R$750 milhões"]
+      - trecho: "de juros sobre o capital próprio (JCP) no montante de R$1.106,0 milhões, sendo R$750,0 milhões extraordinários"
+        numeros: ["R$1.106,0 milhões", "R$750,0 milhões"]
+  - id: F10
+    descricao: Com R$ 196,9 milhões em recompras, as distribuições aos acionistas somaram R$ 1.302,9 milhões.
+    trechos:
+      - trecho: "totalizaram R$ 1.302,9 milhões retornados aos acionistas no período"
+        numeros: ["R$ 1.302,9 milhões"]
+      - trecho: "as distribuições aos acionistas totalizaram R$1.302,9 milhões"
+        numeros: ["R$1.302,9 milhões"]
+      - trecho: "Distribuições de R$1,3 bilhão no 2T26"
+        numeros: ["R$1,3 bilhão"]
+  - id: F11
+    descricao: A B3 vendeu sua participação de 37,5% na Dimensa por R$ 665 milhões.
+    trechos:
+      - trecho: "a B3 exerceu a opção de venda da totalidade de sua participação de 37,5% na Dimensa"
+        numeros: ["37,5%"]
+  - id: F12
+    descricao: As ofertas públicas somaram R$ 11,6 bilhões, incluindo o primeiro IPO em 5 anos.
+    trechos:
+      - trecho: "Ofertas públicas totalizaram R$11,6 bilhões, sendo um IPO de R$3,0 bilhões, o primeiro em 5 anos"
+        numeros: ["R$11,6 bilhões"]
+  - id: F13
+    descricao: Christian Egan foi anunciado como novo CEO.
+    trechos:
+      - trecho: "a chegada de Christian Egan como novo CEO"
+        numeros: []
+  - id: F14
+    descricao: O endividamento bruto ao final do 2T26 era de R$ 14,9 bilhões.
+    trechos:
+      - trecho: "a B3 possuía endividamento bruto de R$14,9 bilhões"
+        numeros: ["R$14,9 bilhões"]
+  - id: F15
+    descricao: As despesas ajustadas cresceram 6,2%.
+    trechos:
+      - trecho: "enquanto as despesas ajustadas cresceram 6,2%"
+        numeros: ["6,2%"]
+      - trecho: "As despesas ajustadas apresentaram crescimento de 6,2%"
+        numeros: ["6,2%"]

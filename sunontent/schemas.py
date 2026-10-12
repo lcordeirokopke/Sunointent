@@ -12,6 +12,10 @@ Fonte = Literal["copom", "cvm", "b3"]
 Modo = Literal["normal", "dev"]
 TipoDocumento = Literal["copom_ata", "cvm_fato_relevante", "b3_release"]
 Unidade = Literal["pct", "pp", "BRL", "BRL_mi", "x", "contagem", "data"]
+TipoClaim = Literal["decisao", "projecao", "condicionante", "resultado", "risco"]
+# Vocabulário fixo de tags do claim; a E4 prioriza por elas (docs/fluxos/extracao.md, Tags).
+Tag = Literal["impacto_pratico", "metodologico", "contexto_macro", "indicador_chave", "governanca"]
+NoLLM = Literal["extractor", "adapter", "synthesizer", "judge"]
 TIPO_DOCUMENTO_POR_FONTE: dict[str, TipoDocumento] = {
     "copom": "copom_ata",
     "cvm": "cvm_fato_relevante",
@@ -145,6 +149,74 @@ class DocumentoProcessado(BaseModel):
         return self
 
 
+class Claim(BaseModel):
+    """Unidade atômica de fato (docs/arquiteturas.md, Claim). `literal_fonte` é o texto limpo na âncora."""
+
+    id: str = Field(pattern=r"^C\d{2,}$")
+    texto: str = Field(min_length=1)
+    numeros: list[Numero]
+    tipo: TipoClaim
+    tags: list[Tag]
+    ancora: Ancora
+    literal_fonte: str = Field(min_length=1)
+
+
+class FactSheet(BaseModel):
+    """Saída da E2 (assinado=False) e da E3 (assinado=True). `tabela_numeros` é a do DocumentoProcessado."""
+
+    doc_id: str = Field(min_length=1)
+    tipo_documento: TipoDocumento
+    emissor: str = Field(min_length=1)
+    data_documento: date
+    claims: list[Claim]
+    tabela_numeros: list[Numero]
+    assinado: bool = False
+
+    def numeros_por_bruto(self, bruto: str) -> list[Numero]:
+        """Todas as ocorrências de um bruto no documento, em ordem de posição."""
+        return [n for n in self.tabela_numeros if n.bruto == bruto]
+
+
+class ClaimProposto(BaseModel):
+    """Claim como o extractor o devolve: cita o trecho e os números; o código resolve âncora e Numero."""
+
+    id: str = Field(description="Identificador do claim, no formato C01, C02...")
+    chunk_id: str = Field(description="chunk_id do trecho de onde o fato foi tirado, ex: K03")
+    texto: str = Field(description="A afirmação normalizada, uma frase, um único fato")
+    literal_fonte: str = Field(
+        description="Trecho copiado exatamente do documento, de uma única página, que sustenta o fato"
+    )
+    numeros: list[str] = Field(
+        description="Cada número do fato, escrito exatamente como aparece dentro de literal_fonte, ex: 13,75%"
+    )
+    tipo: TipoClaim
+    tags: list[Tag]
+
+
+class SaidaExtractor(BaseModel):
+    """Schema da resposta do extractor."""
+
+    claims: list[ClaimProposto]
+
+
+class Span(BaseModel):
+    """Uma chamada (tentativa) a um modelo. Linha de `llm_spans`."""
+
+    span_id: str
+    run_id: str
+    no: NoLLM
+    nivel: Nivel | None = None
+    celula_id: str | None = None
+    tentativa: int | None = None
+    modelo: str
+    tokens_entrada: int = Field(ge=0)
+    tokens_saida: int = Field(ge=0)
+    custo_brl: Decimal = Field(ge=0)
+    duracao_ms: int = Field(ge=0)
+    falha_classe: Literal["retriavel", "terminal"] | None = None
+    falha_mensagem: str | None = None
+
+
 class RunManifest(BaseModel):
     """Versões e entrada de um run. Ver docs/arquiteturas.md, Run manifest."""
 
@@ -174,3 +246,10 @@ class PipelineState(BaseModel):
     manifest: RunManifest
     documento_fonte: DocumentoFonte | None = None  # E0 ou nó de referência
     documento: DocumentoProcessado | None = None  # E1
+    factsheet: FactSheet | None = None  # E2 (não assinado) e E3 (assinado)
+    # Loop E2/E3 (docs/fluxos/extracao.md): a rodada atual, os claims como o extractor os propôs,
+    # os que a E2 não conseguiu ancorar e os que a E3 devolveu para correção, com o motivo.
+    rodada: int = 0
+    propostas: dict[str, ClaimProposto] = {}
+    pendencias: dict[str, str] = {}
+    correcoes: dict[str, str] = {}
