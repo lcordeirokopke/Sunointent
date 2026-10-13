@@ -171,7 +171,7 @@ Formato do `doc_id` por fonte:
 | Fonte | Formato | Exemplo |
 | ----- | ------- | ------- |
 | Copom | `copom_ata_<número da reunião>` | `copom_ata_281` |
-| CVM | `cvm_fato_relevante_<Codigo_CVM>_<numProtocolo>` | `cvm_fato_relevante_24708_1574050` |
+| CVM | `cvm_fato_relevante_<Codigo_CVM>_<numProtocolo>` | `cvm_fato_relevante_16993_1575717` |
 | B3 | `b3_release_<ano>_<trimestre>T` | `b3_release_2026_2T` |
 
 Na CVM, cada nova versão de um fato relevante recebe um `numProtocolo` próprio, e o conjunto de dados IPE não tem um identificador que se mantenha entre versões. Por isso, na CVM, uma republicação gera outro `doc_id`, e não o mesmo `doc_id` com outro hash: cada versão é tratada como uma publicação.

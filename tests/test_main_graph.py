@@ -71,7 +71,7 @@ def test_manifest_le_versoes_e_hashes_da_config(raiz):
                          modo="normal", fonte="copom", k=2)
     assert m.level_specs == {"iniciante": 1, "intermediario": 1, "avancado": 1}
     assert m.glossario_versao == 1
-    assert m.prompts == {"extractor": 3}  # templates vazios ficam de fora
+    assert m.prompts == {"extractor": 7}  # templates vazios ficam de fora
     assert set(m.arquivos_sha256) == {
         "config/models.yaml", "config/glossario.yaml", "prompts/extractor.j2",
         "config/levels/iniciante.yaml", "config/levels/intermediario.yaml", "config/levels/avancado.yaml",
@@ -96,7 +96,7 @@ def test_template_com_conteudo_exige_cabecalho_de_versao(raiz):
 def test_template_com_cabecalho_entra_no_manifest(raiz):
     (raiz / "prompts" / "adapter.j2").write_text("{# versao: 3 #}\nolá", encoding="utf-8")
     m = manifesto.montar(raiz, run_id="x", timestamp=MOMENTO, modo="normal", fonte="copom", k=2)
-    assert m.prompts == {"adapter": 3, "extractor": 3}
+    assert m.prompts == {"adapter": 3, "extractor": 7}
     assert "prompts/adapter.j2" in m.arquivos_sha256
 
 

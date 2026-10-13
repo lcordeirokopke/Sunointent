@@ -42,7 +42,7 @@ Usam serviços reais só `test_persistencia_supabase.py`, contra o Supabase **lo
 
 Como a internet é simulada, nenhum teste confirma que os sites reais continuam respondendo no formato esperado. Se o BCB, a CVM ou a B3 mudarem o formato da listagem, os testes continuam passando e a coleta real quebra. Essa checagem só acontece rodando `python -m sunontent <fonte>` de verdade.
 
-Os documentos de `tests/fixtures/referencia/` estão congelados: Copom ata 281, CVM `cvm_fato_relevante_24708_1574050` e B3 2T26. O corpo do download simulado são os bytes desses PDFs, e as listagens de `tests/fixtures/http/` apontam para essas mesmas publicações.
+Os documentos de `tests/fixtures/referencia/` estão congelados: Copom ata 281, CVM `cvm_fato_relevante_16993_1575717` (fato relevante conjunto Sabesp e EMAE) e B3 2T26. O corpo do download simulado são os bytes desses PDFs, e as listagens de `tests/fixtures/http/` apontam para essas mesmas publicações.
 
 ## Estrutura
 
@@ -64,15 +64,17 @@ tests/
 
 ## E1: leitura
 
-`test_numeros.py` fixa o parser com igualdade exata em `Decimal`: cada formato aceito (`12,5%`, `R$ 1,2 bi`, `0,50 p.p.`, `47 bps`, `1.938,6`) e cada formato recusado (`1,234.56`, `12.5%`, `1.93`, `3.1`, `0.500`), que precisa levantar `NumeroNaoPrevisto` em vez de ser interpretado.
+`test_numeros.py` fixa o parser com igualdade exata em `Decimal`: cada formato aceito (`12,5%`, `R$ 1,2 bi`, `0,50 p.p.`, `47 bps`, `1.938,6`) e cada formato recusado (`1,234.56`, `12.5%`, `1.93`, `3.1`, `0.500`), que precisa levantar `NumeroNaoPrevisto` em vez de ser interpretado. Também fixa o ordinal de período (`1º tri` é `data`, `3º lugar` é `contagem`) e o leitor de datas (`numeros.datas`): cada formato com dia vira dia, mês e ano, e mês sem dia, trimestre, lei e data inválida ficam de fora.
 
 `test_extracao.py` roda a E1 de verdade sobre os três PDFs de `tests/fixtures/referencia/`:
 
 - união de fragmentos: o que o PDF parte (`R$31` e `5,2`) se une, e rótulo de tabela, valor e célula vizinha não;
 - normalização: cabeçalho, rodapé e número de página, hifenização e caracteres invisíveis;
+- versão em inglês: bloco final descartado (as páginas 4 a 6 do fato relevante da CVM), e inglês no meio do documento, documento todo em inglês e termo isolado em inglês mantidos;
 - chunks por seção de cada fonte, cobertura do texto inteiro e consistência com o texto das páginas;
-- metadados de cada fonte e aborto quando o padrão não existe;
-- números conferidos à mão no PDF (`R$315,2 milhões`, `22,0%`, `13,75%`, `R$ 390.000.000,00`) e identificadores fora da tabela;
+- unidade das células de tabela: cabeçalho e rótulo da linha, escala, fim no novo cabeçalho de colunas, parêntese que não é unidade, `exceto LPA` e linha de quantidade, e as células conferidas nos documentos de referência;
+- metadados de cada fonte e aborto quando a data não existe; emissor da CVM com uma e com duas companhias, título em inglês, a primeira linha com letras e o aviso quando o cabeçalho não é reconhecido, e aborto só na página sem nenhuma letra;
+- números conferidos à mão no PDF (`R$315,2 milhões`, `22,0%`, `13,75%`) e identificadores fora da tabela, como os CNPJs do fato relevante;
 - hash diferente, arquivo ausente, PDF sem camada de texto e arquivo que não é PDF: aborto terminal com mensagem clara;
 - snapshot `<fonte>.documento.json`: a saída precisa ser exatamente igual. Depois de uma mudança intencional, `REGERAR_DOCUMENTO=1 pytest tests/test_extracao.py` regrava os arquivos, e a diferença deve ser revisada.
 
@@ -97,12 +99,15 @@ tests/
 - paráfrase não resolve; trecho que atravessa a página é recusado;
 - trecho repetido: dentro do chunk citado resolve; fora dele é ambíguo;
 - número fora do trecho é recusado, com a lista dos números que estão nele; número repetido no trecho usa cada ocorrência uma vez;
+- número listado com a unidade da tabela (`3,2%` para a célula `3,2` do Copom) vale pela célula, e o claim passa na E3; com outra unidade (`3,2 p.p.`) é recusado;
 - `ancorar` separa as propostas que não resolvem, com o motivo.
 
 ### Validador (E3)
 
 - claim resolvido passa;
 - âncora deslocada ou em página inexistente, `pp` no lugar de `pct`, número de outro trecho, número fora da tabela e id repetido reprovam;
+- literal só de números (célula da tabela do Copom sem o rótulo) reprova, e o mesmo trecho com o rótulo da linha passa;
+- data do texto fora do literal reprova: o ano acrescentado (`19 de outubro de 2026` contra `19/10`) e o dia ou mês trocado; a mesma data escrita de outra forma passa;
 - texto e números precisam dizer o mesmo: número listado que o texto não menciona, número no texto fora da lista (inclusive inventado) e número em formato não previsto reprovam.
 
 ### Extractor (E2)

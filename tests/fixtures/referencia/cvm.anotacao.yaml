@@ -1,35 +1,45 @@
 # Fatos que o extractor (E2) precisa transformar em claim. Anotado à mão sobre cvm.pdf.
 # Formato e critério de cobertura: ver copom.anotacao.yaml.
-documento: cvm_fato_relevante_24708_1574050
-doc_sha256: 53d8fb099247fef68081c1ab7b2b04138402940dd8237db79dbc9e0eba88cb90
+# Os trechos são da versão em português (páginas 1 a 3); as páginas 4 a 6 repetem o documento em inglês.
+documento: cvm_fato_relevante_16993_1575717
+doc_sha256: 215aa96736b47ae5000db149b3b2cb9fac3e824166f8e415a2ea12feca508769
 fatos:
   - id: F01
-    descricao: A ANP decidiu aplicar o Método do Capital Recuperado (RCM) aos ativos do Contrato Legado Malhas SE.
+    descricao: Sabesp e EMAE atualizaram o cronograma estimado da incorporação de ações.
     trechos:
-      - trecho: "pela aplicação do Método do Capital Recuperado"
+      - trecho: "informar aos seus acionistas e ao mercado em geral atualizações sobre o cronograma estimado"
+        numeros: []
+      - trecho: "ATUALIZAÇÃO DO CRONOGRAMA ESTIMADO DA INCORPORAÇÃO DE AÇÕES"
         numeros: []
   - id: F02
-    descricao: A remuneração desses ativos representou cerca de 11% da receita líquida no 1º semestre de 2026.
+    descricao: A Sabesp incorpora as ações da EMAE que não detém, entregando aos acionistas da EMAE ações ordinárias da Sabesp.
     trechos:
-      - trecho: "representou aproximadamente 11% (onze por cento) da receita"
-        numeros: ["11%"]
+      - trecho: "incorporação, pela Sabesp, da totalidade das ações de emissão da EMAE não detidas pela Sabesp, tendo como contrapartida a entrega aos acionistas da EMAE de ações ordinárias de emissão da Sabesp"
+        numeros: []
   - id: F03
-    descricao: Esse valor equivale a aproximadamente R$ 390 milhões.
+    descricao: O prazo para exercício do direito de retirada termina em 19/10.
     trechos:
-      - trecho: "ou aproximadamente R$ 390.000.000,00"
-        numeros: ["R$ 390.000.000,00"]
+      - trecho: "19/10 Encerramento do prazo para exercício do Direito de Retirada"
+        numeros: []
   - id: F04
-    descricao: A decisão não afeta a receita dos Contratos Legados remanescentes.
+    descricao: O reembolso aos acionistas da EMAE que exercerem o direito de retirada será pago em 21/10.
     trechos:
-      - trecho: "a decisão da ANP não impacta a"
+      - trecho: "21/10 Data de pagamento do reembolso aos acionistas da EMAE que exercerem o Direito de Retirada"
         numeros: []
   - id: F05
-    descricao: A Companhia considera o método sem precedentes e com viés expropriatório.
+    descricao: O último dia de negociação das ações da EMAE na B3 é 23/10.
     trechos:
-      - trecho: "revestindo-se de viés"
+      - trecho: "23/10 Último dia de negociação das ações de emissão da EMAE na B3"
         numeros: []
   - id: F06
-    descricao: A Companhia adotará todas as medidas cabíveis para proteger seus direitos.
+    descricao: Em 27/10 a Sabesp atesta a eficácia da incorporação e as ações da Sabesp são creditadas aos acionistas da EMAE.
     trechos:
-      - trecho: "A Companhia adotará todas as medidas cabíveis"
+      - trecho: "27/10 Divulgação de Fato Relevante da Sabesp atestando a eficácia da Incorporação de Ações. Crédito das ações emitidas pela Sabesp aos acionistas da EMAE."
+        numeros: []
+  - id: F07
+    descricao: O leilão de frações e o pagamento das frações aos antigos acionistas da EMAE têm data a definir.
+    trechos:
+      - trecho: "Realização do leilão de frações na B3, conforme aplicável"
+        numeros: []
+      - trecho: "Data de disponibilização do pagamento referente às eventuais frações, líquido de taxas, aos antigos acionistas da EMAE"
         numeros: []

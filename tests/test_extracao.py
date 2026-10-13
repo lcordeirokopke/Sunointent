@@ -15,8 +15,8 @@ import pymupdf
 import pytest
 
 from conftest import FIXTURES
-from sunontent import persistencia
-from sunontent.extracao import chunking, leitura, metadados, normalizacao, pdf
+from sunontent import numeros, persistencia
+from sunontent.extracao import chunking, leitura, metadados, normalizacao, pdf, tabelas
 from sunontent.extracao.pdf import Linha, PaginaLida
 from sunontent.retentativa import FalhaRetriavel, FalhaTerminal
 from sunontent.schemas import Chunk, DocumentoFonte, DocumentoProcessado, Pagina
@@ -194,6 +194,30 @@ def test_espaco_ligadura_e_caractere_invisivel():
     assert normalizacao.limpar_linha("  e" + chr(0xFB01) + "ciente  aqui" + chr(0xAD) + chr(0x200B) + "  ") == "eficiente aqui"
 
 
+PT = "A companhia informa que o prazo para exercício do direito de retirada termina em outubro. " * 3
+EN = "The company informs the market that the period for the exercise of the right is open and will end in October. " * 3
+
+
+def test_bloco_final_em_ingles_e_descartado_e_pagina_vazia_nao_interrompe():
+    paginas = [Pagina(pagina=i, texto_limpo=t) for i, t in enumerate([PT, PT, EN, "", EN], start=1)]
+    assert [p.pagina for p in normalizacao.sem_versao_em_ingles(paginas)] == [1, 2]
+
+
+def test_ingles_no_meio_documento_todo_em_ingles_e_pouco_ingles_ficam():
+    meio = [Pagina(pagina=i, texto_limpo=t) for i, t in enumerate([PT, EN, PT], start=1)]
+    assert normalizacao.sem_versao_em_ingles(meio) == meio
+    tudo = [Pagina(pagina=i, texto_limpo=EN) for i in (1, 2)]
+    assert normalizacao.sem_versao_em_ingles(tudo) == tudo
+    termo = [Pagina(pagina=1, texto_limpo=PT), Pagina(pagina=2, texto_limpo="Forward guidance of the Board.")]
+    assert normalizacao.sem_versao_em_ingles(termo) == termo
+
+
+def test_versao_em_ingles_dos_documentos_de_referencia(processados, capsys):
+    assert [len(processados[f].paginas) for f in ("copom", "cvm", "b3")] == [6, 3, 12]
+    leitura.processar(documento_fonte("cvm"), "cvm")
+    assert capsys.readouterr().out == "E1: páginas 4 a 6 descartadas: versão em inglês\n"
+
+
 # Chunking
 
 
@@ -260,19 +284,57 @@ def test_metadados_dos_documentos_de_referencia(processados):
     copom, cvm, b3 = processados["copom"], processados["cvm"], processados["b3"]
     assert (copom.tipo_documento, copom.data_documento) == ("copom_ata", date(2026, 9, 16))
     assert copom.emissor.startswith("Comitê de Política Monetária")
-    assert (cvm.tipo_documento, cvm.data_documento) == ("cvm_fato_relevante", date(2026, 10, 2))
-    assert cvm.emissor == "NOVA TRANSPORTADORA DO SUDESTE S.A. - NTS"
+    assert (cvm.tipo_documento, cvm.data_documento) == ("cvm_fato_relevante", date(2026, 10, 8))
+    assert cvm.emissor == (
+        "COMPANHIA DE SANEAMENTO BÁSICO DO ESTADO DE SÃO PAULO – SABESP; "
+        "EMPRESA METROPOLITANA DE ÁGUAS E ENERGIA S.A. - EMAE"
+    )
     assert (b3.tipo_documento, b3.data_documento) == ("b3_release", date(2026, 6, 30))
     assert (copom.doc_id, copom.doc_sha256) == (documento_fonte("copom").doc_id, documento_fonte("copom").doc_sha256)
 
 
 @pytest.mark.parametrize(
     "tipo, texto",
-    [("copom_ata", "sem data"), ("cvm_fato_relevante", "NTS\nsem assinatura"), ("b3_release", "sem data-base")],
+    [("copom_ata", "sem data"), ("cvm_fato_relevante", "EMISSOR S.A.\nCNPJ nº 1\nFATO RELEVANTE\nsem assinatura"), ("b3_release", "sem data-base")],
 )
 def test_metadado_ausente_aborta(tipo, texto):
     with pytest.raises(FalhaTerminal, match="E1: não encontrei"):
         metadados.extrair(tipo, paginas_de(texto))
+
+
+def test_emissor_cvm_de_uma_companhia_ignora_linha_sem_letra():
+    texto = (
+        ",\nNOVA TRANSPORTADORA DO SUDESTE S.A. - NTS\nCNPJ nº 04.992.714/0001-84\nNIRE 33.3.0026999-1\n"
+        "FATO RELEVANTE\nA Nova Transportadora do Sudeste S.A.\nRio de Janeiro, 02 de outubro de 2026."
+    )
+    emissor, _ = metadados.extrair("cvm_fato_relevante", paginas_de(texto))
+    assert emissor == "NOVA TRANSPORTADORA DO SUDESTE S.A. - NTS"
+
+
+ASSINATURA = "\nSão Paulo, 08 de outubro de 2026."
+
+
+def test_emissor_cvm_com_titulo_em_ingles():
+    texto = "EMISSOR S.A.\nPublicly Held Company\nCNPJ/MF No. 1\nJOINT MATERIAL FACT\nThe company informs." + ASSINATURA
+    emissor, _ = metadados.extrair("cvm_fato_relevante", paginas_de(texto))
+    assert emissor == "EMISSOR S.A."
+
+
+@pytest.mark.parametrize("texto", [
+    ",\nEMISSOR S.A.\nFATO RELEVANTE\nA EMISSOR S.A. informa.",  # sem registro antes do título
+    ",\nEMISSOR S.A.\nComunicado ao Mercado\nCompanhia Aberta e outras coisas do corpo\nCNPJ nº 1",  # sem título
+])
+def test_emissor_cvm_nao_identificado_usa_a_primeira_linha_com_aviso(texto, capsys):
+    emissor, _ = metadados.extrair("cvm_fato_relevante", paginas_de(texto + ASSINATURA))
+    assert emissor == "EMISSOR S.A."
+    assert capsys.readouterr().out == (
+        "E1: emissor não identificado no cabeçalho; usando a primeira linha: 'EMISSOR S.A.'\n"
+    )
+
+
+def test_emissor_cvm_pagina_sem_letra_aborta():
+    with pytest.raises(FalhaTerminal, match="não tem texto"):
+        metadados.extrair("cvm_fato_relevante", paginas_de(",\n123", "São Paulo, 08 de outubro de 2026."))
 
 
 # Números dos documentos reais, conferidos à mão no PDF
@@ -289,7 +351,7 @@ def test_b3_valores_que_o_pdf_parte_em_fragmentos(processados):
     assert brutos["R$1.302,9 milhões"] == (Decimal("1302.9"), "BRL_mi")
     assert brutos["R$1.938,6 milhões"] == (Decimal("1938.6"), "BRL_mi")
     assert brutos["22,0%"] == (Decimal("22.0"), "pct")
-    assert brutos["1.938,6"] == (Decimal("1938.6"), "contagem")
+    assert brutos["1.938,6"] == (Decimal("1938.6"), "BRL_mi")  # célula de tabela "(Em R$ milhões)"
     assert ("2026", Decimal("2026"), "data") in numeros_de(processados["b3"])
     # nenhum fragmento solto do que o PDF partiu: "202 6", "R $1,3", "R$3, 0"
     assert not [b for b in brutos if "202 6" in b or b.startswith("R $") or ", " in b]
@@ -310,6 +372,8 @@ def test_copom_decisao_e_datas(processados):
     doc = processados["copom"]
     assert [b for b, _, _ in numeros_de(doc, "pct")] == [
         "4,9%", "4,3%", "3,2%", "2%", "5,2%", "3,9%", "3,2%", "13,75%",
+        # tabela "Variação do IPCA acumulada em quatro trimestres (%)"
+        "5,2", "3,9", "3,2", "5,2", "4,1", "3,2", "5,3", "3,5", "3,2",
     ]
     assert ("13,75%", Decimal("13.75"), "pct") in numeros_de(doc, "pct")
     assert numeros_de(doc, "BRL") == [("R$5,15/US$", Decimal("5.15"), "BRL")]
@@ -320,12 +384,10 @@ def test_copom_decisao_e_datas(processados):
     assert [b for b, _, u in numeros_de(doc) if u == "contagem"][:3] == ["281ª", "8º", "20º"]
 
 
-def test_cvm_valor_em_reais_e_identificadores_fora(processados):
+def test_cvm_identificadores_fora(processados):
     doc = processados["cvm"]
-    assert ("R$ 390.000.000,00", Decimal("390000000.00"), "BRL") in numeros_de(doc)
-    assert ("11%", Decimal("11"), "pct") in numeros_de(doc)
     brutos = [b for b, _, _ in numeros_de(doc)]
-    for identificador in ("04.992.714", "0001", "84", "22.210", "901", "33.3", "0026999"):
+    for identificador in ("43.776.517", "02.302.101", "0001", "80", "42"):
         assert identificador not in brutos
     assert ("6.404", Decimal("6404"), "contagem") in numeros_de(doc)
 
@@ -378,6 +440,58 @@ def test_saida_igual_ao_snapshot(processados, fonte):
         arquivo.write_text(json.dumps(atual, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     esperado = json.loads(arquivo.read_text(encoding="utf-8"))
     assert atual == esperado
+
+
+# Unidade das células de tabela
+
+
+def unidades(texto):
+    return [(a.bruto, a.valor, a.unidade) for a in tabelas.aplicar(texto, numeros.varrer(texto))]
+
+
+def test_celula_recebe_a_unidade_do_cabecalho_e_texto_corrido_fica():
+    texto = "(Em R$ milhões)\n2T26\n2T25\nReceita total\n3.081,4\n(8,6)\n12,2%\nA receita cresceu 12,2% e somou 3.081,4."
+    assert unidades(texto) == [
+        ("2", Decimal("2"), "data"), ("26", Decimal("26"), "data"),
+        ("2", Decimal("2"), "data"), ("25", Decimal("25"), "data"),
+        ("3.081,4", Decimal("3081.4"), "BRL_mi"), ("8,6", Decimal("8.6"), "BRL_mi"), ("12,2%", Decimal("12.2"), "pct"),
+        ("12,2%", Decimal("12.2"), "pct"), ("3.081,4", Decimal("3081.4"), "contagem"),
+    ]
+
+
+def test_escala_do_cabecalho_e_unidade_do_rotulo_da_linha():
+    texto = "(Em R$ milhares)\nReceita\n3.081.392\nRPC média (R$)\n0,786\nADV (milhares de contratos)\n5.909\nMargem (bps)\n3,074"
+    assert [(b, v, u) for b, v, u in unidades(texto)] == [
+        ("3.081.392", Decimal("3081.392"), "BRL_mi"), ("0,786", Decimal("0.786"), "BRL"),
+        ("5.909", Decimal("5909000"), "contagem"), ("3,074", Decimal("0.03074"), "pp"),
+    ]
+
+
+def test_novo_cabecalho_de_colunas_encerra_a_tabela_anterior_e_parentese_que_nao_e_unidade():
+    texto = "(Em R$ milhões)\n2T26\nSoluções (Trillia)\n315,2\n(+/-) Efeitos\n8,6\nOutra tabela\n2T26\nContratos\n61"
+    assert [(b, u) for b, _, u in unidades(texto) if u != "data"] == [
+        ("315,2", "BRL_mi"), ("8,6", "BRL_mi"), ("61", "contagem"),
+    ]
+
+
+def test_quantidade_e_lpa_nao_herdam_a_unidade():
+    texto = (
+        "(Em R$ milhões, exceto LPA)\nLucro líquido\n1.701,2\nLucro por ação básico\n0,34\n"
+        "Número de pregões\n61\nNúmero de investidores (média em milhares)\n3.458"
+    )
+    assert [(b, v, u) for b, v, u in unidades(texto)] == [
+        ("1.701,2", Decimal("1701.2"), "BRL_mi"), ("0,34", Decimal("0.34"), "contagem"),
+        ("61", Decimal("61"), "contagem"), ("3.458", Decimal("3458000"), "contagem"),
+    ]
+
+
+def test_celulas_de_tabela_dos_documentos_de_referencia(processados):
+    copom = {(n.ancora.pagina, n.bruto): (n.valor, n.unidade) for n in processados["copom"].tabela_numeros}
+    assert copom[(6, "4,1")] == (Decimal("4.1"), "pct")  # IPCA livres 2027
+    b3 = processados["b3"].tabela_numeros
+    assert next(n for n in b3 if n.bruto == "3.081,4" and n.ancora.pagina == 4).unidade == "BRL_mi"
+    assert next(n for n in b3 if n.bruto == "3.081.392").valor == Decimal("3081.392")
+    assert next(n for n in b3 if n.bruto == "0,786").unidade == "BRL"  # RPC média (R$)
 
 
 # Gravação

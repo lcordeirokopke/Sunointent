@@ -23,7 +23,7 @@ URL_PDF = {
     "copom": "https://www.bcb.gov.br/content/copom/atascopom/Copom281-not20260916281.pdf",
     "cvm": (
         "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE"
-        "&CodigoInstituicao=1&numProtocolo=1574050&numSequencia=1098756&numVersao=1"
+        "&CodigoInstituicao=1&numProtocolo=1575717&numSequencia=1100423&numVersao=1"
     ),
     "b3": (
         "https://api.mziq.com/mzfilemanager/v2/d/5fd7b7d8-54a1-472d-8426-eb896ad8a3c4/"
@@ -32,7 +32,7 @@ URL_PDF = {
 }
 DOC_ID = {
     "copom": "copom_ata_281",
-    "cvm": "cvm_fato_relevante_24708_1574050",
+    "cvm": "cvm_fato_relevante_16993_1575717",
     "b3": "b3_release_2026_2T",
 }
 SCRIPTS = {"copom": copom, "cvm": cvm, "b3": b3}

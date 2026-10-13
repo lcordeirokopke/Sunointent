@@ -5,8 +5,20 @@ texto do claim e a sua lista de números dizem o mesmo. Sem nota: cada claim pas
 com o motivo (docs/fluxos/extracao.md, E3).
 """
 
+import re
+
 from sunontent import numeros
 from sunontent.schemas import Claim, DocumentoProcessado, FactSheet
+
+# Palavra: duas letras ou mais seguidas. Escala e unidade ao lado do número não contam como texto.
+_PALAVRA = re.compile(r"[^\W\d_]{2,}")
+_SO_UNIDADE = frozenset(
+    "bps mil milhão milhões milhao milhoes bilhão bilhões bilhao bilhoes trilhão trilhões trilhao trilhoes".split()
+)
+
+
+def _tem_palavra(literal: str) -> bool:
+    return any(p.lower() not in _SO_UNIDADE for p in _PALAVRA.findall(literal))
 
 
 def validar_claim(documento: DocumentoProcessado, claim: Claim) -> str | None:
@@ -21,6 +33,12 @@ def validar_claim(documento: DocumentoProcessado, claim: Claim) -> str | None:
         return "literal_fonte não é o texto limpo no intervalo da âncora"
     if not claim.literal_fonte.strip():
         return "literal_fonte vazio"
+    if not _tem_palavra(claim.literal_fonte):
+        return (
+            "literal_fonte só tem números, sem o texto que diz a que eles se referem; numa tabela, comece o "
+            "trecho no rótulo da linha (por exemplo, 'IPCA livres' seguido dos valores) e liste só os números "
+            "do próprio fato"
+        )
     tabela = documento.tabela_numeros
     for numero in claim.numeros:
         if numero not in tabela:
@@ -35,7 +53,23 @@ def validar_claim(documento: DocumentoProcessado, claim: Claim) -> str | None:
         na = numero.ancora
         if na.pagina != a.pagina or na.offset_inicio < a.offset_inicio or na.offset_fim > a.offset_fim:
             return f"número {numero.bruto!r} está fora do literal_fonte"
-    return numeros_do_texto(claim)
+    return numeros_do_texto(claim) or datas_do_texto(claim)
+
+
+def datas_do_texto(claim: Claim) -> str | None:
+    """Cada data com dia do texto do claim está no literal_fonte: mesmo dia e mês e, se o texto traz o
+    ano, o mesmo ano no literal ("19 de outubro de 2026" não passa contra "19/10"). None se batem."""
+    no_literal = numeros.datas(claim.literal_fonte)
+    fora = [
+        d.bruto for d in numeros.datas(claim.texto)
+        if not any(l.dia == d.dia and l.mes == d.mes and (d.ano is None or l.ano == d.ano) for l in no_literal)
+    ]
+    if fora:
+        return (
+            f"datas no texto do claim que não estão no literal_fonte: {', '.join(dict.fromkeys(fora))}; "
+            "escreva a data com o dia, o mês e o ano que o trecho traz, sem acrescentar o que ele não diz"
+        )
+    return None
 
 
 def numeros_do_texto(claim: Claim) -> str | None:

@@ -38,10 +38,10 @@ A resposta segue o schema `SaidaExtractor` (`schemas.py`): uma lista de `ClaimPr
 Regras pedidas ao modelo:
 
 - Cobertura: todos os fatos relevantes; sinalizações sobre a conduta futura e métricas secundárias com número próprio também viram claim. Dados administrativos (presentes, horários, telefones, CNPJ) ficam de fora.
-- Um fato por claim. O mesmo número da mesma métrica em dois trechos vira um claim só, do trecho com o valor mais preciso.
-- `texto`: uma frase autocontida, sem relação de causa que o documento não declara, com atribuição em projeções e avaliações.
-- `literal_fonte`: cópia exata de um trecho contínuo de uma única página, sem atravessar nota de rodapé.
-- `numeros`: o bruto de cada valor do fato, como aparece no trecho; sem anos, datas, trimestres e numeração. Texto e lista dizem o mesmo.
+- Um fato por claim. O mesmo número da mesma métrica em dois trechos vira um claim só, do trecho com o valor mais preciso. Texto corrido vem antes de tabela, cuja unidade fica no cabeçalho e não acompanha o número: o fato só sai de tabela quando não aparece em nenhum texto corrido.
+- `texto`: uma frase autocontida, sem relação de causa que o documento não declara, com atribuição em projeções e avaliações. Número de tabela vai com a unidade do cabeçalho ou da linha (`R$ 3.081,4 milhões`, `4,1%`), e data vai com o dia, o mês e o ano que o literal traz, sem acrescentar o ano.
+- `literal_fonte`: cópia exata de um trecho contínuo de uma única página, sem atravessar nota de rodapé; em tabela, a partir do rótulo da linha.
+- `numeros`: o bruto de cada valor do fato, como aparece no trecho; sem anos, datas, trimestres e numeração. Número por extenso ("dois", "três") não entra na lista e fica por extenso no texto; de "5 anos" entra só o "5". Texto e lista dizem o mesmo.
 
 ## Tipos e tags
 
@@ -64,7 +64,7 @@ Para cada proposta, `ancoragem.resolver`:
 1. Procura o `literal_fonte` no texto limpo de cada página. A comparação aceita diferença só de espaço e quebra de linha e na grafia de aspas, apóstrofos e travessões; qualquer outra diferença não resolve.
 2. Fica com a ocorrência dentro do chunk citado. Fora dele, aceita se o trecho existe uma única vez no documento; se existe mais de uma vez, recusa por ambiguidade.
 3. O `literal_fonte` gravado é o texto limpo exato no intervalo encontrado, e não o que o modelo escreveu.
-4. Para cada bruto da lista, pega a entrada da `tabela_numeros` com esse bruto dentro do intervalo (espaços ignorados na comparação), sem usar a mesma entrada duas vezes.
+4. Para cada bruto da lista, pega a entrada da `tabela_numeros` com esse bruto dentro do intervalo (espaços ignorados na comparação), sem usar a mesma entrada duas vezes. Se o bruto não está escrito assim no trecho, vale a entrada do trecho com exatamente o mesmo valor e unidade: `4,1%` listado casa com a célula `4,1` de uma tabela `(%)`, que a E1 já leu como `pct`, e `4,1 p.p.` não casa.
 
 Na primeira rodada, os ids são renumerados `C01`, `C02`... na ordem devolvida pelo modelo. Se ele não devolver nenhum claim, o run aborta com erro terminal.
 
@@ -75,11 +75,12 @@ Motivos de recusa da ancoragem, devolvidos ao modelo como estão: trecho não en
 Cada claim passa ou reprova, sem nota:
 
 1. A página da âncora existe e o intervalo cabe nela.
-2. O texto limpo no intervalo é exatamente o `literal_fonte`.
+2. O texto limpo no intervalo é exatamente o `literal_fonte`, e ele tem ao menos uma palavra além de números, escala e unidade (`milhões`, `bps`). Literal só de números (`'4,1'`, uma célula de tabela sem o rótulo da linha) não diz a que o número se refere e é recusado, pedindo o rótulo junto.
 3. Cada `Numero` do claim é uma entrada da `tabela_numeros`, com o mesmo valor, unidade, bruto e posição. Unidade trocada (`pp` no lugar de `pct`) é recusada com o valor e a unidade da tabela.
 4. Cada número está dentro do `literal_fonte`.
 5. O texto do claim e a lista de números dizem o mesmo: o texto é lido pelo mesmo parser da E1 (`numeros.varrer`), e cada número listado precisa aparecer no texto com o mesmo valor e unidade; cada número do texto, exceto datas, precisa estar na lista. Isso recusa claim que carrega números de outro fato e número no texto que não veio do documento.
-6. Id repetido é recusado.
+6. Cada data com dia do texto do claim (`19/10`, `19 de outubro`, `15 e 16 de setembro de 2026`, lidas por `numeros.datas`) está no `literal_fonte`, com o mesmo dia e mês; se o texto traz o ano, o literal traz o mesmo ano. `19 de outubro de 2026` contra o literal `19/10` reprova, porque o ano foi deduzido. Mês e ano sem dia (`junho de 2026`, `dez/25`) e trimestre (`2T26`) não entram na regra.
+7. Id repetido é recusado.
 
 Os claims que a E2 não ancorou também reprovam, com o motivo da E2.
 

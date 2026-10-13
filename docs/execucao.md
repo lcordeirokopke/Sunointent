@@ -75,12 +75,12 @@ START -> (modo normal) coleta     -> leitura -> extract -> validate -> END
 `_rodar_grafo` roda o grafo com `stream_mode=["tasks", "values"]`: cada evento de tarefa vira uma linha e o último `values` é o estado final, o mesmo que o `invoke` devolveria.
 
 ```
-run cvm_20261012T122310Z_13e2d5 (dev)
-etapa referencia: iniciada
-etapa referencia: concluída
+run cvm_20261013T152557Z_c95dc4 (normal)
+etapa coleta: iniciada
+etapa coleta: concluída
 etapa leitura: iniciada
 ...
-concluído: cvm_fato_relevante_24708_1574050 (53d8fb099247), 7 claims, 11074 tokens, R$ 0.1578
+concluído: cvm_fato_relevante_16993_1575717 (215aa96736b4), 9 claims, 10836 tokens, R$ 0.1516
 ```
 
 - O nome é o do nó em `graph.py` (`coleta`, `referencia`, `leitura`, `extract`, `validate`, `quarentena`). No loop E2/E3, `extract` e `validate` aparecem uma vez por rodada.
@@ -112,7 +112,7 @@ Os campos do documento (`doc_id`, `doc_sha256`, `url_origem`, `coletado_em`, `co
 No terminal, a última linha do run traz o documento, os claims do FactSheet e o custo:
 
 ```
-concluído: cvm_fato_relevante_24708_1574050 (53d8fb099247), 7 claims, 11074 tokens, R$ 0.1578
+concluído: cvm_fato_relevante_16993_1575717 (215aa96736b4), 9 claims, 10836 tokens, R$ 0.1516
 ```
 
 Em `runs`, o custo é somado na mesma instrução que grava cada span (`docs/fluxos/extracao.md`, Custo).

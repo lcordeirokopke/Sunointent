@@ -11,6 +11,8 @@ Regras:
 - data: cada componente numérico da data é um número (valor = o inteiro escrito): "15 e 16 de
   setembro de 2026" dá 15, 16 e 2026; "2T26" dá 2 e 26; "30/06/2026" dá 30, 6 e 2026.
 - cotação "R$5,15/US$" é um BRL com o bruto inteiro; outras quantias em dólar ou euro levantam NumeroNaoPrevisto.
+- `datas` lê as datas com dia como dia, mês e ano (quando há), para comparar datas escritas de formas
+  diferentes ("19/10" e "19 de outubro"); `varrer` continua dando um número por componente.
 - identificadores (CNPJ, CPF, CEP, NIRE, telefone, hora, endereço web), numeração de parágrafo no
   início da linha ("12. ") e números colados a letra ("Copom1", "B3", "5G") não são números do
   texto e são ignorados.
@@ -66,7 +68,7 @@ _PADRAO = re.compile(
     )
   | (?P<datanum>{_FRONTEIRA_ESQ}\d{{1,2}}/\d{{1,2}}(?:/\d{{4}}|/\d{{2}})?(?![\w/]))
   | (?P<trimestre>{_FRONTEIRA_ESQ}[1-4]T(?:\d{{4}}|\d{{2}})(?![\w]))
-  | (?P<periodo>{_FRONTEIRA_ESQ}\d{{1,4}}[ºª](?=\s+(?:reuni[ãa]o|(?:tri|se|quadri|bi)mestre)\b))
+  | (?P<periodo>{_FRONTEIRA_ESQ}\d{{1,4}}[ºª](?=\s+(?:reuni[ãa]o|(?:tri|se|quadri|bi)mestre|tri)\b))
   | (?P<cambio>{_SINAL}R\$\s?(?P<cambio_num>{_NUM})/US\$)
   | (?P<brl>{_SINAL}R\$\s?(?P<brl_num>{_NUM})(?:\s?(?P<brl_escala>{_ESCALA})(?![\w{_LETRA}]))?{_FRONTEIRA_DIR})
   | (?P<pct>{_SINAL}{_FRONTEIRA_ESQ}(?P<pct_num>{_NUM})\s?(?:%|por\s+cento\b))
@@ -180,6 +182,49 @@ def interpretar(bruto: str) -> Encontrado:
     if len(achados) != 1 or achados[0].inicio != 0 or achados[0].fim != len(bruto.strip()):
         raise NumeroNaoPrevisto(f"não é um único número: {bruto!r}")
     return achados[0]
+
+
+@dataclass(frozen=True)
+class Data:
+    """Data com dia lida do texto. `ano` é None quando o texto não traz o ano ("19/10", "19 de outubro")."""
+
+    dia: int
+    mes: int
+    ano: int | None
+    bruto: str
+
+
+_NUMERO_DO_MES = {
+    "janeiro": 1, "fevereiro": 2, "março": 3, "marco": 3, "abril": 4, "maio": 5, "junho": 6, "julho": 7,
+    "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12,
+}
+_DATA_NUMERICA = re.compile(rf"{_FRONTEIRA_ESQ}(\d{{1,2}})/(\d{{1,2}})(?:/(\d{{4}}|\d{{2}}))?(?![\w/])")
+_DATA_EXTENSO = re.compile(
+    rf"{_FRONTEIRA_ESQ}((?:\d{{1,2}}|1º)(?:\s*(?:,|e|a|-|–)\s*\d{{1,2}})*)\s+de\s+({_MESES})(?:\s+de\s+(\d{{4}}))?",
+    re.IGNORECASE,
+)
+
+
+def datas(texto: str) -> list[Data]:
+    """Datas com dia do texto: "19/10", "19/10/2026", "19 de outubro", "15 e 16 de setembro de 2026" (uma
+    Data por dia). Mês e ano sem dia ("junho de 2026", "dez/25") e trimestre ("2T26") ficam de fora."""
+    achadas = []
+    for m in _DATA_NUMERICA.finditer(texto):
+        dia, mes = int(m.group(1)), int(m.group(2))
+        ano = m.group(3)
+        if 1 <= dia <= 31 and 1 <= mes <= 12:
+            achadas.append(Data(dia, mes, _ano(ano), m.group(0)))
+    for m in _DATA_EXTENSO.finditer(texto):
+        mes = _NUMERO_DO_MES[m.group(2).lower()]
+        for dia in re.findall(r"\d{1,2}", m.group(1)):
+            achadas.append(Data(int(dia), mes, _ano(m.group(3)), m.group(0)))
+    return achadas
+
+
+def _ano(texto: str | None) -> int | None:
+    if texto is None:
+        return None
+    return int(texto) + 2000 if len(texto) == 2 else int(texto)
 
 
 def _contexto(texto: str, posicao: int, raio: int = 30) -> str:

@@ -12,6 +12,7 @@ O que não resolve vira motivo, devolvido ao extractor na rodada seguinte (docs/
 
 import re
 
+from sunontent import numeros
 from sunontent.schemas import Ancora, Claim, ClaimProposto, DocumentoProcessado, Numero
 
 _EQUIVALENTES = [
@@ -84,7 +85,10 @@ def _sem_espaco(texto: str) -> str:
 
 
 def numeros_no_trecho(documento: DocumentoProcessado, ancora: Ancora, brutos: list[str]) -> list[Numero]:
-    """Entrada da tabela_numeros para cada bruto, dentro do intervalo, sem repetir a mesma entrada."""
+    """Entrada da tabela_numeros para cada bruto, dentro do intervalo, sem repetir a mesma entrada.
+
+    Bruto que não está escrito assim no trecho ("4,1%" para a célula "4,1" de uma tabela "(%)") vale
+    pela entrada do trecho com exatamente o mesmo valor e unidade: a unidade da célula vem da E1."""
     dentro = [
         n
         for n in documento.tabela_numeros
@@ -97,6 +101,8 @@ def numeros_no_trecho(documento: DocumentoProcessado, ancora: Ancora, brutos: li
         alvo = _sem_espaco(bruto)
         candidato = next((n for n in dentro if _sem_espaco(n.bruto) == alvo and n not in usados), None)
         if candidato is None:
+            candidato = _mesmo_valor(dentro, usados, bruto)
+        if candidato is None:
             presentes = ", ".join(sorted({n.bruto for n in dentro})) or "nenhum"
             raise NaoResolvido(
                 f"o número {bruto!r} não está dentro do literal_fonte (números do trecho: {presentes}); "
@@ -104,6 +110,16 @@ def numeros_no_trecho(documento: DocumentoProcessado, ancora: Ancora, brutos: li
             )
         usados.append(candidato)
     return usados
+
+
+def _mesmo_valor(dentro: list[Numero], usados: list[Numero], bruto: str) -> Numero | None:
+    try:
+        lido = numeros.interpretar(bruto)
+    except numeros.NumeroNaoPrevisto:
+        return None
+    return next(
+        (n for n in dentro if (n.valor, n.unidade) == (lido.valor, lido.unidade) and n not in usados), None
+    )
 
 
 def resolver(documento: DocumentoProcessado, proposto: ClaimProposto) -> Claim:

@@ -108,7 +108,7 @@ class DocumentoProcessado(BaseModel):
     tabela_numeros: list[Numero]
 ```
 
-Saída da E1, detalhada em `docs/fluxos/leitura.md`. `data_documento` é o último dia da reunião no Copom, a data da assinatura na CVM e a data-base do balanço na B3. `emissor` é texto fixo para Copom e B3 e a primeira linha da primeira página na CVM. O modelo valida a si mesmo: o `bruto` de cada número bate com o texto na âncora e o texto de cada chunk bate com o intervalo das páginas.
+Saída da E1, detalhada em `docs/fluxos/leitura.md`. `data_documento` é o último dia da reunião no Copom, a data da assinatura na CVM e a data-base do balanço na B3. `emissor` é texto fixo para Copom e B3 e, na CVM, o nome de cada companhia do cabeçalho da primeira página, unidos por `; ` no fato relevante conjunto. O modelo valida a si mesmo: o `bruto` de cada número bate com o texto na âncora e o texto de cada chunk bate com o intervalo das páginas.
 
 ## FactSheet
 

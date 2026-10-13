@@ -1,7 +1,7 @@
 """E1: normalização do texto das páginas.
 
 Remove cabeçalho e rodapé repetidos e número de página, junta palavras hifenizadas quebradas por
-linha e colapsa espaço. O texto limpo da página é a referência de todos os offsets do pipeline:
+linha e colapsa espaço. Depois, `sem_versao_em_ingles` descarta a versão em inglês do fim do documento. O texto limpo da página é a referência de todos os offsets do pipeline:
 nada depois desta etapa altera esse texto.
 """
 
@@ -38,6 +38,12 @@ _NUMERO_DE_PAGINA = re.compile(
 )
 _FIM_HIFENIZADO = re.compile(r"[^\W\d_]-$")
 
+# Palavras curtas que só uma das duas línguas usa com frequência; a contagem decide a língua da página.
+_PALAVRA = re.compile(r"[^\W\d_]+")
+_PALAVRAS_PT = frozenset("de da do das dos que para com não uma pela pelo ao em na no e à".split())
+_PALAVRAS_EN = frozenset("the of and to in for by with on is which shall will be this that at".split())
+MINIMO_PALAVRAS_EN = 20
+
 
 def limpar_linha(texto: str) -> str:
     return _ESPACOS.sub(" ", texto.translate(_TABELA)).strip()
@@ -47,6 +53,27 @@ def normalizar(paginas: list[PaginaLida]) -> list[Pagina]:
     repetidas = _linhas_repetidas(paginas)
     deslocamento = _deslocamento_da_numeracao(paginas)
     return [_normalizar_pagina(pagina, repetidas, deslocamento) for pagina in paginas]
+
+
+def sem_versao_em_ingles(paginas: list[Pagina]) -> list[Pagina]:
+    """Descarta o bloco final de páginas em inglês (a versão traduzida que alguns documentos trazem
+    depois da original). Só o bloco final: as páginas que ficam seguem numeradas como no PDF. Página
+    vazia não interrompe o bloco. Documento todo em inglês fica inteiro."""
+    corte = len(paginas)
+    for indice in range(len(paginas) - 1, -1, -1):
+        if not paginas[indice].texto_limpo.strip():
+            continue
+        if not _em_ingles(paginas[indice]):
+            break
+        corte = indice
+    return paginas[:corte] if corte > 0 else paginas
+
+
+def _em_ingles(pagina: Pagina) -> bool:
+    palavras = _PALAVRA.findall(pagina.texto_limpo.lower())
+    ingles = sum(p in _PALAVRAS_EN for p in palavras)
+    portugues = sum(p in _PALAVRAS_PT for p in palavras)
+    return ingles >= MINIMO_PALAVRAS_EN and ingles > 2 * portugues
 
 
 def _valor_de_pagina(texto: str) -> int | None:

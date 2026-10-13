@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from sunontent.numeros import NumeroNaoPrevisto, interpretar, varrer
+from sunontent.numeros import Data, NumeroNaoPrevisto, datas, interpretar, varrer
 
 
 def d(texto: str) -> Decimal:
@@ -169,3 +169,22 @@ def test_parenteses_de_valor_negativo_ficam_fora_do_bruto():
 def test_escala_com_quebra_de_linha_no_meio():
     achado = varrer("R$1.701,2\nmilhões")[0]
     assert (achado.valor, achado.unidade) == (d("1701.2"), "BRL_mi")
+
+
+def test_datas_com_dia_em_cada_formato():
+    texto = "Em 15 e 16 de setembro de 2026, depois em 19/10, 01/10/26 e 1º de julho."
+    assert datas(texto) == [
+        Data(19, 10, None, "19/10"), Data(1, 10, 2026, "01/10/26"),
+        Data(15, 9, 2026, "15 e 16 de setembro de 2026"), Data(16, 9, 2026, "15 e 16 de setembro de 2026"),
+        Data(1, 7, None, "1º de julho"),
+    ]
+
+
+def test_sem_dia_trimestre_lei_e_data_invalida_nao_sao_datas():
+    assert datas("dez/25, junho de 2026, 2T26/2T25, Lei 224/2025, 6.404 e 32/13") == []
+
+
+def test_ordinal_de_periodo_abreviado_e_data():
+    assert [(a.bruto, a.unidade) for a in varrer("1º tri 2028, 1º trimestre e 3º lugar")] == [
+        ("1º", "data"), ("2028", "data"), ("1º", "data"), ("3º", "contagem"),
+    ]

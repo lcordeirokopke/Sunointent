@@ -134,7 +134,7 @@ def test_literal_com_espaco_no_lugar_da_quebra_de_linha_resolve_no_texto_exato(d
 def test_aspas_e_travessoes_trocados_pelo_modelo_resolvem(documentos):
     documento = documentos["cvm"]
     claim = ancoragem.resolver(documento, proposto(
-        'A Nova Transportadora do Sudeste S.A. - NTS, sociedade por ações', chunk_id="K01"))
+        'A COMPANHIA DE SANEAMENTO BÁSICO DO ESTADO DE SÃO PAULO - SABESP ("Sabesp")', chunk_id="K01"))
     assert "–" in claim.literal_fonte
 
 
@@ -229,6 +229,47 @@ def test_validador_recusa_numero_de_outro_trecho_e_id_repetido(documentos):
         valor=Decimal("14"), unidade="pct", bruto="14%", ancora=claim.ancora)]})
     assert "tabela_numeros" in validador.validar(documento, factsheet_de(documento, [inventado]))["C01"]
     assert validador.validar(documento, factsheet_de(documento, [claim, claim])) == {"C01": "id repetido no FactSheet"}
+
+
+def test_numero_listado_com_a_unidade_da_tabela_vale_pela_celula(documentos):
+    documento = documentos["copom"]
+    literal = "IPCA livres\n5,2\n4,1\n3,2"
+
+    def claim(brutos, texto):
+        return ancoragem.resolver(documento, proposto(literal, brutos, chunk_id="K21", texto=texto))
+
+    texto = "Segundo o Copom, a projeção do IPCA livres para o 1º tri 2028 é 3,2%."
+    resolvido = claim(["3,2%"], texto)
+    assert [(n.bruto, n.valor, n.unidade) for n in resolvido.numeros] == [("3,2", Decimal("3.2"), "pct")]
+    assert validador.validar(documento, factsheet_de(documento, [resolvido])) == {}
+    with pytest.raises(ancoragem.NaoResolvido, match="não está dentro do literal_fonte"):
+        claim(["3,2 p.p."], texto)  # mesmo valor, outra unidade
+
+
+def test_validador_exige_a_data_do_texto_no_literal(documentos):
+    documento = documentos["cvm"]
+    literal = "19/10\nEncerramento do prazo para exercício do Direito de Retirada."
+
+    def motivo(texto):
+        claim = ancoragem.resolver(documento, proposto(literal, chunk_id="K01", texto=texto))
+        return validador.validar(documento, factsheet_de(documento, [claim])).get("C01")
+
+    assert motivo("O prazo para exercício do Direito de Retirada termina em 19 de outubro.") is None
+    assert motivo("O prazo para exercício do Direito de Retirada termina em 19/10.") is None
+    assert "19 de outubro de 2026" in motivo("O prazo do Direito de Retirada termina em 19 de outubro de 2026.")
+    assert "19 de novembro" in motivo("O prazo do Direito de Retirada termina em 19 de novembro.")
+
+
+def test_validador_recusa_literal_so_de_numeros_e_aceita_com_o_rotulo(documentos):
+    documento = documentos["copom"]
+    texto = "Segundo o Copom, a projeção do IPCA de preços livres para 2027 é 4,1%."
+
+    def motivo(literal):
+        claim = ancoragem.resolver(documento, proposto(literal, ["4,1"], chunk_id="K21", texto=texto))
+        return validador.validar(documento, factsheet_de(documento, [claim])).get("C01")
+
+    assert "só tem números" in motivo("5,2\n4,1")
+    assert motivo("IPCA livres\n5,2\n4,1") is None
 
 
 def test_validador_exige_que_texto_e_numeros_digam_o_mesmo(documentos):
