@@ -4,7 +4,7 @@ Os testes comuns usam o ProviderFalso (conftest.py): sem rede e sem custo. A anc
 validação rodam sobre a saída real da E1 dos documentos de tests/fixtures/referencia/.
 
 O teste de cobertura com a Gemini API de verdade tem o marker `gemini` e só roda com
-`pytest -m gemini`; ele lê só a GOOGLE_API_KEY do .env.
+`pytest -m gemini`; ele lê só a GOOGLE_API_KEY_PRINC e a GOOGLE_API_KEY_SEC do .env.
 """
 
 import json
@@ -22,7 +22,7 @@ from conftest import FIXTURES, ProviderFalso, RepositorioMemoria, cliente_falso
 from sunontent import __main__ as principal
 from sunontent import llm, persistencia
 from sunontent.extracao import ancoragem, extractor, leitura, validador
-from sunontent.llm import ClienteLLM, Preco, RespostaBruta
+from sunontent.llm import ClienteLLM, FalhaChave, Preco, RespostaBruta
 from sunontent.retentativa import FalhaRetriavel, FalhaTerminal
 from sunontent.schemas import Ancora, Claim, ClaimProposto, DocumentoFonte, FactSheet, Numero
 
@@ -405,8 +405,95 @@ def test_nivel_de_raciocinio_invalido_e_terminal():
 
 
 def test_sem_chave_do_gemini_e_terminal():
-    with pytest.raises(FalhaTerminal, match="GOOGLE_API_KEY"):
+    with pytest.raises(FalhaTerminal, match="GOOGLE_API_KEY_PRINC"):
         llm.conferir_credenciais({})
+    with pytest.raises(FalhaTerminal, match="GOOGLE_API_KEY_PRINC"):
+        llm.conferir_credenciais({"GOOGLE_API_KEY_SEC": "reserva"})
+
+
+def test_chaves_na_ordem_int_e_pes_com_a_reserva_opcional():
+    so_princ = llm.criar_cliente(RAIZ, {"GOOGLE_API_KEY_PRINC": "a"})
+    assert [chave for chave, _ in so_princ._providers] == ["GOOGLE_API_KEY_PRINC"]
+    as_duas = llm.criar_cliente(RAIZ, {"GOOGLE_API_KEY_SEC": "b", "GOOGLE_API_KEY_PRINC": "a"})
+    assert [chave for chave, _ in as_duas._providers] == ["GOOGLE_API_KEY_PRINC", "GOOGLE_API_KEY_SEC"]
+
+
+def cliente_com_reserva(principal, reserva):
+    return ClienteLLM(
+        [("GOOGLE_API_KEY_PRINC", ProviderFalso(principal)), ("GOOGLE_API_KEY_SEC", ProviderFalso(reserva))],
+        {"extractor": "m"}, {"m": Preco(Decimal("0.75"), Decimal("3.75"))}, Decimal("5.40"),
+    )
+
+
+@pytest.mark.parametrize("falha", [FalhaRetriavel("HTTP 429: cota"), FalhaChave("HTTP 403: sem permissão")])
+def test_falha_da_int_passa_para_a_pes_sem_esperar(sem_espera, falha):
+    cliente = cliente_com_reserva([falha], ['{"ok": true}'])
+    spans = []
+    assert chamar(cliente, spans).ok
+    assert not sem_espera
+    assert [s.falha_classe for s in spans] == [falha.classe, None]
+    assert spans[0].falha_mensagem.startswith("GOOGLE_API_KEY_PRINC: HTTP")
+
+
+def test_cada_chamada_comeca_pela_int(sem_espera):
+    cliente = cliente_com_reserva([FalhaRetriavel("HTTP 429"), '{"ok": true}'], ['{"ok": true}'])
+    chamar(cliente, [])
+    chamar(cliente, [])
+    principal, reserva = (p for _, p in cliente._providers)
+    assert (len(principal.prompts), len(reserva.prompts)) == (2, 1)
+
+
+def test_as_duas_chaves_falham_espera_e_recomeca_pela_int(sem_espera):
+    cliente = cliente_com_reserva([FalhaRetriavel("HTTP 503"), '{"ok": true}'], [FalhaRetriavel("HTTP 429")])
+    spans = []
+    assert chamar(cliente, spans).ok
+    assert len(sem_espera) == 1
+    assert [s.falha_mensagem.split(":")[0] for s in spans[:2]] == ["GOOGLE_API_KEY_PRINC", "GOOGLE_API_KEY_SEC"]
+    assert spans[2].falha_classe is None
+
+
+def test_as_duas_chaves_esgotadas_viram_terminal(sem_espera):
+    cliente = cliente_com_reserva([FalhaRetriavel("HTTP 503")] * 4, [FalhaRetriavel("HTTP 429")] * 4)
+    spans = []
+    with pytest.raises(FalhaTerminal, match="4 tentativas esgotadas.*GOOGLE_API_KEY_PRINC.*GOOGLE_API_KEY_SEC"):
+        chamar(cliente, spans)
+    assert len(spans) == 8 and len(sem_espera) == 3
+
+
+def test_as_duas_chaves_recusadas_sao_terminais_sem_esperar(sem_espera):
+    cliente = cliente_com_reserva([FalhaChave("HTTP 401")], [FalhaChave("HTTP 403")])
+    with pytest.raises(FalhaTerminal, match="chave recusada"):
+        chamar(cliente, [])
+    assert not sem_espera
+
+
+def test_bloqueio_e_erro_4xx_na_int_nao_chamam_a_pes():
+    for resposta in (RespostaBruta("", 10, 0, "finish_reason SAFETY"), FalhaTerminal("HTTP 400: inválido")):
+        cliente = cliente_com_reserva([resposta], ['{"ok": true}'])
+        with pytest.raises(FalhaTerminal):
+            chamar(cliente, [])
+        assert not cliente._providers[1][1].prompts
+
+
+@pytest.mark.parametrize(("codigo", "mensagem", "classe"), [
+    (429, "Resource exhausted", FalhaRetriavel),
+    (401, "Unauthorized", FalhaChave),
+    (403, "Permission denied", FalhaChave),
+    (400, "API key not valid. Please pass a valid API key.", FalhaChave),
+    (400, "Invalid JSON payload", FalhaTerminal),
+])
+def test_gemini_classifica_o_erro_http(codigo, mensagem, classe):
+    from google.genai import errors
+
+    provider = llm.ProviderGemini("chave-de-teste")
+
+    def falhar(**kwargs):
+        raise errors.APIError(codigo, {"error": {"code": codigo, "message": mensagem, "status": "X"}})
+
+    provider._cliente.models.generate_content = falhar
+    with pytest.raises(classe) as falha:
+        provider.gerar("m", "p", {})
+    assert type(falha.value) is classe
 
 
 # Persistência
@@ -449,11 +536,12 @@ def raiz_completa(tmp_path):
 def test_gemini_cobre_os_fatos_anotados(documentos, raiz_completa, fonte):
     from dotenv import dotenv_values
 
-    chave = dotenv_values(RAIZ / ".env").get("GOOGLE_API_KEY")
-    if not chave:
-        pytest.skip("GOOGLE_API_KEY ausente no .env")
+    valores = dotenv_values(RAIZ / ".env")
+    chaves = {c: valores[c] for c in (llm.CHAVE_PRINCIPAL, llm.CHAVE_RESERVA) if valores.get(c)}
+    if llm.CHAVE_PRINCIPAL not in chaves:
+        pytest.skip(f"{llm.CHAVE_PRINCIPAL} ausente no .env")
     repo = RepositorioMemoria()
-    cliente = llm.criar_cliente(raiz_completa, {"GOOGLE_API_KEY": chave})
+    cliente = llm.criar_cliente(raiz_completa, chaves)
     codigo = principal.executar(
         fonte, dev=True, repositorio=repo, checkpointer=InMemorySaver(), cliente_llm=cliente,
         raiz=raiz_completa, relogio=lambda: datetime.now(timezone.utc),

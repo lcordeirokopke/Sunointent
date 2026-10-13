@@ -10,7 +10,7 @@ Este documento descreve como um run começa, como o grafo é montado e executado
 | `sunontent/graph.py` | Monta o grafo LangGraph: as duas entradas (E0 ou referência), a E1, a E2, a E3, o loop E2/E3 e a quarentena, as constantes `K` e `RODADAS_EXTRACAO` e `construir_grafo(checkpointer)`. A ordem das etapas fica só aqui. |
 | `sunontent/manifesto.py` | Lê `config/` e `prompts/` e devolve o `RunManifest` sem os campos do documento. |
 | `sunontent/schemas.py` | `RunManifest`, `PipelineState` e os tipos `Nivel`, `Fonte` e `Modo`. |
-| `sunontent/llm.py` | `conferir_credenciais` (`GOOGLE_API_KEY`) e `criar_cliente`: um `ClienteLLM` por run, que acumula os tokens e o custo do run. |
+| `sunontent/llm.py` | `conferir_credenciais` (`GOOGLE_API_KEY_PRINC`) e `criar_cliente`: um `ClienteLLM` por run, com as chaves na ordem `GOOGLE_API_KEY_PRINC` e `GOOGLE_API_KEY_SEC`, que acumula os tokens e o custo do run. |
 | `sunontent/persistencia.py` | Funções do run: `criar_run`, `concluir_run`, `abortar_run`, `gravar_manifest_local`, `criar_repositorio_supabase` e `checkpointer_postgres`. Única porta de gravação no Supabase e em `data/`. |
 | `sunontent/nodes/` | Nós finos: `coleta` e `referencia` (entradas), `leitura` (E1), `extract` (E2), `validate` (E3) e `quarentena`. Não tratam erro: a `Falha` sobe até o `__main__.py`. |
 
@@ -18,7 +18,7 @@ Este documento descreve como um run começa, como o grafo é montado e executado
 
 ```mermaid
 flowchart TD
-    CLI["python -m sunontent [fonte]"] --> ENV["le o .env e confere SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL e GOOGLE_API_KEY"]
+    CLI["python -m sunontent [fonte]"] --> ENV["le o .env e confere SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL e GOOGLE_API_KEY_PRINC"]
     ENV -->|"ausente ou conexao recusada"| PARA["erro na tela, codigo 1, sem linha em runs"]
     ENV --> CK["abre o checkpointer: conexao propria, schema langgraph, setup()"]
     CK --> MAN["gera run_id e monta o RunManifest a partir de config/ e prompts/"]
@@ -41,7 +41,7 @@ flowchart TD
 ```
 
 1. **Parâmetros.** `fonte` é opcional e vale `copom`, `cvm` ou `b3`; sem ela, as três rodam em sequência, um run por fonte. `--dev` escolhe o documento de referência no lugar do download.
-2. **Credenciais.** O `.env` da raiz do repositório é carregado e as quatro variáveis de `.env.example` são conferidas: as três do Supabase, por `persistencia.criar_repositorio_supabase`, e a `GOOGLE_API_KEY`, por `llm.conferir_credenciais`. O banco recebe um `select 1` sem retentativa. Se algo falhar, a execução para com a mensagem na tela e código de saída 1, **sem criar linha em `runs`** e sem chamar `abortar_run`.
+2. **Credenciais.** O `.env` da raiz do repositório é carregado e as variáveis obrigatórias de `.env.example` são conferidas: as três do Supabase, por `persistencia.criar_repositorio_supabase`, e a `GOOGLE_API_KEY_PRINC`, por `llm.conferir_credenciais`. A `GOOGLE_API_KEY_SEC` é opcional: sem ela, o run roda só com a principal, sem chave de reserva. O banco recebe um `select 1` sem retentativa. Se algo falhar, a execução para com a mensagem na tela e código de saída 1, **sem criar linha em `runs`** e sem chamar `abortar_run`.
 3. **Checkpointer.** `PostgresSaver` em conexão própria (`autocommit`, `dict_row`, `search_path = langgraph`). O `setup()` cria as tabelas na primeira execução.
 4. **`run_id` e manifest.** O `run_id` tem o formato `<fonte>_<AAAAMMDDTHHMMSSZ>_<6 hex>`, por exemplo `copom_20261006T150000Z_9f2c1a`, e o instante é o mesmo do `timestamp` do manifest. Se a config for inválida, a execução para antes de existir linha em `runs`.
 5. **Registro.** `criar_run` insere a linha em `runs` com status `em_andamento` (sem efeito se o `run_id` já existe) e o `manifest.json` local é gravado em seguida.

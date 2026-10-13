@@ -807,7 +807,7 @@ E manter `ERRO_INFRA` como estado de célula distinto de `REPROVADA`. Os dois ch
 
 Versão de prompt, versão de LevelSpec, pin de modelo com snapshot, e um **run manifest** que amarra tudo isso ao resultado. Sem isso, reprodutibilidade é aspiracional: o mesmo documento com o mesmo código gera outro resultado porque o provider atualizou o modelo por baixo. As instruções de reprodutibilidade do Entregável 6 são, na prática, este componente.
 
-As credenciais ficam no `.env`, fora do git. O `.env.example` versionado lista as variáveis sem valores: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_DB_URL` (conexão do checkpointer e das transações pelo session pooler ou pela conexão direta, nunca pelo pooler de transação, que não aceita prepared statements) e `GOOGLE_API_KEY` (Gemini API, usada pelo extractor).
+As credenciais ficam no `.env`, fora do git. O `.env.example` versionado lista as variáveis sem valores: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_DB_URL` (conexão do checkpointer e das transações pelo session pooler ou pela conexão direta, nunca pelo pooler de transação, que não aceita prepared statements) e as chaves da Gemini API, na ordem de chamada: `GOOGLE_API_KEY_PRINC` (principal, obrigatória) e `GOOGLE_API_KEY_SEC` (reserva, opcional, chamada quando a principal falha; regra em `docs/fluxos/extracao.md`, Cliente LLM).
 
 ---
 

@@ -301,7 +301,7 @@ def test_sem_fonte_o_cli_roda_as_tres(monkeypatch, repo):
 
     monkeypatch.setattr(principal, "executar", falso)
     monkeypatch.setattr(principal.llm, "criar_cliente", lambda raiz, ambiente: None)
-    monkeypatch.setenv("GOOGLE_API_KEY", "chave-de-teste")
+    monkeypatch.setenv("GOOGLE_API_KEY_PRINC", "chave-de-teste")
     monkeypatch.setattr(principal.persistencia, "criar_repositorio_supabase", lambda ambiente: repo)
     monkeypatch.setattr(principal.persistencia, "checkpointer_postgres", lambda url: nullcontext(None))
     monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://localhost/x")
@@ -319,7 +319,8 @@ def test_sem_chave_do_gemini_para_antes_de_criar_o_run(monkeypatch, repo):
     monkeypatch.setattr(principal.persistencia, "criar_repositorio_supabase", lambda ambiente: repo)
     monkeypatch.setattr(principal.persistencia, "checkpointer_postgres", lambda url: nullcontext(None))
     monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://localhost/x")
-    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY_PRINC", raising=False)
+    monkeypatch.setenv("GOOGLE_API_KEY_SEC", "reserva")  # a reserva sozinha não basta
     monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **k: None)
     assert principal.main(["copom", "--dev"]) == 1
     assert not repo.runs

@@ -4,10 +4,16 @@
 JSON no schema Pydantic, valida e devolve o objeto, nunca texto. Cada tentativa vira um Span,
 entregue a `registrar_span` (gravado por persistencia.py), com tokens e custo estimado em BRL.
 
+Chaves da Gemini API em ordem de chamada: GOOGLE_API_KEY_PRINC e, como reserva, GOOGLE_API_KEY_SEC.
+Cada tentativa começa pela PRINC e só passa para a SEC quando a PRINC tem falha de infraestrutura ou de
+chave (FalhaChave: 401, 403 ou chave inválida). Quando todas as chaves falham, a tentativa conta como
+uma falha de infraestrutura; se todas foram recusadas por chave, a falha é terminal.
+
 Duas contagens separadas, nenhuma ligada ao K de qualidade:
-- falha de infraestrutura (429, 5xx, timeout, conexão): repete com backoff até retentativa.TENTATIVAS;
+- falha de infraestrutura (429, 5xx, timeout, conexão) em todas as chaves: repete com backoff até
+  retentativa.TENTATIVAS;
 - resposta fora do schema: repete até TENTATIVAS_PARSE, reinjetando o erro de validação no prompt.
-Bloqueio de conteúdo e erro 4xx são terminais.
+Bloqueio de conteúdo e os demais erros 4xx são terminais, sem passar para a chave seguinte.
 
 Só este módulo importa o SDK do provider (google-genai).
 """
@@ -15,7 +21,7 @@ Só este módulo importa o SDK do provider (google-genai).
 import sys
 import time
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -33,7 +39,8 @@ T = TypeVar("T", bound=BaseModel)
 TENTATIVAS_PARSE = 3
 TIMEOUT_S = 300
 MAX_TOKENS_SAIDA = 65536
-VARIAVEL_CHAVE = "GOOGLE_API_KEY"
+CHAVE_PRINCIPAL = "GOOGLE_API_KEY_PRINC"
+CHAVE_RESERVA = "GOOGLE_API_KEY_SEC"
 NIVEIS_RACIOCINIO = ("minimal", "low", "medium", "high")
 
 
@@ -53,18 +60,25 @@ class RespostaBruta:
     bloqueio: str | None = None  # motivo, quando o provider recusou o conteúdo
 
 
+class FalhaChave(FalhaTerminal):
+    """Chave recusada pelo provider (401, 403 ou chave inválida): a tentativa passa para a chave seguinte."""
+
+
 class Provider(Protocol):
     def gerar(self, modelo: str, prompt: str, json_schema: dict, raciocinio: str | None = None) -> RespostaBruta:
         """Uma chamada. `raciocinio` é um de NIVEIS_RACIOCINIO, ou None para o padrão do modelo.
 
-        Levanta FalhaRetriavel (429, 5xx, timeout, conexão) ou FalhaTerminal (demais erros)."""
+        Levanta FalhaRetriavel (429, 5xx, timeout, conexão), FalhaChave (chave recusada) ou
+        FalhaTerminal (demais erros)."""
         ...
 
 
 class ClienteLLM:
+    """`provider` é um Provider só ou a lista de pares (nome da chave, Provider) na ordem de chamada."""
+
     def __init__(
         self,
-        provider: Provider,
+        provider: Provider | Sequence[tuple[str, Provider]],
         modelos: Mapping[str, str],
         precos: Mapping[str, Preco],
         cotacao_usd_brl: Decimal,
@@ -82,7 +96,8 @@ class ClienteLLM:
                 f"use {', '.join(NIVEIS_RACIOCINIO)}"
             )
         self._raciocinio = dict(raciocinio or {})
-        self._provider = provider
+        self._providers = list(provider) if isinstance(provider, Sequence) else [("", provider)]
+        self._provider = self._providers[0][1]  # o da chave principal
         self._modelos = dict(modelos)
         self._precos = dict(precos)
         self._cotacao = cotacao_usd_brl
@@ -91,7 +106,7 @@ class ClienteLLM:
         self.custo_total_brl = Decimal(0)
 
     @classmethod
-    def de_config(cls, raiz: Path, provider: Provider) -> "ClienteLLM":
+    def de_config(cls, raiz: Path, provider: Provider | Sequence[tuple[str, Provider]]) -> "ClienteLLM":
         """Lê modelos, preços, cotação e níveis de raciocínio de config/models.yaml."""
         relativo = "config/models.yaml"
         try:
@@ -157,27 +172,44 @@ class ClienteLLM:
             )
 
         while True:
-            inicio = self._relogio()
-            try:
-                bruta = self._provider.gerar(modelo, prompt_atual, json_schema, nivel_raciocinio)
-            except FalhaRetriavel as falha:
-                span(inicio, classe="retriavel", mensagem=falha.mensagem)
+            bruta = None
+            falhas: list[tuple[FalhaRetriavel | FalhaChave, str]] = []  # (falha, mensagem com a chave)
+            for posicao, (chave, provider) in enumerate(self._providers):
+                inicio = self._relogio()
+                try:
+                    bruta = provider.gerar(modelo, prompt_atual, json_schema, nivel_raciocinio)
+                    break
+                except (FalhaRetriavel, FalhaChave) as falha:
+                    mensagem = _com_chave(chave, falha.mensagem)
+                    span(inicio, classe=falha.classe, mensagem=mensagem)
+                    falhas.append((falha, mensagem))
+                    if posicao + 1 < len(self._providers):
+                        print(
+                            f"{no} ({modelo}): {mensagem}; chamando {self._providers[posicao + 1][0]}",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                except FalhaTerminal as falha:
+                    span(inicio, classe="terminal", mensagem=_com_chave(chave, falha.mensagem))
+                    raise
+
+            if bruta is None:
+                ultima, mensagens = falhas[-1][0], "; ".join(m for _, m in falhas)
+                if all(isinstance(f, FalhaChave) for f, _ in falhas):
+                    raise FalhaTerminal(f"{no} ({modelo}): chave recusada. {mensagens}") from ultima
                 falhas_infra += 1
                 if falhas_infra >= retentativa.TENTATIVAS:
                     raise FalhaTerminal(
-                        f"{no} ({modelo}): {falhas_infra} tentativas esgotadas. Última falha: {falha.mensagem}"
-                    ) from falha
+                        f"{no} ({modelo}): {falhas_infra} tentativas esgotadas. Última falha: {mensagens}"
+                    ) from ultima
                 atraso = retentativa.espera(falhas_infra)
                 print(
-                    f"{no} ({modelo}): tentativa {falhas_infra} falhou ({falha.mensagem}); nova tentativa em {atraso:.0f}s",
+                    f"{no} ({modelo}): tentativa {falhas_infra} falhou ({mensagens}); nova tentativa em {atraso:.0f}s",
                     file=sys.stderr,
                     flush=True,
                 )
                 retentativa._dormir(atraso)
                 continue
-            except FalhaTerminal as falha:
-                span(inicio, classe="terminal", mensagem=falha.mensagem)
-                raise
 
             if bruta.bloqueio is not None:
                 mensagem = f"{no} ({modelo}): conteúdo recusado pelo provider ({bruta.bloqueio})"
@@ -202,6 +234,10 @@ class ClienteLLM:
 
             span(inicio, bruta.tokens_entrada, bruta.tokens_saida)
             return objeto
+
+
+def _com_chave(chave: str, mensagem: str) -> str:
+    return f"{chave}: {mensagem}" if chave else mensagem
 
 
 def _resumo_validacao(erro: ValidationError, limite: int = 10) -> str:
@@ -249,6 +285,9 @@ class ProviderGemini:
             codigo = erro.code or 0
             if codigo in (408, 429) or codigo >= 500:
                 raise FalhaRetriavel(f"HTTP {codigo}: {erro.message}") from erro
+            # A Gemini API responde 400 com "API key not valid" para chave inválida.
+            if codigo in (401, 403) or (codigo == 400 and "api key" in (erro.message or "").lower()):
+                raise FalhaChave(f"HTTP {codigo}: {erro.message}") from erro
             raise FalhaTerminal(f"HTTP {codigo}: {erro.message}") from erro
         except (httpx.TimeoutException, httpx.TransportError) as erro:
             raise FalhaRetriavel(f"{type(erro).__name__}: {erro}") from erro
@@ -271,11 +310,14 @@ class ProviderGemini:
 
 
 def conferir_credenciais(ambiente: Mapping[str, str]) -> None:
-    if not ambiente.get(VARIAVEL_CHAVE):
-        raise FalhaTerminal(f"credencial do Gemini ausente: {VARIAVEL_CHAVE}. Preencha o .env a partir do .env.example.")
+    """A chave principal é obrigatória; a reserva é opcional."""
+    if not ambiente.get(CHAVE_PRINCIPAL):
+        raise FalhaTerminal(f"credencial do Gemini ausente: {CHAVE_PRINCIPAL}. Preencha o .env a partir do .env.example.")
 
 
 def criar_cliente(raiz: Path, ambiente: Mapping[str, str]) -> ClienteLLM:
-    """Confere a chave e monta o cliente com o provider Gemini e a config de config/models.yaml."""
+    """Confere as chaves e monta o cliente com um provider Gemini por chave, na ordem PRINC e SEC, e a
+    config de config/models.yaml."""
     conferir_credenciais(ambiente)
-    return ClienteLLM.de_config(raiz, ProviderGemini(ambiente[VARIAVEL_CHAVE]))
+    chaves = [c for c in (CHAVE_PRINCIPAL, CHAVE_RESERVA) if ambiente.get(c)]
+    return ClienteLLM.de_config(raiz, [(c, ProviderGemini(ambiente[c])) for c in chaves])

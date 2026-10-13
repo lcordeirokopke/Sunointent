@@ -36,7 +36,7 @@ Usam serviços reais só `test_persistencia_supabase.py`, contra o Supabase **lo
 - `conftest.py` aborta o pytest antes da coleta se `SUPABASE_URL` ou `SUPABASE_DB_URL` apontarem para um host diferente de `localhost`, `127.0.0.1` ou `::1`. Os testes nunca tocam o banco hospedado.
 - O `.env` não é carregado pelos testes.
 - Marker `supabase`: identifica os testes de integração com o Supabase local.
-- Marker `gemini`: identifica os testes que chamam a Gemini API e gastam tokens. Ficam pulados, a menos que o `-m` os peça. Leem só a `GOOGLE_API_KEY` do `.env`, sem carregar o resto do arquivo.
+- Marker `gemini`: identifica os testes que chamam a Gemini API e gastam tokens. Ficam pulados, a menos que o `-m` os peça. Leem só a `GOOGLE_API_KEY_PRINC` e a `GOOGLE_API_KEY_SEC` do `.env`, sem carregar o resto do arquivo, e pulam se a `GOOGLE_API_KEY_PRINC` estiver ausente.
 
 ## Limite do que provam
 
@@ -119,7 +119,13 @@ tests/
 - falha de infraestrutura repete com espera crescente, sem gastar o contador de parse; 4 falhas viram terminal;
 - bloqueio de conteúdo e erro 4xx são terminais, sem repetir;
 - nó sem modelo, modelo sem preço e nível de raciocínio inválido são terminais; o `config/models.yaml` do repositório tem preço para cada modelo e o raciocínio da correção;
-- sem `GOOGLE_API_KEY`, erro terminal.
+- sem `GOOGLE_API_KEY_PRINC`, erro terminal, mesmo com a `GOOGLE_API_KEY_SEC`; o cliente monta as chaves na ordem PRINC e SEC, e a SEC só entra se estiver preenchida;
+- falha de infraestrutura ou chave recusada na PRINC passa para a SEC na mesma tentativa, sem esperar, e o span da falha leva o nome da chave;
+- cada chamada começa pela PRINC, mesmo depois de uma passagem para a SEC;
+- as duas chaves com falha de infraestrutura contam uma tentativa, com espera, e a seguinte recomeça pela PRINC; 4 tentativas viram terminal;
+- as duas chaves recusadas são terminais, sem esperar;
+- bloqueio de conteúdo e os demais erros 4xx na PRINC são terminais, sem chamar a SEC;
+- o provider Gemini classifica 429 como retriável, 401, 403 e 400 de chave inválida como chave recusada, e os demais 400 como terminais.
 
 ### Persistência
 
@@ -132,7 +138,7 @@ tests/
 
 ### No grafo
 
-`test_main_graph.py` confere, com o `ProviderFalso`: o FactSheet assinado e gravado, a rodada em `validacoes_ancora`, o span e o custo no run e no manifest local; o claim recusado que volta para a E2 com o motivo no prompt e é corrigido; o claim que não converge e, depois de 3 rodadas, vai para a quarentena, com o run concluído e o FactSheet assinado só com o claim válido; o run sem nenhum claim válido, que grava a quarentena e aborta; o extractor sem claims, que aborta; e o run que não começa sem a `GOOGLE_API_KEY`.
+`test_main_graph.py` confere, com o `ProviderFalso`: o FactSheet assinado e gravado, a rodada em `validacoes_ancora`, o span e o custo no run e no manifest local; o claim recusado que volta para a E2 com o motivo no prompt e é corrigido; o claim que não converge e, depois de 3 rodadas, vai para a quarentena, com o run concluído e o FactSheet assinado só com o claim válido; o run sem nenhum claim válido, que grava a quarentena e aborta; o extractor sem claims, que aborta; e o run que não começa sem a `GOOGLE_API_KEY_PRINC`, mesmo com a `GOOGLE_API_KEY_SEC` preenchida.
 
 `test_persistencia_supabase.py` confere no Supabase local o span com o custo somado uma só vez em `runs`, a rodada em `validacoes_ancora` e o `claim_numeros` ligado à sua linha em `numeros`.
 

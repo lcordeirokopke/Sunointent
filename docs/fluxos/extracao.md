@@ -27,7 +27,7 @@ O modelo nunca escreve página, offset nem valor de número. Ele cita o trecho e
 
 ## Modelo
 
-O extractor usa o `gemini-3.8-flash` (Gemini API, SDK `google-genai`), escolhido por ser um modelo estável, com versão fixa. A chave fica em `GOOGLE_API_KEY` no `.env`, conferida pelo `__main__.py` antes de o run ser criado. O juiz (M6) precisa ser de outra família.
+O extractor usa o `gemini-3.8-flash` (Gemini API, SDK `google-genai`), escolhido por ser um modelo estável, com versão fixa. As chaves ficam no `.env`: `GOOGLE_API_KEY_PRINC`, a principal, conferida pelo `__main__.py` antes de o run ser criado, e `GOOGLE_API_KEY_SEC`, a reserva, opcional. A ordem de chamada está em Cliente LLM. O juiz (M6) precisa ser de outra família.
 
 ## O que o modelo recebe
 
@@ -120,9 +120,21 @@ A pessoa nunca informa posição: aponta o trecho e o bruto, e a âncora vem do 
 
 `llm.ClienteLLM.chamar(no, prompt, schema)` lê o snapshot do nó em `config/models.yaml`, pede ao provider saída JSON no schema Pydantic e devolve o objeto validado, nunca texto. Duas contagens separadas, nenhuma ligada ao `K`:
 
-- **Falha de infraestrutura** (HTTP 408, 429, 5xx, timeout, erro de conexão): repete com o backoff de `retentativa.py`, até 4 tentativas; depois, erro terminal.
+- **Falha de infraestrutura** (HTTP 408, 429, 5xx, timeout, erro de conexão) em todas as chaves: repete com o backoff de `retentativa.py`, até 4 tentativas; depois, erro terminal.
 - **Resposta fora do schema:** repete até 3 vezes, acrescentando ao prompt o erro de validação; depois, erro terminal.
-- **Conteúdo recusado pelo provider** (bloqueio do prompt ou `finish_reason` de segurança) e demais erros HTTP 4xx: terminal, sem repetir.
+- **Conteúdo recusado pelo provider** (bloqueio do prompt ou `finish_reason` de segurança) e demais erros HTTP 4xx: terminal, sem repetir e sem passar para a chave de reserva.
+
+### Ordem das chaves
+
+Cada tentativa chama primeiro a `GOOGLE_API_KEY_PRINC` e, se ela falhar, a `GOOGLE_API_KEY_SEC`, na mesma tentativa e sem esperar:
+
+- **Passa para a SEC:** falha de infraestrutura (HTTP 408, 429, 5xx, timeout, erro de conexão) ou chave recusada (`FalhaChave`: HTTP 401, 403 ou 400 de chave inválida).
+- **Não passa para a SEC:** conteúdo recusado, resposta fora do schema e demais erros 4xx, que não dependem da chave.
+- **Toda chamada e toda nova tentativa começam pela PRINC**, mesmo que a anterior tenha usado a SEC.
+- **As duas falham:** se alguma teve falha de infraestrutura, a tentativa conta para o limite de 4, com o backoff, e a seguinte recomeça pela PRINC; se as duas foram recusadas por chave, o erro é terminal, sem esperar.
+- **Sem a SEC** no `.env`, a PRINC é a única chave e uma chave recusada é terminal.
+
+Cada chamada a uma chave vira um span; o span de falha leva o nome da chave no começo da mensagem, e a passagem para a SEC é avisada no terminal.
 
 A retentativa interna do SDK fica desligada, para que cada tentativa passe pelo cliente e vire um span. O timeout por chamada é de 300 s.
 
@@ -152,5 +164,5 @@ Todas as gravações usam `on conflict do nothing`: repetir não duplica linhas.
 
 - **Omissão silenciosa:** um fato que não vira claim não existe para o resto do pipeline, e nenhuma etapa detecta. A defesa é o teste de cobertura com os documentos anotados à mão (`docs/testes.md`).
 - **Não convergência:** claim que segue reprovado depois de 3 rodadas vai para a quarentena e fica fora do FactSheet até a revisão humana; se nenhum claim passar, o run aborta.
-- **Provider fora ou resposta inválida:** retentativas esgotadas abortam o run com erro terminal.
+- **Provider fora ou resposta inválida:** retentativas esgotadas nas duas chaves abortam o run com erro terminal.
 - **Falha de gravação:** segue a classificação de `docs/fluxos/ingestao.md`; esgotadas as tentativas, aborta o run.
