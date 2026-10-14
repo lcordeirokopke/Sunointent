@@ -37,9 +37,11 @@ create table decisoes_analogia (
   termo       text not null,
   explicacao  text not null,  -- o texto da analogia como estava no plano
   decisao     decisao_analogia not null,
+  limite      text,           -- onde a analogia deixa de valer, escrito por quem aprova; vai para o glossário
   autor       text not null,  -- nome digitado no dashboard
   decidido_em timestamptz not null default now(),
   unique (run_id, nivel, termo),
+  check (decisao <> 'aprovar' or nullif(btrim(limite), '') is not null),
   foreign key (run_id, nivel) references planos_nivel (run_id, nivel)
 );
 

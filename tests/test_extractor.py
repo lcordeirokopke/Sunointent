@@ -288,6 +288,20 @@ def test_validador_exige_que_texto_e_numeros_digam_o_mesmo(documentos):
     assert "formato não previsto" in motivo("A receita foi de 3.1 bi, alta de 12.5%.", [])
 
 
+def test_validador_recusa_data_listada_em_numeros(documentos):
+    documento = documentos["b3"]
+    literal = "Receita de R$3,1 bilhões (+12% vs. 2T25), refletindo os crescimentos de 8% das receitas pró-cíclicas"
+    texto = "A receita foi de R$ 3,1 bilhões, alta de 12% sobre o 2T25."
+    claim = ancoragem.resolver(documento, proposto(literal, ["R$3,1 bilhões", "12%"], chunk_id="K02", texto=texto))
+    a = claim.ancora
+    datas = [n for n in documento.tabela_numeros if n.unidade == "data" and n.ancora.pagina == a.pagina
+             and a.offset_inicio <= n.ancora.offset_inicio and n.ancora.offset_fim <= a.offset_fim]
+    assert datas  # o 2T25 do trecho
+    assert validador.validar(documento, factsheet_de(documento, [claim])) == {}
+    com_data = claim.model_copy(update={"numeros": [*claim.numeros, *datas]})
+    assert "datas listadas em numeros" in validador.validar(documento, factsheet_de(documento, [com_data]))["C01"]
+
+
 # Extractor (E2)
 
 
@@ -436,7 +450,7 @@ def test_no_sem_modelo_ou_modelo_sem_preco_e_terminal():
 def test_config_do_repositorio_tem_preco_para_cada_modelo():
     cliente = ClienteLLM.de_config(RAIZ, ProviderFalso([]))
     assert cliente.custo_brl("gemini-3.8-flash", 1_000_000, 0) == Decimal("4.050000")
-    assert cliente._raciocinio == {"extractor_correcao": "low"}
+    assert cliente._raciocinio == {"extractor_correcao": "low", "adapter_correcao": "low"}
 
 
 def test_nivel_de_raciocinio_invalido_e_terminal():

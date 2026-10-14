@@ -6,7 +6,7 @@ O arquivo explica conceitos, nunca fatos de um documento. Os fatos vêm só do F
 
 ## Estado
 
-O arquivo está montado e versionado no git. Todas as analogias estão em `rascunho`, à espera de revisão humana. Os leitores descritos em [Quem lê e como](#quem-lê-e-como) fazem parte da E4 e da E6, que ainda não estão implementadas; hoje só o `manifesto.py` lê o arquivo, para registrar a versão e o hash no `RunManifest`.
+O arquivo está montado e versionado no git. Todas as analogias estão em `rascunho`, à espera de revisão humana. Hoje leem o arquivo o `manifesto.py`, que registra a versão e o hash no `RunManifest`, e a E4, pelo `sunontent/glossario.py`, que também é o leitor previsto para a M4 e a M5, ainda não implementadas. Um teste lista as flexões dos termos encontradas nos claims das referências que não estão em `variantes` (`docs/testes.md`, Glossário).
 
 ## Formato e campos
 
@@ -52,7 +52,7 @@ Todos os campos são obrigatórios. `analogias` pode ser uma lista vazia, mas n�
 
 - `iniciante`: palavra do dia a dia (inflação, juros, poupança); dispensa analogia.
 - `intermediario`: vocabulário padrão de mercado (Selic, CDI, IPCA, dividendos, JCP); pede analogia no Iniciante.
-- `avancado`: jargão pleno (forward guidance, hiato do produto, EBITDA ajustado, covenants); pede analogia no Iniciante e contexto no Intermediário.
+- `avancado`: jargão pleno (forward guidance, hiato do produto, EBITDA ajustado, covenants); também pede analogia no Iniciante.
 
 ### `status` da analogia
 
@@ -87,13 +87,24 @@ Os termos ficam agrupados por categoria, cada grupo aberto por um comentário (`
 | E4.2, planejador | recebe os termos acima de iniciante encontrados no texto dos candidatos do Iniciante que não têm nenhuma analogia no glossário, e cria uma analogia `nova` para os que estiverem nos claims usados. |
 | E4.3, complemento | no Iniciante, cada termo acima de iniciante encontrado no texto dos claims usados recebe a primeira analogia `aprovada` do termo ou, sem nenhuma aprovada, a primeira `rascunho`, com a referência `<id>#<n>`. |
 | E4.3, gate | `jargao_sem_analogia`: todo termo acima de iniciante nos claims usados do Iniciante tem analogia no plano. `motivo_invalido`: `exige_base_tecnica` só vale para claim com termo de `nivel_minimo` acima do nível. |
-| M4 | lematiza a peça e casa contra termos e variantes; a densidade é termos técnicos únicos sobre tokens de conteúdo, com piso e teto por nível. |
+| M4 | casa a peça contra termos e variantes pela [regra de casamento](#casamento-no-texto); a densidade é termos técnicos únicos sobre tokens de conteúdo, com piso e teto por nível. |
 | M5 | no Iniciante, todo termo acima de iniciante encontrado no texto precisa de `Analogia` no plano e de um marcador de analogia antes da primeira ocorrência. |
 | M6 | pode receber a definição do termo como referência ao julgar se a analogia está correta. |
 
 Na `Analogia` do plano, `origem` é `glossario` ou `nova`, `glossario_ref` guarda a referência `<id>#<n>`, e `revisada` é `true` só para analogia do glossário com `status: aprovada`.
 
 O extractor (E2) não consulta o glossário: ele lê só o documento.
+
+### Casamento no texto
+
+A E4, a M4 e a M5 usam a mesma regra para dizer se um termo aparece num texto. O casamento é por formas explícitas, sem lematizar:
+
+- cada forma (o `termo` e cada variante) casa como está escrita, ignorando maiúsculas e acentos, com fronteira de palavra nos dois lados;
+- a forma escrita só com maiúsculas, dígitos e sinais (sigla, como `CDI`, `IPCA-15` ou `NTN-B`) casa só com a caixa exata;
+- plural e outras flexões só casam se estiverem em `variantes`;
+- com `ambiguo: true`, só as formas de mais de uma palavra casam;
+- quando uma forma está contida em outra no mesmo trecho, vale a mais longa (`taxa Selic` conta um termo, e não `taxa Selic` e `Selic`);
+- os marcadores de número da peça (`{{<claim_id>.<ordem>}}`) não entram no casamento.
 
 ## Manutenção
 
@@ -109,10 +120,10 @@ O extractor (E2) não consulta o glossário: ele lê só o documento.
 
 A revisão humana troca `status: rascunho` por `status: aprovada` no próprio arquivo, sem mudar a posição da analogia na lista. Uma analogia enganosa é corrigida ou removida; remover muda as referências das seguintes, por isso sobe a `versao`.
 
-As analogias `nova`, criadas pelo planejador em runs, são revisadas numa seção própria do dashboard (E8) e gravadas em `decisoes_analogia`. Um comando executado à mão leva as aprovadas para este arquivo, para revisão e commit humanos:
+As analogias `nova`, criadas pelo planejador em runs, são revisadas numa seção própria do dashboard (E8) e gravadas em `decisoes_analogia`. Quem aprova escreve o `limite`, que a analogia do plano não tem. Um comando executado à mão leva as aprovadas para este arquivo, para revisão e commit humanos:
 
-- termo já cadastrado (pelo `termo` ou por uma variante): a analogia entra no fim da lista do termo, com `status: aprovada`;
-- termo sem cadastro: o comando cria a entrada com `id`, `termo` e a analogia, e deixa os demais campos em branco para alguém completar antes do commit;
+- termo já cadastrado (pelo `termo` ou por uma variante): a analogia entra no fim da lista do termo, com o `texto` do plano, o `limite` da revisão e `status: aprovada`;
+- termo sem cadastro: o comando cria a entrada com `id`, `termo` e a analogia aprovada (`texto`, `limite` e `status: aprovada`), e deixa em branco `variantes`, `categoria`, `nivel_minimo`, `definicao_simples`, `definicao_tecnica`, `ambiguo` e `fonte`, para alguém completar antes do commit;
 - analogia com o mesmo texto de uma existente não é repetida;
 - a `versao` sobe.
 

@@ -11,8 +11,8 @@ const ETAPAS = [
     descricao: "O LLM extrai os claims do documento e cada um é ancorado no texto da página de origem." },
   { id: "E3", nos: ["validate", "quarentena"], nome: "Validador de Âncoras",
     descricao: "Confere âncoras e números de cada claim. Reprovado volta à E2; aprovado, o FactSheet é assinado. Reprovado depois da última rodada vai para a quarentena, à espera de revisão humana." },
-  { id: "E4", nos: ["adapt"], nome: "Audience Adapter",
-    descricao: "Adapta o FactSheet para os 3 níveis: iniciante, intermediário e avançado." },
+  { id: "E4", nos: ["adapt"], nome: "Plano editorial",
+    descricao: "Decide o núcleo e, para cada nível, o que entra, em que ordem, o que sai e por quê, e quais analogias usar. O código confere o plano." },
   { id: "E5", nos: ["synth"], nome: "Format Synthesizer",
     descricao: "Gera as 9 peças: texto, carrossel e roteiro de vídeo para cada nível." },
   { id: "E6", nos: ["evaluate"], nome: "Hybrid Evaluator",
@@ -36,7 +36,7 @@ const estado = {
   fonte: "",
   aba: "fluxo",
   subaba: "terminal",
-  grafo: { nos: [], arestas: [], rodadas_extracao: 3 },
+  grafo: { nos: [], arestas: [], rodadas_extracao: 3, rodadas_plano: 3 },
   execucao: null,
   runSelecionado: null,
   historico: [],
@@ -396,6 +396,12 @@ function painelEtapa(etapa, run) {
   if (etapa.id === "E2" || etapa.id === "E3") {
     metricas.push(metrica("Rodadas", `${run.rodadas || 0} de ${estado.grafo.rodadas_extracao}`));
   }
+  if (etapa.id === "E4") {
+    // Rodadas e aviso do plano vêm da linha final do terminal: "plano em N rodadas (com aviso)".
+    const plano = /plano em (\d+) rodadas?( \(com aviso\))?/.exec(run.resumo ?? "");
+    metricas.push(metrica("Rodadas do plano", plano ? `${plano[1]} de ${estado.grafo.rodadas_plano}` : ""));
+    if (plano) metricas.push(metrica("Aviso", plano[2] ? selo("erro", "com aviso") : selo("ok", "sem aviso")));
+  }
   const execucao = `<div class="cartao"><h3>Execução</h3><div class="metricas">${metricas.join("")}</div></div>`;
   const dados = dadosEtapa(etapa, run);
   return cabecalho + execucao + dados + terminalHtml(`saída de ${info.no}`, info.linhas ?? []);
@@ -424,9 +430,11 @@ function dadosEtapa(etapa, run) {
     case "E1":
       return cartaoDocumento(d.documento);
     case "E2":
-      return cartaoSpans(d.spans, m) + cartaoClaims(d.factsheet);
+      return cartaoSpans(spansDoNo(d.spans, "extractor"), m) + cartaoClaims(d.factsheet);
     case "E3":
       return cartaoValidacoes(d.validacoes, d.factsheet) + cartaoQuarentena(d.quarentena);
+    case "E4":
+      return cartaoSpans(spansDoNo(d.spans, "adapter"), m);
     default:
       return "";
   }
@@ -442,6 +450,11 @@ function cartaoDocumento(doc) {
     ${metrica("Chunks", fmtInt(doc.chunks))}
     ${metrica("Números na tabela", fmtInt(doc.numeros))}
   </div></div>`;
+}
+
+// Spans de um nó: cada etapa mostra só as chamadas do seu agente.
+function spansDoNo(spans, no) {
+  return (spans ?? []).filter((s) => s.no === no);
 }
 
 function cartaoSpans(spans, manifest) {

@@ -139,7 +139,7 @@ def test_documento_processado_grava_paginas_chunks_e_numeros(repositorio, ambien
             "select emissor, data_documento from documentos_processados where run_id = %s", (run_id,)
         ).fetchone()
         valor = conexao.execute(
-            "select valor, unidade from numeros where run_id = %s and bruto = 'R$ 390.000.000,00'", (run_id,)
+            "select valor, unidade from numeros where run_id = %s and bruto = '6.404'", (run_id,)
         ).fetchone()
     assert contagem == {
         "documentos_processados": 1,
@@ -147,7 +147,7 @@ def test_documento_processado_grava_paginas_chunks_e_numeros(repositorio, ambien
         "chunks": len(documento.chunks),
         "numeros": len(documento.tabela_numeros),
     }
-    assert (str(valor[0]), valor[1]) == ("390000000.00", "BRL")
+    assert (str(valor[0]), valor[1]) == ("6404", "contagem")
     assert metadados == (documento.emissor, documento.data_documento)
 
 
@@ -177,8 +177,8 @@ def test_span_validacao_e_factsheet(repositorio, ambiente, tmp_path):
         persistencia.gravar_span(repositorio, tmp_path, span)
 
     proposto = ClaimProposto(
-        id="C01", chunk_id="K01", texto="A remuneração representou cerca de 11% da receita líquida.",
-        literal_fonte="representou aproximadamente 11% (onze por cento) da receita", numeros=["11%"],
+        id="C01", chunk_id="K01", texto="O fato relevante atende à Resolução CVM nº 44.",
+        literal_fonte="CVM nº 44, de 23 de agosto de 2021", numeros=["44"],
         tipo="resultado", tags=["indicador_chave"])
     claims, pendencias = extractor.ancorar(documento, {"C01": proposto})
     assert not pendencias
@@ -200,7 +200,87 @@ def test_span_validacao_e_factsheet(repositorio, ambiente, tmp_path):
             (run_id,)).fetchall()
     assert (custo[0], custo[1]) == (120, Decimal("0.5"))
     assert validacoes == 1
-    assert vinculo == [("11%",)]
+    assert vinculo == [("44",)]
+
+
+def test_plano_editorial_rodadas_e_celulas(repositorio, ambiente, tmp_path):
+    import psycopg
+
+    from sunontent.extracao import extractor
+    from sunontent.schemas import (
+        FORMATOS, NIVEIS, Analogia, CelulaState, ClaimPlanejado, ClaimProposto, Descarte, FactSheet,
+        PlanoEditorial, PlanoNivel, ProblemaPlano, celula_id,
+    )
+
+    run_id, documento = run_com_referencia(repositorio, ambiente["SUPABASE_DB_URL"])
+    persistencia.gravar_documento_processado(repositorio, tmp_path, run_id, documento)
+    proposto = ClaimProposto(
+        id="C01", chunk_id="K01", texto="O fato relevante atende à Resolução CVM nº 44.",
+        literal_fonte="CVM nº 44, de 23 de agosto de 2021", numeros=["44"], tipo="resultado", tags=["governanca"])
+    claims, _ = extractor.ancorar(documento, {"C01": proposto})
+    factsheet = FactSheet(
+        doc_id=documento.doc_id, tipo_documento=documento.tipo_documento, emissor=documento.emissor,
+        data_documento=documento.data_documento, claims=claims, tabela_numeros=documento.tabela_numeros,
+        assinado=True)
+
+    plano = PlanoEditorial(nucleo=["C01"], rodadas=2, aviso=None, niveis=[
+        PlanoNivel(nivel=n, descartes=[Descarte(claim_id="C02", motivo="secundario", origem="padrao")],
+                   claims=[ClaimPlanejado(claim_id="C01", papel="principal", atribuir_fonte=False)],
+                   tese="Tese.", tese_claim_ids=["C01"],
+                   analogias=[Analogia(termo="CVM", explicacao="Como um árbitro.", origem="nova", revisada=False)]
+                   if n == "iniciante" else [])
+        for n in NIVEIS])
+    celulas = [CelulaState(celula_id=celula_id(n, f), nivel=n, formato=f) for n in NIVEIS for f in FORMATOS]
+
+    # O plano exige o FactSheet do run.
+    with pytest.raises(FalhaTerminal):
+        persistencia.gravar_plano(repositorio, tmp_path, run_id, plano, celulas)
+    persistencia.gravar_factsheet(repositorio, tmp_path, run_id, factsheet)
+
+    rodada_antiga = [ProblemaPlano(regra="contraditorio", nivel="avancado", detalhe="antiga")]
+    persistencia.gravar_validacao_plano(repositorio, tmp_path, run_id, 1, rodada_antiga)
+    persistencia.reiniciar_validacoes_plano(repositorio, tmp_path, run_id)
+    problemas = [ProblemaPlano(regra="nucleo_ausente", nivel="avancado", detalhe="C01 fora do avançado"),
+                 ProblemaPlano(regra="id_inexistente", detalhe="C99")]
+    assert persistencia.carregar_plano(repositorio, tmp_path, run_id) is None
+    for _ in range(2):  # a repetição não duplica linhas
+        persistencia.gravar_validacao_plano(repositorio, tmp_path, run_id, 1, problemas)
+        persistencia.gravar_validacao_plano(repositorio, tmp_path, run_id, 2, [])
+        persistencia.gravar_plano(repositorio, tmp_path, run_id, plano, celulas)
+
+    with psycopg.connect(ambiente["SUPABASE_DB_URL"]) as conexao:
+        rodadas = conexao.execute(
+            "select rodada, ordem, nivel::text, regra::text, detalhe from validacoes_plano where run_id = %s"
+            " order by rodada, ordem", (run_id,)).fetchall()
+        estados = conexao.execute(
+            "select estado::text, tentativa, count(*) from celulas where run_id = %s group by 1, 2",
+            (run_id,)).fetchall()
+    assert rodadas == [(1, 1, "avancado", "nucleo_ausente", "C01 fora do avançado"),
+                       (1, 2, None, "id_inexistente", "C99")]
+    assert estados == [("PENDENTE", 0, 9)]
+
+    lido, celulas_lidas = persistencia.carregar_plano(repositorio, tmp_path, run_id)
+    assert lido == plano
+    assert sorted(c.celula_id for c in celulas_lidas) == sorted(c.celula_id for c in celulas)
+
+
+def test_span_do_adapter_aceita_nivel_nulo(repositorio, ambiente, tmp_path):
+    """O planejador da E4 faz 1 chamada para os 3 níveis: o span do adapter não tem nível. O extractor nunca tem."""
+    import uuid
+    from decimal import Decimal
+
+    from sunontent.schemas import Span
+
+    run_id, _ = run_com_referencia(repositorio, ambiente["SUPABASE_DB_URL"])
+
+    def span(no, nivel=None):
+        return Span(span_id=str(uuid.uuid4()), run_id=run_id, no=no, nivel=nivel, modelo="m", tokens_entrada=1,
+                    tokens_saida=1, custo_brl=Decimal("0"), duracao_ms=1)
+
+    persistencia.gravar_span(repositorio, tmp_path, span("adapter"))
+    persistencia.gravar_span(repositorio, tmp_path, span("adapter", "iniciante"))
+    with pytest.raises(FalhaTerminal):
+        persistencia.gravar_span(repositorio, tmp_path, span("extractor", "iniciante"))
 
 
 # Leitura do dashboard (ConsultaSupabase)
@@ -221,8 +301,8 @@ def test_consulta_le_o_run_completo_do_dashboard(repositorio, ambiente, tmp_path
                     tokens_saida=20, custo_brl=Decimal("0.5"), duracao_ms=10)
         persistencia.gravar_span(repositorio, tmp_path, span)
     proposto = ClaimProposto(
-        id="C01", chunk_id="K01", texto="A remuneração representou cerca de 11% da receita líquida.",
-        literal_fonte="representou aproximadamente 11% (onze por cento) da receita", numeros=["11%"],
+        id="C01", chunk_id="K01", texto="O fato relevante atende à Resolução CVM nº 44.",
+        literal_fonte="CVM nº 44, de 23 de agosto de 2021", numeros=["44"],
         tipo="resultado", tags=["indicador_chave"])
     claims, _ = extractor.ancorar(documento, {"C01": proposto})
     persistencia.gravar_validacao(repositorio, tmp_path, run_id, 1, [("C01", "motivo de teste")])
@@ -247,7 +327,7 @@ def test_consulta_le_o_run_completo_do_dashboard(repositorio, ambiente, tmp_path
     }
     (claim,) = detalhe["factsheet"]["claims"]
     assert claim["id"] == "C01" and claim["tags"] == ["indicador_chave"]
-    assert [n["bruto"] for n in claim["numeros"]] == ["11%"] and claim["ancora"] == claims[0].ancora.model_dump()
+    assert [n["bruto"] for n in claim["numeros"]] == ["44"] and claim["ancora"] == claims[0].ancora.model_dump()
     assert [(v["rodada"], v["claims"][0]["passou"]) for v in detalhe["validacoes"]] == [(1, False), (2, True)]
     assert len(detalhe["spans"]) == 2 and detalhe["spans"][0]["criado_em"] <= detalhe["spans"][1]["criado_em"]
     assert consulta.detalhar_run("cvm_20261004T142205Z_ffffff") is None
@@ -262,18 +342,18 @@ def test_quarentena_e_revisao_humana(repositorio, ambiente, tmp_path):
 
     run_id, documento = run_com_referencia(repositorio, ambiente["SUPABASE_DB_URL"])
     persistencia.gravar_documento_processado(repositorio, tmp_path, run_id, documento)
-    with psycopg.connect(ambiente["SUPABASE_DB_URL"]) as conexao:  # a E1 "não leu" o 11%
-        conexao.execute("delete from numeros where run_id = %s and bruto = '11%%'", (run_id,))
+    with psycopg.connect(ambiente["SUPABASE_DB_URL"]) as conexao:  # a E1 "não leu" o 44
+        conexao.execute("delete from numeros where run_id = %s and bruto = '44'", (run_id,))
 
-    medidas = ClaimProposto(
-        id="C01", chunk_id="K01", texto="A Companhia adotará todas as medidas cabíveis.",
-        literal_fonte="A Companhia adotará todas as medidas cabíveis", numeros=[], tipo="risco", tags=["governanca"])
-    receita = ClaimProposto(
-        id="C02", chunk_id="K01", texto="A remuneração representou cerca de 11% da receita líquida.",
-        literal_fonte="representou aproximadamente 11% (onze por cento) da receita", numeros=["11%"],
+    informacoes = ClaimProposto(
+        id="C01", chunk_id="K01", texto="Informações adicionais sobre a Incorporação de Ações serão divulgadas.",
+        literal_fonte="Informações adicionais acerca da Incorporação de Ações serão tempestivamente", numeros=[], tipo="risco", tags=["governanca"])
+    resolucao = ClaimProposto(
+        id="C02", chunk_id="K01", texto="O fato relevante atende à Resolução CVM nº 44.",
+        literal_fonte="CVM nº 44, de 23 de agosto de 2021", numeros=["44"],
         tipo="resultado", tags=["indicador_chave"])
-    claims, _ = extractor.ancorar(documento, {"C01": medidas})
-    itens = [ClaimQuarentena(proposto=receita, motivo="o número '11%' não está dentro do literal_fonte", rodada=3)]
+    claims, _ = extractor.ancorar(documento, {"C01": informacoes})
+    itens = [ClaimQuarentena(proposto=resolucao, motivo="o número '44' não está dentro do literal_fonte", rodada=3)]
     for _ in range(2):  # a repetição não duplica linhas
         persistencia.gravar_quarentena(repositorio, tmp_path, run_id, itens)
     persistencia.gravar_factsheet(repositorio, tmp_path, run_id, FactSheet(
@@ -284,7 +364,7 @@ def test_quarentena_e_revisao_humana(repositorio, ambiente, tmp_path):
     (item,) = persistencia.carregar_quarentena(repositorio, run_id)
     assert item.claim == itens[0] and item.decisao is None
     (sugerido,) = quarentena.preparar_revisao(repositorio, run_id, "C02").numeros
-    assert sugerido.novo and sugerido.numero.bruto == "11%"
+    assert sugerido.novo and sugerido.numero.bruto == "44"
     claim = quarentena.aceitar_da_quarentena(repositorio, tmp_path, run_id, "C02", [sugerido.numero], autor="Ana")
     # Repetir a mesma decisão (resposta perdida e nova tentativa) não tem efeito; outra decisão é recusada.
     repositorio.gravar_decisao_quarentena(run_id, "C02", "aceitar", "Ana", claim, [sugerido.numero])

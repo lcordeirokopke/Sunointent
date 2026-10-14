@@ -70,6 +70,7 @@ class RepositorioMemoria:
 
     `falhas` injeta exceções por método, consumidas uma a cada chamada.
     `perder_resposta_da_transacao` grava a transação e depois levanta FalhaRetriavel.
+    Da E1 em diante, guarda o que o pipeline grava, com as mesmas recusas do banco.
     """
 
     runs: dict[str, dict] = field(default_factory=dict)
@@ -89,6 +90,9 @@ class RepositorioMemoria:
     quarentena: dict[tuple, object] = field(default_factory=dict)
     decisoes_quarentena: dict[tuple, dict] = field(default_factory=dict)
     claims_humanos: dict[tuple, object] = field(default_factory=dict)
+    validacoes_plano: dict[tuple, object] = field(default_factory=dict)
+    planos: dict[str, object] = field(default_factory=dict)
+    celulas: dict[tuple, object] = field(default_factory=dict)
 
     def registrar_run(self, run_id: str) -> None:
         self.runs[run_id] = {"coleta_id": None}
@@ -259,6 +263,37 @@ class RepositorioMemoria:
             self.claims_humanos[chave] = claim
         self.decisoes_quarentena[chave] = {"decisao": decisao, "autor": autor}
 
+    def gravar_validacao_plano(self, run_id, rodada, problemas) -> None:
+        self._entrar("gravar_validacao_plano")
+        if run_id not in self.runs:
+            raise FalhaTerminal(f"run {run_id} não existe em runs")
+        if not 1 <= rodada <= 3:
+            raise FalhaTerminal(f"validacoes_plano.rodada fora de 1 a 3: {rodada}")
+        for ordem, problema in enumerate(problemas, start=1):
+            self.validacoes_plano.setdefault((run_id, rodada, ordem), problema)
+
+    def apagar_validacoes_plano(self, run_id) -> None:
+        self._entrar("apagar_validacoes_plano")
+        for chave in [c for c in self.validacoes_plano if c[0] == run_id]:
+            del self.validacoes_plano[chave]
+
+    def gravar_plano(self, run_id, plano, celulas) -> None:
+        """Mesmas regras do Supabase: o plano exige o FactSheet do run; tudo numa transação."""
+        self._entrar("gravar_plano")
+        if run_id not in self.factsheets:
+            raise FalhaTerminal(f"run {run_id} não tem FactSheet em factsheets; o plano não pode ser gravado")
+        if not 1 <= len(plano.nucleo) <= 3:
+            raise FalhaTerminal("planos_editoriais.nucleo precisa ter de 1 a 3 claims")
+        self.planos.setdefault(run_id, plano)
+        for celula in celulas:
+            self.celulas.setdefault((run_id, celula.celula_id), celula)
+
+    def carregar_plano(self, run_id):
+        self._entrar("carregar_plano")
+        if run_id not in self.planos:
+            return None
+        return self.planos[run_id], [c for (r, _), c in self.celulas.items() if r == run_id]
+
     def criar_run(self, manifest) -> None:
         self._entrar("criar_run")
         self.runs.setdefault(manifest.run_id, {"coleta_id": None, "manifest": manifest,
@@ -322,13 +357,23 @@ class ProviderFalso:
         return resposta
 
 
+def resposta_plano(*claim_ids: str, nucleo=None) -> str:
+    """Resposta do planejador (E4) que usa os claims dados nos 3 níveis, com o primeiro no núcleo."""
+    ids = list(claim_ids or ("C01",))
+    nivel = lambda n: {  # noqa: E731
+        "nivel": n, "descartes": [], "claims": [{"claim_id": c, "papel": "principal"} for c in ids],
+        "tese": f"Tese do {n}.", "tese_claim_ids": ids[:1], "analogias": [],
+    }
+    return json.dumps({"nucleo": nucleo or ids[:1], "niveis": [nivel(n) for n in ("iniciante", "intermediario", "avancado")]})
+
+
 def cliente_falso(respostas) -> ClienteLLM:
-    """ClienteLLM do extractor com o ProviderFalso; preço de 1 US$ por milhão nos dois sentidos, cotação 5,
-    raciocínio low na correção."""
+    """ClienteLLM do extractor e do adapter com o ProviderFalso; preço de 1 US$ por milhão nos dois sentidos,
+    cotação 5, raciocínio low nas correções."""
     return ClienteLLM(
         ProviderFalso(respostas),
-        {"extractor": "modelo-falso"},
+        {"extractor": "modelo-falso", "adapter": "modelo-falso"},
         {"modelo-falso": Preco(Decimal(1), Decimal(1))},
         Decimal(5),
-        raciocinio={"extractor_correcao": "low"},
+        raciocinio={"extractor_correcao": "low", "adapter_correcao": "low"},
     )

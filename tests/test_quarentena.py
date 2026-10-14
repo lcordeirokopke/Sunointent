@@ -14,7 +14,7 @@ from sunontent.retentativa import FalhaTerminal
 from sunontent.schemas import ClaimProposto, FactSheet
 from test_extractor import documento_fonte
 from test_main_graph import DECISAO, ERRADO, VOTACAO, raiz, repo, rodar  # noqa: F401 (fixtures)
-from conftest import cliente_falso
+from conftest import cliente_falso, resposta_plano
 
 SELIC = "13,75%"
 
@@ -125,7 +125,7 @@ def e1_sem_selic(monkeypatch):
 def rodar_com_quarentena(raiz, repo, primeiro, correcao):
     resposta = json.dumps({"claims": [primeiro, VOTACAO]}, ensure_ascii=False)
     correcao = json.dumps({"claims": [correcao]}, ensure_ascii=False)
-    assert rodar(raiz, repo, dev=True, llm=cliente_falso([resposta, correcao, correcao])) == 0
+    assert rodar(raiz, repo, dev=True, llm=cliente_falso([resposta, correcao, correcao, resposta_plano("C02")])) == 0
     (run_id,) = repo.runs
     assert (run_id, "C01") in repo.quarentena
     return run_id

@@ -1,18 +1,18 @@
 # Fluxo de execução (run)
 
-Este documento descreve como um run começa, como o grafo é montado e executado e como ele termina, concluído ou abortado. A ingestão (E0 e o modo `--dev`) está em `docs/fluxos/ingestao.md`, a leitura (E1) em `docs/fluxos/leitura.md`, a extração e a validação (E2 e E3) em `docs/fluxos/extracao.md`, o dashboard em `docs/fluxos/dashboard.md`, e o RunManifest, o estado e o checkpoint em `docs/arquiteturas.md`.
+Este documento descreve como um run começa, como o grafo é montado e executado e como ele termina, concluído ou abortado. A ingestão (E0 e o modo `--dev`) está em `docs/fluxos/ingestao.md`, a leitura (E1) em `docs/fluxos/leitura.md`, a extração e a validação (E2 e E3) em `docs/fluxos/extracao.md`, o plano editorial (E4) em `docs/fluxos/plano-editorial.md`, o dashboard em `docs/fluxos/dashboard.md`, e o RunManifest, o estado e o checkpoint em `docs/arquiteturas.md`.
 
 ## Responsabilidades
 
 | Peça | Papel |
 | ---- | ----- |
 | `sunontent/__main__.py` | Ponto de entrada (`python -m sunontent [fonte] [--dev]`). Lê o `.env`, confere as credenciais do Supabase e do Gemini, gera o `run_id`, monta o manifest, registra o run, executa o grafo escrevendo as linhas de etapa no terminal e fecha o run como `concluido` ou `abortado`, com o custo do run. |
-| `sunontent/graph.py` | Monta o grafo LangGraph: as duas entradas (E0 ou referência), a E1, a E2, a E3, o loop E2/E3 e a quarentena, as constantes `K` e `RODADAS_EXTRACAO` e `construir_grafo(checkpointer)`. A ordem das etapas fica só aqui. |
+| `sunontent/graph.py` | Monta o grafo LangGraph: as duas entradas (E0 ou referência), a E1, a E2, a E3, o loop E2/E3, a quarentena e a E4, as constantes `K`, `RODADAS_EXTRACAO` e `RODADAS_PLANO` e `construir_grafo(checkpointer)`. A ordem das etapas fica só aqui. |
 | `sunontent/manifesto.py` | Lê `config/` e `prompts/` e devolve o `RunManifest` sem os campos do documento. |
 | `sunontent/schemas.py` | `RunManifest`, `PipelineState` e os tipos `Nivel`, `Fonte` e `Modo`. |
 | `sunontent/llm.py` | `conferir_credenciais` (`GOOGLE_API_KEY_PRINC`) e `criar_cliente`: um `ClienteLLM` por run, com as chaves na ordem `GOOGLE_API_KEY_PRINC` e `GOOGLE_API_KEY_SEC`, que acumula os tokens e o custo do run. |
 | `sunontent/persistencia.py` | Funções do run: `criar_run`, `concluir_run`, `abortar_run`, `gravar_manifest_local`, `criar_repositorio_supabase` e `checkpointer_postgres`. Única porta de gravação no Supabase e em `data/`. |
-| `sunontent/nodes/` | Nós finos: `coleta` e `referencia` (entradas), `leitura` (E1), `extract` (E2), `validate` (E3) e `quarentena`. Não tratam erro: a `Falha` sobe até o `__main__.py`. |
+| `sunontent/nodes/` | Nós finos: `coleta` e `referencia` (entradas), `leitura` (E1), `extract` (E2), `validate` (E3), `quarentena` e `adapt` (E4). Não tratam erro: a `Falha` sobe até o `__main__.py`. |
 
 ## Ciclo de vida do run
 
@@ -33,9 +33,10 @@ flowchart TD
     E2 --> E3["no validate: E3"]
     E3 -->|"claim reprovado e rodada menor que 3"| E2
     E3 -->|"claim reprovado na rodada 3"| QUA["no quarentena"]
-    E3 --> FIM{"resultado"}
-    QUA --> FIM
-    FIM -->|"FactSheet assinado"| OK["status concluido, manifest.json com os campos do documento e o custo, codigo 0"]
+    E3 -->|"todos aprovados"| E4["no adapt: E4"]
+    QUA --> E4
+    E4 --> FIM{"resultado"}
+    FIM -->|"plano e 9 celulas gravados"| OK["status concluido, manifest.json com os campos do documento e o custo, codigo 0"]
     FIM -->|"Falha"| AB["abortar_run: status abortado com erro_classe e erro_mensagem, codigo 1"]
     FIM -->|"outra excecao"| AB2["abortar_run como terminal, mensagem Tipo: texto, e a excecao sobe"]
 ```
@@ -53,22 +54,22 @@ O código de saída é 0 para run concluído e 1 para run abortado ou para erro 
 ## O grafo
 
 ```
-START -> (modo normal) coleta     -> leitura -> extract -> validate -> END
-      -> (modo dev)    referencia -> leitura -> extract -> validate -> END
+START -> (modo normal) coleta     -> leitura -> extract -> validate -> adapt -> END
+      -> (modo dev)    referencia -> leitura -> extract -> validate -> adapt -> END
                                                   ^           |
                                                   +-----------+  claim reprovado e rodada < 3
                                                               |
-                                                              +--> quarentena -> END  claim reprovado e rodada = 3
+                                                              +--> quarentena -> adapt -> END  claim reprovado e rodada = 3
 ```
 
 - A aresta condicional de `START` lê `state.manifest.modo`: `dev` entra pelo nó `referencia`, e `normal` entra pelo nó `coleta` (E0).
 - As duas entradas entregam um `DocumentoFonte` em `documento_fonte` e seguem para o nó `leitura` (E1), que entrega o `DocumentoProcessado` em `documento`.
-- O nó `extract` (E2) coloca o FactSheet não assinado no estado, e o nó `validate` (E3) o confere. Sem claim reprovado, o FactSheet é assinado e o grafo termina. Com claim reprovado, `depois_da_validacao` volta ao `extract` enquanto `rodada < RODADAS_EXTRACAO` (3); na terceira rodada, segue para o nó `quarentena`, que grava os reprovados em quarentena e assina o FactSheet com os válidos (sem nenhum válido, levanta `FalhaTerminal`). O loop e a quarentena estão detalhados em `docs/fluxos/extracao.md`.
-- O grafo termina na E3 ou na quarentena: a E4 em diante ainda não existe no grafo.
+- O nó `extract` (E2) coloca o FactSheet não assinado no estado, e o nó `validate` (E3) o confere. Sem claim reprovado, o FactSheet é assinado e o grafo segue para o nó `adapt` (E4). Com claim reprovado, `depois_da_validacao` volta ao `extract` enquanto `rodada < RODADAS_EXTRACAO` (3); na terceira rodada, segue para o nó `quarentena`, que grava os reprovados em quarentena e assina o FactSheet com os válidos (sem nenhum válido, levanta `FalhaTerminal`). O loop e a quarentena estão detalhados em `docs/fluxos/extracao.md`.
+- O nó `adapt` (E4) recebe o FactSheet assinado, na E3 ou na quarentena, roda o loop do gate dentro dele, até `RODADAS_PLANO` (3), e grava o plano e as 9 células em `PENDENTE`. O grafo termina depois dele; a E5 em diante ainda não existe no grafo. A E4 está detalhada em `docs/fluxos/plano-editorial.md`.
 - `K = 2` é uma constante de `graph.py`. O valor lido no início do run entra no manifest.
 - `construir_grafo(checkpointer=None)` aceita qualquer checkpointer do LangGraph. O `__main__.py` passa o `PostgresSaver`, e os testes passam o `InMemorySaver`.
-- `PipelineState` tem `run_id`, `manifest`, `documento_fonte` (entradas), `documento` (E1), `factsheet` (não assinado na E2, assinado na E3) e os campos do loop E2/E3: `rodada`, `propostas`, `pendencias` e `correcoes`.
-- O `thread_id` é o `run_id`. O formato `<run_id>:<celula_id>` vale a partir das células, que ainda não existem.
+- `PipelineState` tem `run_id`, `manifest`, `documento_fonte` (entradas), `documento` (E1), `factsheet` (não assinado na E2, assinado na E3) os campos do loop E2/E3 (`rodada`, `propostas`, `pendencias` e `correcoes`) e os da E4: `rodada_plano`, `plano` e `celulas`.
+- O `thread_id` é o `run_id`. A E4 cria as 9 células em `PENDENTE`, e o formato `<run_id>:<celula_id>` vale a partir do fan-out da E5, que ainda não existe no grafo.
 
 ## Linhas de etapa no terminal
 
@@ -80,11 +81,12 @@ etapa coleta: iniciada
 etapa coleta: concluída
 etapa leitura: iniciada
 ...
-concluído: cvm_fato_relevante_16993_1575717 (215aa96736b4), 9 claims, 10836 tokens, R$ 0.1516
+concluído: cvm_fato_relevante_16993_1575717 (215aa96736b4), 9 claims, plano em 1 rodada, 10836 tokens, R$ 0.1516
 ```
 
-- O nome é o do nó em `graph.py` (`coleta`, `referencia`, `leitura`, `extract`, `validate`, `quarentena`). No loop E2/E3, `extract` e `validate` aparecem uma vez por rodada.
+- O nome é o do nó em `graph.py` (`coleta`, `referencia`, `leitura`, `extract`, `validate`, `quarentena`, `adapt`). No loop E2/E3, `extract` e `validate` aparecem uma vez por rodada.
 - Com claims em quarentena, a linha final diz quantos: `..., 22 claims, 1 em quarentena, ...`.
+- A linha final diz em quantas rodadas o plano da E4 ficou pronto e, com `aviso`, que o plano tem aviso: `plano em 3 rodadas (com aviso)`.
 - A etapa que falha não tem a linha `concluída`: a exceção sobe e a linha seguinte é `abortado (<classe>): <mensagem>`.
 - O dashboard (`docs/fluxos/dashboard.md`) lê essas linhas para mostrar em que etapa o run está.
 
@@ -109,17 +111,17 @@ Os campos do documento (`doc_id`, `doc_sha256`, `url_origem`, `coletado_em`, `co
 
 `concluir_run` atualiza `runs` para `status = 'concluido'` com `where run_id = ... and status = 'em_andamento'` e, só depois, regrava o `manifest.json` com os campos do documento e o custo do run (`custo_total_tokens` e `custo_total_brl`, acumulados pelo `ClienteLLM`). Se o update não alterar exatamente uma linha, a função levanta `FalhaTerminal`.
 
-No terminal, a última linha do run traz o documento, os claims do FactSheet e o custo:
+No terminal, a última linha do run traz o documento, os claims do FactSheet, as rodadas do plano e o custo:
 
 ```
-concluído: cvm_fato_relevante_16993_1575717 (215aa96736b4), 9 claims, 10836 tokens, R$ 0.1516
+concluído: cvm_fato_relevante_16993_1575717 (215aa96736b4), 9 claims, plano em 1 rodada, 10836 tokens, R$ 0.1516
 ```
 
 Em `runs`, o custo é somado na mesma instrução que grava cada span (`docs/fluxos/extracao.md`, Custo).
 
 ## Run abortado
 
-Toda `Falha` que sobe do grafo (E0, referência do `--dev`, E1, E2 e E3) é registrada por `persistencia.abortar_run(repositorio, raiz_dados, manifest, classe, mensagem)`:
+Toda `Falha` que sobe do grafo (E0, referência do `--dev`, E1, E2, E3 e E4) é registrada por `persistencia.abortar_run(repositorio, raiz_dados, manifest, classe, mensagem)`:
 
 1. A mensagem aparece na tela (stderr) antes de qualquer gravação.
 2. Com `com_retentativa`, o `abortar_run` faz o update em `runs`: `status = 'abortado'`, `erro_classe` e `erro_mensagem`, `where run_id = ... and status = 'em_andamento'`. Os campos de documento não são tocados: podem estar vazios se o run abortou antes de a E0 entregar o documento.
@@ -147,7 +149,11 @@ data/runs/<run_id>/
 ├── documento.json           # E1: DocumentoProcessado
 ├── spans/<span_id>.json     # E2: uma chamada de LLM por arquivo
 ├── validacoes/<rodada>.json # E3: resultado de cada rodada
-└── factsheet.json           # E3: FactSheet assinado, sem a tabela_numeros
+├── factsheet.json           # E3: FactSheet assinado, sem a tabela_numeros
+├── quarentena.json          # claims em quarentena, quando há
+├── validacoes_plano/<rodada>.json  # E4: problemas do gate em cada rodada
+├── plano.json               # E4: núcleo, aviso e os 3 planos de nível
+└── celulas/<celula_id>/estado.json # E4: as 9 células em PENDENTE
 ```
 
 O `manifest.json` contém os campos do `RunManifest` (em JSON) e, ao lado deles, `status`, `erro_classe` e `erro_mensagem`. Só o processo principal grava esse arquivo. Todos os arquivos são gravados num arquivo temporário renomeado no fim, e sempre depois de gravar no Supabase. Um run abortado tem só os arquivos das etapas que chegaram a gravar.
@@ -170,4 +176,4 @@ Sem a fonte, as três rodam em sequência, cada uma com o seu `run_id`. Se um ru
 python -m pytest
 ```
 
-`tests/test_main_graph.py` cobre o manifest, a escolha da entrada do grafo, os dois modos, o loop E2/E3, as linhas de etapa no terminal e os caminhos de erro: falha da E0, bug, referência ausente, hash divergente, config inválida, Supabase fora no aborto, run concluído não sobrescrito, credenciais ausentes, claim que não converge e extractor sem claims. Os testes usam o repositório em memória e o LLM simulado (`tests/conftest.py`), o `InMemorySaver` e `tmp_path`; não acessam internet, o Gemini nem o Supabase do site.
+`tests/test_main_graph.py` cobre o manifest, a escolha da entrada do grafo, os dois modos, o loop E2/E3, a E4 no grafo, as linhas de etapa no terminal e os caminhos de erro: falha da E0, bug, referência ausente, hash divergente, config inválida, Supabase fora no aborto, run concluído não sobrescrito, credenciais ausentes, claim que não converge e extractor sem claims. Os testes usam o repositório em memória e o LLM simulado (`tests/conftest.py`), o `InMemorySaver` e `tmp_path`; não acessam internet, o Gemini nem o Supabase do site.

@@ -17,7 +17,7 @@ create table validacoes_plano (
 -- regerado no retry das células (docs/arquiteturas.md, Regras do loop).
 create table planos_editoriais (
   run_id  text primary key references factsheets (run_id),
-  nucleo  text[] not null check (cardinality(nucleo) <= 3),
+  nucleo  text[] not null check (cardinality(nucleo) between 1 and 3),
   rodadas int not null check (rodadas between 1 and 3),
   aviso   text  -- o que o gate ainda acusava depois da última rodada; null quando passou. Mostrado na E8.
 );

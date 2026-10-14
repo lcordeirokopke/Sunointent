@@ -1,3 +1,7 @@
 nivel: avancado
-versao: 1
-foco: "analise tecnica e institucional"
+versao: 2
+# Campos da E4 (docs/fluxos/plano-editorial.md, LevelSpec da E4). Valores de partida.
+foco: "análise técnica e institucional"
+tags_priorizadas: [indicador_chave, metodologico, governanca]
+tags_descartaveis: []
+max_claims: 9

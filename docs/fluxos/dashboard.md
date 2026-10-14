@@ -12,7 +12,7 @@ python -m app --porta 8080
 
 Rode a partir da raiz do repositório, com o mesmo `.env` do pipeline e o Python do `.venv` (`.venv\Scripts\python -m app` no Windows): o processo iniciado pelo dashboard é o próprio `python -m sunontent`, executado com o mesmo Python do servidor, que lê o `.env` e confere as credenciais.
 
-Cada run chama o Gemini na E2 e grava no Supabase do site. A ordem de grandeza do custo está em `docs/fluxos/extracao.md` (Custo); com a fonte "Todas", são três runs.
+Cada run chama o Gemini na E2 e na E4 e grava no Supabase do site. A ordem de grandeza do custo está em `docs/fluxos/extracao.md` (Custo); com a fonte "Todas", são três runs.
 
 ## Peças
 
@@ -26,8 +26,8 @@ Cada run chama o Gemini na E2 e grava no Supabase do site. A ordem de grandeza d
 
 ## Botões
 
-- **Executar run**: `python -m sunontent [fonte]`. O `__main__.py` monta o manifest, registra o run no Supabase e chama `graph.construir_grafo(checkpointer)`. Cada run passa pela E0 (download da publicação mais recente), E1, E2 e E3, e termina com o FactSheet assinado, com ou sem claims em quarentena; a E4 em diante ainda não existe no grafo.
-- **Modo dev**: o mesmo com `--dev`, entrando pelo nó `referencia` com o documento de `tests/fixtures/referencia/`, sem download. A E2 chama o Gemini nos dois modos.
+- **Executar run**: `python -m sunontent [fonte]`. O `__main__.py` monta o manifest, registra o run no Supabase e chama `graph.construir_grafo(checkpointer)`. Cada run passa pela E0 (download da publicação mais recente), E1, E2, E3 e E4, e termina com o plano editorial e as 9 células em `PENDENTE`; a E5 em diante ainda não existe no grafo.
+- **Modo dev**: o mesmo com `--dev`, entrando pelo nó `referencia` com o documento de `tests/fixtures/referencia/`, sem download. A E2 e a E4 chamam o Gemini nos dois modos.
 - **Parar**: encerra o processo. O run em andamento fica com status `em_andamento` no Supabase, porque o `__main__.py` não chega a registrar o aborto.
 - **Fonte**: Todas (sem fonte, os três runs em sequência), Copom, CVM ou B3.
 
@@ -58,11 +58,11 @@ Quando o processo termina, o servidor acrescenta o evento `fim` com o código de
 
 ## Abas
 
-- **Fluxo**: os cartões E0 a E8 com estado e duração, o contador de rodadas do loop E2/E3 e as arestas do grafo. As subabas mostram o terminal completo ou uma etapa: descrição, estado, duração, os dados do run gravados por ela e as linhas do terminal daquela etapa. O cartão da E3 cobre os nós `validate` e `quarentena`: soma as durações, junta as linhas e mostra o estado do último que rodou.
+- **Fluxo**: os cartões E0 a E8 com estado e duração, o contador de rodadas do loop E2/E3 e as arestas do grafo. As subabas mostram o terminal completo ou uma etapa: descrição, estado, duração, os dados do run gravados por ela e as linhas do terminal daquela etapa. O cartão da E3 cobre os nós `validate` e `quarentena`: soma as durações, junta as linhas e mostra o estado do último que rodou. Cada etapa com agente mostra só as chamadas de LLM do seu nó: a E2, as do `extractor`; a E4, as do `adapter`, com as rodadas do plano e se ele tem aviso, lidas da linha final do terminal (`plano em N rodadas (com aviso)`). O plano em si (núcleo, claims por nível, descartes e analogias) não aparece no dashboard.
 - **Resultado**: um run lido do Supabase: resumo, documento processado, claims do FactSheet com o trecho da fonte (os aceitos na revisão da quarentena marcados como `humano`), validações por rodada, a quarentena com o motivo e a decisão de cada claim, chamadas de LLM e as versões do manifest. A quarentena é só leitura: a revisão é feita pelas funções de `sunontent/extracao/quarentena.py` (`docs/fluxos/extracao.md`, Quarentena).
 - **Histórico**: os runs da tabela `runs`, do mais recente ao mais antigo, com os claims e os claims em quarentena ainda sem decisão; um clique abre o resultado.
 
-Uma etapa é mostrada como implementada quando o seu nó existe no grafo devolvido por `/api/grafo`, que chama `graph.construir_grafo()`. As etapas E4 a E8 aparecem como não implementadas até os nós `adapt`, `synth`, `evaluate`, `router` e `revisao` existirem.
+Uma etapa é mostrada como implementada quando o seu nó existe no grafo devolvido por `/api/grafo`, que chama `graph.construir_grafo()`. As etapas E5 a E8 aparecem como não implementadas até os nós `synth`, `evaluate`, `router` e `revisao` existirem.
 
 A URL guarda a aba: `#fluxo/E3`, `#resultado/<run_id>`, `#historico`.
 
@@ -70,7 +70,7 @@ A URL guarda a aba: `#fluxo/E3`, `#resultado/<run_id>`, `#historico`.
 
 | Rota | O que faz |
 | ---- | --------- |
-| `GET /api/grafo` | Nós e arestas de `construir_grafo()`, `RODADAS_EXTRACAO` e `K`. |
+| `GET /api/grafo` | Nós e arestas de `construir_grafo()`, `RODADAS_EXTRACAO`, `RODADAS_PLANO` e `K`. |
 | `POST /api/execucao` | Corpo `{"fonte": null \| "copom" \| "cvm" \| "b3", "dev": bool}`. 409 se já houver execução em andamento, 422 para fonte desconhecida. |
 | `GET /api/execucao` | A execução atual ou a última, com todos os eventos. |
 | `GET /api/execucao/eventos?desde=N` | SSE com os eventos a partir de `N`; termina depois do `fim`. |

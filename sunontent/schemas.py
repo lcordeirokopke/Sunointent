@@ -3,11 +3,23 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 Nivel = Literal["iniciante", "intermediario", "avancado"]
+NIVEIS: tuple[str, ...] = get_args(Nivel)
+Formato = Literal["artigo", "carrossel", "roteiro"]
+FORMATOS: tuple[str, ...] = get_args(Formato)
+EstadoCelula = Literal["PENDENTE", "GERANDO", "AVALIANDO", "APROVADA", "REPROVADA", "ERRO_INFRA"]
+# E4 (docs/arquiteturas.md, Plano editorial). O planejador só usa os três motivos específicos.
+MotivoDescarte = Literal["redundante", "secundario", "exige_base_tecnica", "fora_do_foco", "metodologico"]
+MotivoPlanejador = Literal["redundante", "exige_base_tecnica", "fora_do_foco"]
+OrigemDescarte = Literal["prefiltro", "planejador", "padrao"]
+Papel = Literal["principal", "apoio", "contexto"]
+RegraPlano = Literal[
+    "id_inexistente", "contraditorio", "nucleo_ausente", "acima_do_limite", "jargao_sem_analogia", "motivo_invalido"
+]
 Fonte = Literal["copom", "cvm", "b3"]
 Modo = Literal["normal", "dev"]
 TipoDocumento = Literal["copom_ata", "cvm_fato_relevante", "b3_release"]
@@ -21,6 +33,12 @@ TIPO_DOCUMENTO_POR_FONTE: dict[str, TipoDocumento] = {
     "copom": "copom_ata",
     "cvm": "cvm_fato_relevante",
     "b3": "b3_release",
+}
+# Descrição do tipo de documento nos prompts do extractor e do planejador.
+DESCRICAO_TIPO: dict[str, str] = {
+    "copom_ata": "ata de reunião do Comitê de Política Monetária",
+    "cvm_fato_relevante": "fato relevante publicado na CVM",
+    "b3_release": "release de resultados trimestrais",
 }
 
 
@@ -249,6 +267,148 @@ class RunManifest(BaseModel):
     custo_total_brl: Decimal = Decimal(0)
 
 
+class ProblemaPlano(BaseModel):
+    """Problema acusado pelo gate do plano (docs/arquiteturas.md, E4.3). Linha de `validacoes_plano`.
+    `nivel` None vale para o plano inteiro; `detalhe` é a mensagem devolvida ao planejador."""
+
+    regra: RegraPlano
+    nivel: Nivel | None = None
+    detalhe: str = Field(min_length=1)
+
+    def texto(self) -> str:
+        return f"[{self.regra}] {self.nivel or 'plano'}: {self.detalhe}"
+
+
+class Descarte(BaseModel):
+    """Claim que não entra no nível, com o motivo (docs/arquiteturas.md, Plano editorial)."""
+
+    claim_id: str
+    motivo: MotivoDescarte
+    relacionado: str | None = None  # obrigatório em "redundante": o claim usado no nível que já diz o mesmo
+    origem: OrigemDescarte
+
+
+class ClaimPlanejado(BaseModel):
+    claim_id: str
+    papel: Papel
+    atribuir_fonte: bool  # preenchido pelo código: true em projecao, condicionante e risco
+
+
+class Analogia(BaseModel):
+    termo: str = Field(min_length=1)
+    explicacao: str = Field(min_length=1)
+    origem: Literal["glossario", "nova"]
+    glossario_ref: str | None = None  # "<id do termo>#<n>": a n-ésima analogia do termo no glossário
+    revisada: bool  # True só para analogia do glossário com status aprovada
+
+
+class PlanoNivel(BaseModel):
+    nivel: Nivel
+    descartes: list[Descarte]
+    claims: list[ClaimPlanejado]  # em ordem de leitura
+    tese: str
+    tese_claim_ids: list[str]
+    analogias: list[Analogia]  # uma por termo, a mesma nos 3 formatos do nível
+
+
+class PlanoEditorial(BaseModel):
+    """Saída da E4, agnóstica de formato. Sem texto de peça, exceto a explicação das analogias `nova`."""
+
+    nucleo: list[str] = Field(min_length=1, max_length=3)
+    niveis: list[PlanoNivel]  # exatamente 3, na ordem iniciante, intermediario e avancado
+    rodadas: int = Field(ge=1, le=3)
+    aviso: str | None = None
+
+    @model_validator(mode="after")
+    def _tres_niveis(self) -> "PlanoEditorial":
+        if [p.nivel for p in self.niveis] != list(NIVEIS):
+            raise ValueError(f"niveis precisa ter {', '.join(NIVEIS)}, nessa ordem")
+        return self
+
+    def nivel(self, nivel: str) -> PlanoNivel:
+        return next(p for p in self.niveis if p.nivel == nivel)
+
+
+class CelulaState(BaseModel):
+    """Estado de uma das 9 células (docs/arquiteturas.md, O objeto de estado). `peca` e `scorecard`
+    entram com a E5 e a E6."""
+
+    celula_id: str
+    nivel: Nivel
+    formato: Formato
+    tentativa: int = Field(default=0, ge=0)
+    estado: EstadoCelula = "PENDENTE"
+
+    @model_validator(mode="after")
+    def _id(self) -> "CelulaState":
+        if self.celula_id != celula_id(self.nivel, self.formato):
+            raise ValueError(f"celula_id {self.celula_id!r} não confere com {self.nivel} e {self.formato}")
+        return self
+
+
+def celula_id(nivel: str, formato: str) -> str:
+    return f"{nivel}__{formato}"
+
+
+# Saída do planejador (E4.2): schema próprio, separado do PlanoEditorial. O motivo do descarte só aceita
+# os três motivos específicos e não há `origem`, `atribuir_fonte` nem analogia do glossário: o código
+# completa o plano no complemento (docs/arquiteturas.md, Plano editorial).
+
+
+class DescarteDoPlanejador(BaseModel):
+    claim_id: str = Field(description="id do claim descartado neste nível, ex: C07")
+    motivo: MotivoPlanejador = Field(
+        description="redundante: outro claim usado no nível já diz o mesmo; exige_base_tecnica: o claim depende "
+        "de um termo técnico acima do nível; fora_do_foco: não serve ao foco do nível"
+    )
+    relacionado: str | None = Field(
+        default=None, description="só em redundante: o id do claim usado neste nível que já diz o mesmo"
+    )
+
+
+class ClaimDoPlanejador(BaseModel):
+    claim_id: str = Field(description="id do claim usado neste nível")
+    papel: Papel = Field(description="principal, apoio ou contexto")
+
+
+class AnalogiaDoPlanejador(BaseModel):
+    termo: str = Field(description="o termo exatamente como aparece na lista de termos sem analogia")
+    explicacao: str = Field(description="a analogia cotidiana que explica o termo, sem números")
+
+
+class NivelDoPlanejador(BaseModel):
+    nivel: Nivel
+    descartes: list[DescarteDoPlanejador] = Field(
+        description="candidatos que não entram neste nível por um motivo específico"
+    )
+    claims: list[ClaimDoPlanejador] = Field(description="claims usados neste nível, em ordem de leitura")
+    tese: str = Field(description="uma frase: o que esta versão diz")
+    tese_claim_ids: list[str] = Field(description="os claims usados que sustentam a tese")
+    analogias: list[AnalogiaDoPlanejador] = Field(
+        description="só no iniciante: analogias novas para os termos da lista que estão nos claims usados; "
+        "vazia nos outros níveis"
+    )
+
+
+class SaidaPlanejador(BaseModel):
+    """Schema da resposta do planejador, com os campos na ordem em que o modelo os escreve."""
+
+    nucleo: list[str] = Field(
+        min_length=1, max_length=3,
+        description="1 a 3 claims que dizem sobre o que é o documento, escolhidos entre os candidatos nos 3 níveis",
+    )
+    niveis: list[NivelDoPlanejador] = Field(description="exatamente 3: iniciante, intermediario e avancado")
+
+    @model_validator(mode="after")
+    def _tres_niveis(self) -> "SaidaPlanejador":
+        if [p.nivel for p in self.niveis] != list(NIVEIS):
+            raise ValueError(f"niveis precisa ter {', '.join(NIVEIS)}, nessa ordem")
+        com_analogia = [p.nivel for p in self.niveis if p.nivel != "iniciante" and p.analogias]
+        if com_analogia:
+            raise ValueError(f"analogias só no iniciante (encontradas em {', '.join(com_analogia)})")
+        return self
+
+
 class PipelineState(BaseModel):
     """Estado do grafo. Cresce a cada etapa implementada (docs/arquiteturas.md, O objeto de estado)."""
 
@@ -263,3 +423,7 @@ class PipelineState(BaseModel):
     propostas: dict[str, ClaimProposto] = {}
     pendencias: dict[str, str] = {}
     correcoes: dict[str, str] = {}
+    # E4: rodada do gate e plano; o plano só entra aqui depois do gate.
+    rodada_plano: int = 0
+    plano: PlanoEditorial | None = None
+    celulas: dict[str, CelulaState] = {}  # 9 entradas depois da E4, chaveadas por celula_id

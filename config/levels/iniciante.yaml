@@ -1,3 +1,7 @@
 nivel: iniciante
-versao: 1
-foco: "impacto pratico no bolso do leitor"
+versao: 2
+# Campos da E4 (docs/fluxos/plano-editorial.md, LevelSpec da E4). Valores de partida.
+foco: "impacto prático no bolso do leitor"
+tags_priorizadas: [impacto_pratico]
+tags_descartaveis: [metodologico]
+max_claims: 5

@@ -13,6 +13,9 @@ Funções da E0 e do run (docs/fluxos/ingestao.md, docs/arquiteturas.md):
 - quarentena do loop E2/E3 (claims_quarentena e data/runs/<run_id>/quarentena.json), a leitura do
   documento e da quarentena para a revisão, e a decisão humana (decisoes_quarentena e, ao aceitar, o
   claim e os números novos com origem humano, numa transação; data/runs/<run_id>/revisoes/);
+- E4: problemas de cada rodada do gate em validacoes_plano, e o plano (planos_editoriais e planos_nivel)
+  com as 9 células em PENDENTE numa transação; data/runs/<run_id>/validacoes_plano/, plano.json e
+  celulas/<celula_id>/estado.json; a leitura do plano para a retomada;
 - cópia local em data/sources/<fonte>/ e data/runs/<run_id>/;
 - conexão do checkpointer do LangGraph;
 - leitura dos runs para o dashboard (app/), em conexão só de leitura (ConsultaSupabase).
@@ -33,6 +36,7 @@ from typing import Mapping, Protocol
 from sunontent.retentativa import Falha, FalhaRetriavel, FalhaTerminal, com_retentativa
 from sunontent.schemas import (
     Ancora,
+    CelulaState,
     Chunk,
     Claim,
     ClaimQuarentena,
@@ -42,6 +46,8 @@ from sunontent.schemas import (
     FactSheet,
     Numero,
     Pagina,
+    PlanoEditorial,
+    ProblemaPlano,
     RunManifest,
     Span,
 )
@@ -157,6 +163,23 @@ class Repositorio(Protocol):
         """Numa transação: a linha de `decisoes_quarentena` e, ao aceitar, os números novos em `numeros` e o
         claim em `claims` e `claim_numeros`, com origem humano. Repetir a mesma decisão não tem efeito;
         decisão diferente da gravada é FalhaTerminal. Aceitar exige o FactSheet assinado do run."""
+        ...
+
+    def gravar_validacao_plano(self, run_id: str, rodada: int, problemas: list[ProblemaPlano]) -> None:
+        """Linhas de `validacoes_plano` da rodada, uma por problema, com `ordem` a partir de 1. Repetição não duplica."""
+        ...
+
+    def apagar_validacoes_plano(self, run_id: str) -> None:
+        """Apaga as linhas de `validacoes_plano` do run: a E4 recomeça sem plano gravado."""
+        ...
+
+    def gravar_plano(self, run_id: str, plano: PlanoEditorial, celulas: list[CelulaState]) -> None:
+        """Numa transação: `planos_editoriais`, `planos_nivel` e as linhas de `celulas`. Linhas que já existem
+        ficam como estão. Exige o FactSheet assinado do run."""
+        ...
+
+    def carregar_plano(self, run_id: str) -> tuple[PlanoEditorial, list[CelulaState]] | None:
+        """O plano gravado do run e as suas células, ou None se `planos_editoriais` não tem o run."""
         ...
 
     def criar_run(self, manifest: RunManifest) -> None:
@@ -367,6 +390,65 @@ def gravar_decisao_quarentena(
         "numeros_novos": [n.model_dump(mode="json") for n in numeros_novos],
     }
     return _gravar_json(destino, conteudo)
+
+
+def gravar_validacao_plano(
+    repositorio: Repositorio, raiz_dados: Path, run_id: str, rodada: int, problemas: list[ProblemaPlano]
+) -> Path:
+    """Grava os problemas da rodada do gate no Supabase (a rodada sem problema não tem linha) e, depois, em
+    data/runs/<run_id>/validacoes_plano/<rodada>.json, com a lista vazia na rodada que passou."""
+    com_retentativa(
+        lambda: repositorio.gravar_validacao_plano(run_id, rodada, problemas),
+        f"gravação da rodada {rodada} do gate do plano do run {run_id}",
+    )
+    destino = Path(raiz_dados) / "runs" / run_id / "validacoes_plano" / f"{rodada}.json"
+    return _gravar_json(destino, {"rodada": rodada, "problemas": [p.model_dump(mode="json") for p in problemas]})
+
+
+def reiniciar_validacoes_plano(repositorio: Repositorio, raiz_dados: Path, run_id: str) -> None:
+    """Apaga as rodadas do gate de uma execução da E4 que não chegou a gravar o plano, no Supabase e na
+    cópia local, para que a nova execução não misture as suas linhas com as antigas."""
+    com_retentativa(
+        lambda: repositorio.apagar_validacoes_plano(run_id), f"limpeza das rodadas do gate do plano do run {run_id}"
+    )
+    pasta = Path(raiz_dados) / "runs" / run_id / "validacoes_plano"
+    if pasta.is_dir():
+        for arquivo in pasta.glob("*.json"):
+            arquivo.unlink()
+
+
+def _gravar_plano_local(raiz_dados: Path, run_id: str, plano: PlanoEditorial, celulas: list[CelulaState]) -> Path:
+    pasta = Path(raiz_dados) / "runs" / run_id
+    for celula in celulas:
+        _gravar_json(pasta / "celulas" / celula.celula_id / "estado.json", celula.model_dump(mode="json"))
+    return _gravar_json(pasta / "plano.json", plano.model_dump(mode="json"))
+
+
+def gravar_plano(
+    repositorio: Repositorio, raiz_dados: Path, run_id: str, plano: PlanoEditorial, celulas: list[CelulaState]
+) -> Path:
+    """Grava o plano e as 9 células no Supabase e, depois, em data/runs/<run_id>/plano.json e
+    celulas/<celula_id>/estado.json."""
+    com_retentativa(
+        lambda: repositorio.gravar_plano(run_id, plano, celulas), f"gravação do plano editorial do run {run_id}"
+    )
+    return _gravar_plano_local(raiz_dados, run_id, plano, celulas)
+
+
+def carregar_plano(
+    repositorio: Repositorio, raiz_dados: Path, run_id: str
+) -> tuple[PlanoEditorial, list[CelulaState]] | None:
+    """O plano já gravado do run (retomada), com a cópia local que faltar gravada; None se não existe."""
+    gravado = com_retentativa(lambda: repositorio.carregar_plano(run_id), f"leitura do plano editorial do run {run_id}")
+    if gravado is not None:
+        plano, celulas = gravado
+        pasta = Path(raiz_dados) / "runs" / run_id
+        faltando = not (pasta / "plano.json").exists() or any(
+            not (pasta / "celulas" / c.celula_id / "estado.json").exists() for c in celulas
+        )
+        if faltando:
+            _gravar_plano_local(raiz_dados, run_id, plano, celulas)
+    return gravado
 
 
 def criar_run(repositorio: Repositorio, manifest: RunManifest) -> None:
@@ -854,6 +936,86 @@ class RepositorioSupabase:
                 self._inserir_claims(cursor, run_id, [claim], "humano")
 
         self._executar(transacao)
+
+    def gravar_validacao_plano(self, run_id: str, rodada: int, problemas: list[ProblemaPlano]) -> None:
+        linhas = [(run_id, rodada, ordem, p.nivel, p.regra, p.detalhe) for ordem, p in enumerate(problemas, start=1)]
+        if not linhas:
+            return
+
+        def transacao(conexao):
+            with conexao.transaction(), conexao.cursor() as cursor:
+                cursor.executemany(
+                    "insert into validacoes_plano (run_id, rodada, ordem, nivel, regra, detalhe)"
+                    " values (%s, %s, %s, %s::nivel, %s::regra_plano, %s)"
+                    " on conflict (run_id, rodada, ordem) do nothing",
+                    linhas,
+                )
+
+        self._executar(transacao)
+
+    def apagar_validacoes_plano(self, run_id: str) -> None:
+        self._executar(lambda conexao: conexao.execute("delete from validacoes_plano where run_id = %s", (run_id,)))
+
+    def gravar_plano(self, run_id: str, plano: PlanoEditorial, celulas: list[CelulaState]) -> None:
+        from psycopg.types.json import Jsonb
+
+        niveis = [
+            (run_id, p.nivel, p.tese, p.tese_claim_ids,
+             Jsonb([c.model_dump(mode="json") for c in p.claims]),
+             Jsonb([d.model_dump(mode="json") for d in p.descartes]),
+             Jsonb([a.model_dump(mode="json") for a in p.analogias]))
+            for p in plano.niveis
+        ]
+        linhas_celulas = [(run_id, c.celula_id, c.nivel, c.formato, c.estado, c.tentativa) for c in celulas]
+
+        def transacao(conexao):
+            with conexao.transaction(), conexao.cursor() as cursor:
+                cursor.execute(
+                    "insert into planos_editoriais (run_id, nucleo, rodadas, aviso) values (%s, %s, %s, %s)"
+                    " on conflict (run_id) do nothing",
+                    (run_id, plano.nucleo, plano.rodadas, plano.aviso),
+                )
+                cursor.executemany(
+                    "insert into planos_nivel (run_id, nivel, tese, tese_claim_ids, claims, descartes, analogias)"
+                    " values (%s, %s::nivel, %s, %s, %s, %s, %s) on conflict (run_id, nivel) do nothing",
+                    niveis,
+                )
+                cursor.executemany(
+                    "insert into celulas (run_id, celula_id, nivel, formato, estado, tentativa)"
+                    " values (%s, %s, %s::nivel, %s::formato, %s::estado_celula, %s)"
+                    " on conflict (run_id, celula_id) do nothing",
+                    linhas_celulas,
+                )
+
+        self._executar(transacao)
+
+    def carregar_plano(self, run_id: str) -> tuple[PlanoEditorial, list[CelulaState]] | None:
+        def consulta(conexao):
+            from psycopg.rows import dict_row
+
+            with conexao.cursor(row_factory=dict_row) as cursor:
+                cabecalho = cursor.execute(
+                    "select nucleo, rodadas, aviso from planos_editoriais where run_id = %s", (run_id,)
+                ).fetchone()
+                if cabecalho is None:
+                    return None
+                niveis = cursor.execute(
+                    "select nivel::text as nivel, tese, tese_claim_ids, claims, descartes, analogias"
+                    " from planos_nivel where run_id = %s order by nivel",
+                    (run_id,),
+                ).fetchall()
+                celulas = cursor.execute(
+                    "select celula_id, nivel::text as nivel, formato::text as formato, estado::text as estado,"
+                    " tentativa from celulas where run_id = %s order by nivel, formato",
+                    (run_id,),
+                ).fetchall()
+            plano = PlanoEditorial(
+                nucleo=list(cabecalho["nucleo"]), rodadas=cabecalho["rodadas"], aviso=cabecalho["aviso"],
+                niveis=[{**n, "tese_claim_ids": list(n["tese_claim_ids"])} for n in niveis],
+            )
+            return plano, [CelulaState(**c) for c in celulas]
+
+        return self._executar(consulta)
 
     def criar_run(self, manifest: RunManifest) -> None:
         from psycopg.types.json import Jsonb

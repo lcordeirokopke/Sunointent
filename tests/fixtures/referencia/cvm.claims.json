@@ -1,0 +1,106 @@
+{
+  "run_id": "cvm_20261013T190953Z_b41958",
+  "doc_sha256": "215aa96736b47ae5000db149b3b2cb9fac3e824166f8e415a2ea12feca508769",
+  "doc_id": "cvm_fato_relevante_16993_1575717",
+  "tipo_documento": "cvm_fato_relevante",
+  "emissor": "COMPANHIA DE SANEAMENTO BÁSICO DO ESTADO DE SÃO PAULO – SABESP; EMPRESA METROPOLITANA DE ÁGUAS E ENERGIA S.A. - EMAE",
+  "data_documento": "2026-10-08",
+  "claims": [
+    {
+      "id": "C01",
+      "texto": "A Sabesp realizará a incorporação da totalidade das ações de emissão da EMAE que não detém, tendo como contrapartida a entrega aos acionistas da EMAE de ações ordinárias de emissão da Sabesp.",
+      "numeros": [],
+      "tipo": "decisao",
+      "tags": [
+        "governanca",
+        "impacto_pratico"
+      ],
+      "ancora": {
+        "pagina": 1,
+        "offset_inicio": 1196,
+        "offset_fim": 1389
+      },
+      "literal_fonte": "incorporação, pela Sabesp, da totalidade das ações de\nemissão da EMAE não detidas pela Sabesp, tendo como contrapartida a entrega aos\nacionistas da EMAE de ações ordinárias de emissão da Sabesp"
+    },
+    {
+      "id": "C02",
+      "texto": "O encerramento do prazo para exercício do Direito de Retirada pelos acionistas da EMAE está previsto para 19/10.",
+      "numeros": [],
+      "tipo": "projecao",
+      "tags": [
+        "governanca",
+        "impacto_pratico"
+      ],
+      "ancora": {
+        "pagina": 2,
+        "offset_inicio": 1454,
+        "offset_fim": 1520
+      },
+      "literal_fonte": "19/10\nEncerramento do prazo para exercício do Direito de Retirada."
+    },
+    {
+      "id": "C03",
+      "texto": "O pagamento do reembolso aos acionistas da EMAE que exercerem o Direito de Retirada está previsto para 21/10.",
+      "numeros": [],
+      "tipo": "projecao",
+      "tags": [
+        "governanca",
+        "impacto_pratico"
+      ],
+      "ancora": {
+        "pagina": 2,
+        "offset_inicio": 2098,
+        "offset_fim": 2194
+      },
+      "literal_fonte": "21/10\nData de pagamento do reembolso aos acionistas da EMAE que exercerem\no Direito de Retirada."
+    },
+    {
+      "id": "C04",
+      "texto": "O último dia de negociação das ações de emissão da EMAE na B3 está previsto para 23/10.",
+      "numeros": [],
+      "tipo": "projecao",
+      "tags": [
+        "governanca",
+        "impacto_pratico"
+      ],
+      "ancora": {
+        "pagina": 2,
+        "offset_inicio": 2195,
+        "offset_fim": 2261
+      },
+      "literal_fonte": "23/10\nÚltimo dia de negociação das ações de emissão da EMAE na B3."
+    },
+    {
+      "id": "C05",
+      "texto": "O crédito das ações emitidas pela Sabesp aos acionistas da EMAE está previsto para 27/10.",
+      "numeros": [],
+      "tipo": "projecao",
+      "tags": [
+        "governanca",
+        "impacto_pratico"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 164,
+        "offset_fim": 318
+      },
+      "literal_fonte": "27/10\nDivulgação de Fato Relevante da Sabesp atestando a eficácia da\nIncorporação de Ações.\nCrédito das ações emitidas pela Sabesp aos acionistas da EMAE."
+    },
+    {
+      "id": "C06",
+      "texto": "A confirmação pela B3 e pelo Novo Escriturador sobre eventuais frações decorrentes da Incorporação de Ações está prevista para 04/11.",
+      "numeros": [],
+      "tipo": "projecao",
+      "tags": [
+        "governanca"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 458,
+        "offset_fim": 567
+      },
+      "literal_fonte": "04/11\nConfirmação, pela B3 e Novo Escriturador, sobre eventuais frações\ndecorrentes da Incorporação de Ações."
+    }
+  ],
+  "assinado": true
+}

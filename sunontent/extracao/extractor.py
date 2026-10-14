@@ -19,13 +19,8 @@ import jinja2
 from sunontent.extracao import ancoragem
 from sunontent.llm import ClienteLLM
 from sunontent.retentativa import FalhaTerminal
-from sunontent.schemas import Claim, ClaimProposto, DocumentoProcessado, SaidaExtractor, Span
+from sunontent.schemas import DESCRICAO_TIPO, Claim, ClaimProposto, DocumentoProcessado, SaidaExtractor, Span
 
-DESCRICAO_TIPO = {
-    "copom_ata": "ata de reunião do Comitê de Política Monetária",
-    "cvm_fato_relevante": "fato relevante publicado na CVM",
-    "b3_release": "release de resultados trimestrais",
-}
 VIZINHOS = 1  # chunks de cada lado do chunk de um claim recusado, mostrados na correção
 
 

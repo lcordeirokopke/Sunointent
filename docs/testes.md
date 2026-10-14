@@ -1,6 +1,6 @@
 # Testes
 
-Os testes ficam em `tests/` e rodam com `pytest` a partir da raiz do repositório. Hoje cobrem a E0 (coleta dos PDFs de Copom, CVM e B3), a E1 (leitura), a E2 (extractor e ancoragem), a E3 (validador de âncoras), o cliente LLM, o manifest do run, o grafo, o `__main__`, o dashboard (`app/`) e as consultas de leitura do dashboard.
+Os testes ficam em `tests/` e rodam com `pytest` a partir da raiz do repositório. Hoje cobrem a E0 (coleta dos PDFs de Copom, CVM e B3), a E1 (leitura), a E2 (extractor e ancoragem), a E3 (validador de âncoras), a E4 (LevelSpec, glossário e plano editorial), o cliente LLM, o manifest do run, o grafo, o `__main__`, o dashboard (`app/`) e as consultas de leitura do dashboard.
 
 ## Para que servem
 
@@ -18,14 +18,14 @@ Quase tudo é simulado. O código do projeto roda de verdade; o mundo externo (i
 | Parte | Como é simulada | Onde |
 |---|---|---|
 | Internet (BCB, CVM, B3) | `httpx.MockTransport` devolve respostas prontas de `tests/fixtures/http/`, inclusive 503, 429, timeout e 404 | `test_ingestao.py` |
-| Supabase | `RepositorioMemoria`: classe em memória com as mesmas regras do banco usadas pelo pipeline (E0 a E3), que também injeta falhas por método | `conftest.py` |
+| Supabase | `RepositorioMemoria`: classe em memória com as mesmas regras do banco usadas pelo pipeline (E0 a E4), que também injeta falhas por método | `conftest.py` |
 | Leitura do Supabase pelo dashboard | `ConsultaFalsa`: devolve runs prontos ou levanta a falha pedida | `test_app.py` |
 | Processo do pipeline iniciado pelo dashboard | script Python que escreve as mesmas linhas do `__main__.py` | `test_app.py` |
 | Storage do Supabase | `_StorageFalso`: só devolve o erro que o teste pede | `test_ingestao.py` |
 | Espera do backoff | `monkeypatch` troca `retentativa._dormir` por uma lista; o teste confere o tamanho da lista e que as esperas crescem, sem esperar de verdade | `conftest.py` |
 | Disco | `tmp_path` do pytest no lugar de `data/` | todos |
 | Checkpointer do LangGraph | `InMemorySaver` | `test_main_graph.py` |
-| Gemini API | `ProviderFalso`: devolve respostas prontas em ordem (JSON, `RespostaBruta` ou exceção) e guarda os prompts recebidos; `cliente_falso` monta o `ClienteLLM` com ele | `conftest.py` |
+| Gemini API | `ProviderFalso`: devolve respostas prontas em ordem (JSON, `RespostaBruta` ou exceção) e guarda os prompts recebidos; `cliente_falso` monta o `ClienteLLM` com ele, para o extractor e o adapter; `resposta_plano` monta a resposta do planejador | `conftest.py` |
 
 Rodam de verdade: `copom.py`, `cvm.py`, `b3.py`, `comum.py`, `retentativa.py`, `manifesto.py`, `graph.py` e `__main__.py` (parsing, validação de `%PDF-`, hash, limite de tamanho, classificação dos erros, ordem das gravações), o grafo LangGraph, o servidor do dashboard (`app/servidor.py` e `app/execucao.py`, com um processo filho de verdade), a leitura e o hash dos arquivos de `config/` e `prompts/` (copiados para o `tmp_path`) e a escrita de arquivos no disco dentro do `tmp_path`.
 
@@ -54,12 +54,15 @@ tests/
 ├── test_extracao.py               # E1: leitura, normalização, chunks, metadados, números e gravação
 ├── test_extractor.py              # E2, E3, cliente LLM e cobertura com a Gemini API (marker gemini)
 ├── test_quarentena.py             # quarentena do loop E2/E3 e revisão humana
-├── test_main_graph.py             # manifest, grafo (E0 a E3) e __main__
+├── test_levelspec.py              # LevelSpec da E4: leitura e validação de config/levels/
+├── test_glossario.py              # glossário: validação, casamento de termos, analogia e flexões
+├── test_adaptacao.py              # E4: pré-filtro, complemento, gate, planejador e gravação
+├── test_main_graph.py             # manifest, grafo (E0 a E4) e __main__
 ├── test_app.py                    # dashboard: linhas do terminal e API com processo e consulta simulados
 ├── test_persistencia_supabase.py  # integração com o Supabase local
 └── fixtures/
     ├── http/                      # respostas simuladas por fonte (listagem e página de erro)
-    └── referencia/                # documentos congelados por fonte, o snapshot <fonte>.documento.json e a anotação <fonte>.anotacao.yaml
+    └── referencia/                # documentos congelados por fonte, o snapshot <fonte>.documento.json, a anotação <fonte>.anotacao.yaml e os claims <fonte>.claims.json
 ```
 
 ## E1: leitura
@@ -108,7 +111,8 @@ tests/
 - âncora deslocada ou em página inexistente, `pp` no lugar de `pct`, número de outro trecho, número fora da tabela e id repetido reprovam;
 - literal só de números (célula da tabela do Copom sem o rótulo) reprova, e o mesmo trecho com o rótulo da linha passa;
 - data do texto fora do literal reprova: o ano acrescentado (`19 de outubro de 2026` contra `19/10`) e o dia ou mês trocado; a mesma data escrita de outra forma passa;
-- texto e números precisam dizer o mesmo: número listado que o texto não menciona, número no texto fora da lista (inclusive inventado) e número em formato não previsto reprovam.
+- texto e números precisam dizer o mesmo: número listado que o texto não menciona, número no texto fora da lista (inclusive inventado) e número em formato não previsto reprovam;
+- data listada em `numeros` (o `2T25` do trecho da B3) reprova, e o mesmo claim sem ela passa.
 
 ### Extractor (E2)
 
@@ -139,7 +143,7 @@ tests/
 
 ### Gemini de verdade
 
-`test_gemini_cobre_os_fatos_anotados` (marker `gemini`) roda o `__main__` em modo `--dev` para cada fonte, com a Gemini API de verdade e o repositório em memória, e exige o FactSheet assinado e todos os fatos anotados cobertos. Imprime claims, tokens, custo e rodadas, e os tokens, o custo e a duração de cada chamada (com `-s`). Custa da ordem de R$ 0,15 a R$ 0,60 por documento e leva alguns minutos. Como a resposta do modelo varia, uma falha aqui pede para ler os claims gerados (`data/runs/<run_id>/factsheet.json` no `tmp_path` do teste) antes de mexer no prompt ou na anotação.
+`test_gemini_cobre_os_fatos_anotados` (marker `gemini`) roda o `__main__` em modo `--dev` para cada fonte, com a Gemini API de verdade e o repositório em memória, e exige o FactSheet assinado e todos os fatos anotados cobertos. Imprime claims, tokens, custo e rodadas, e os tokens, o custo e a duração de cada chamada (com `-s`). O run vai até a E4, com o planejador de verdade. Custa da ordem de R$ 0,15 a R$ 0,60 por documento na extração, mais cerca de R$ 0,16 por rodada do plano, e leva alguns minutos. Como a resposta do modelo varia, uma falha aqui pede para ler os claims gerados (`data/runs/<run_id>/factsheet.json` no `tmp_path` do teste) antes de mexer no prompt ou na anotação.
 
 ### No grafo
 
@@ -160,6 +164,47 @@ tests/
 
 `test_persistencia_supabase.py::test_quarentena_e_revisao_humana` faz o mesmo caminho no Supabase local: a quarentena sem duplicar, a leitura do documento e da quarentena, a aceitação com número novo (`origem = humano` em `claims` e `numeros`), a mesma decisão repetida sem efeito, a outra decisão recusada, o trigger que bloqueia o delete e a leitura do dashboard.
 
+## E4: plano editorial
+
+### LevelSpec
+
+`test_levelspec.py` lê os 3 arquivos de `config/levels/` e confere os valores de `docs/fluxos/plano-editorial.md`. Cada regra de validação aborta com o caminho do arquivo: `nivel` diferente do nome do arquivo, tag fora do vocabulário, tag nas duas listas, tag descartável que não é `metodologico`, `max_claims` abaixo de 3 ou não inteiro (`"5"`, `5.0`, `true`), campo desconhecido, campo ausente e arquivo vazio ou ausente.
+
+### Glossário
+
+`test_glossario.py`, com um glossário pequeno montado no teste e com o do repositório:
+
+- o glossário do repositório é válido;
+- valor fora da lista em `categoria`, `nivel_minimo` ou `status`, campo ausente ou desconhecido, `limite` vazio, variante que o YAML leu como booleano, id repetido, forma repetida (sem maiúsculas e sem acentos, na mesma entrada ou em duas) e dígito em definição ou analogia: erro terminal;
+- casamento: maiúsculas e acentos ignorados, posições no texto original, fronteira de palavra, sigla só com a caixa exata (inclusive terminada em sinal, como `EMBI+`), flexão fora de `variantes` não casa, `ambiguo` só pelas formas de mais de uma palavra, a forma mais longa vence, quebra de linha entre as palavras da forma e marcador `{{...}}` fora;
+- filtro por `nivel_minimo` acima de um nível e busca do termo por uma forma;
+- analogia: a primeira aprovada ou, sem aprovada, o primeiro rascunho, com `<id>#<n>` e `revisada`; termo sem analogia devolve nada;
+- `test_flexoes_fora_de_variantes_nos_claims_das_referencias`: roda o casador sobre `<fonte>.claims.json` (claims de um run real de cada documento de referência) e lista, com `-s`, os termos escritos com flexão que não está em `variantes`. Não falha: a lista é para revisão humana do glossário. A heurística troca as 2 últimas letras de cada palavra da forma e pode trazer falso positivo.
+
+### Plano editorial
+
+`test_adaptacao.py`, com claims, LevelSpec e glossário montados no teste:
+
+- pré-filtro: sai só o claim com todas as tags descartáveis; com uma tag descartável e outra não, continua candidato; candidatos nos 3 níveis;
+- complemento: `atribuir_fonte` pelo tipo; descartes do pré-filtro, do planejador e `secundario` para os candidatos restantes; analogia do glossário e `nova`, casada pelo nome sem caixa e sem acento; `nova` fora da lista, de termo com analogia no glossário ou fora dos claims usados fica de fora; lista de termos sem analogia; retirada dos ids inexistentes, que pode esvaziar o núcleo;
+- gate: o plano correto passa, e cada regra reprova: `id_inexistente` (núcleo, claims, descartes, relacionado e tese), `contraditorio` (usado e descartado, descartado pelo pré-filtro e pelo planejador, usado depois do pré-filtro, repetido nos claims), `nucleo_ausente` (fora de um nível e não candidato nos 3), `acima_do_limite`, `jargao_sem_analogia` (só no Iniciante e só para termo acima de iniciante) e `motivo_invalido` (`redundante` sem relacionado ou com relacionado fora dos claims; `exige_base_tecnica` sem termo acima do nível, e sempre no Avançado);
+- schema do planejador: núcleo de 1 a 3, exatamente 3 níveis em ordem, analogia só no Iniciante e motivo `secundario` recusado;
+- planejador, com o `ProviderFalso`: o prompt traz o LevelSpec dos 3 níveis, os claims com onde cada um é candidato e os termos sem analogia, sem a linha de versão e sem a seção de correção; a rodada 1 usa o raciocínio padrão; a correção traz só os problemas e o plano enviado e pede `adapter_correcao`; resposta fora do schema é repetida com o erro, e 3 viram terminal;
+- gravação, com o repositório em memória: rodadas do gate sem duplicar e com a cópia local (lista vazia na rodada que passou), limpeza das rodadas, plano e 9 células em `PENDENTE` com a cópia local, plano recusado sem FactSheet e leitura do plano que regrava a cópia local que falta.
+
+### No grafo
+
+`test_main_graph.py`, com o `ProviderFalso`:
+
+- o run conclui com o plano, as 9 células em `PENDENTE`, as analogias do glossário no Iniciante, o span do `adapter` sem nível e a linha `plano em 1 rodada`;
+- o problema do gate volta ao planejador só com a lista de problemas, e o plano fica pronto na rodada 2;
+- problema que continua depois da 3ª rodada: o plano segue com `aviso`, sem os ids inexistentes, e a linha final diz `(com aviso)`;
+- núcleo vazio depois da retirada: aborta, com as 3 rodadas gravadas e sem plano;
+- LevelSpec ou glossário inválido abortam antes de chamar o planejador; 3 respostas fora do schema abortam o run;
+- retomada: com o plano gravado, o nó o reaproveita sem chamar o modelo e regrava a cópia local; sem plano, apaga as rodadas antigas antes de recomeçar.
+
+`test_app.py::test_e4_entra_no_fluxo_do_dashboard` confere o nó `adapt` e as arestas `validate -> adapt`, `quarentena -> adapt` e `adapt -> END` em `/api/grafo`, `RODADAS_PLANO` em `rodadas_plano`, e a etapa E4 com o nó `adapt` no `app.js`. `test_persistencia_supabase.py::test_plano_editorial_rodadas_e_celulas` faz a gravação no Supabase local.
+
 ## conftest.py
 
 Não contém testes, só infraestrutura compartilhada:
@@ -171,7 +216,8 @@ Não contém testes, só infraestrutura compartilhada:
 - `repositorio` e `run_id`: fixtures com um run `copom_...` já registrado.
 - `referencia(fonte)`: devolve bytes e metadados do documento congelado, ou `None` se ainda não existir.
 - `RepositorioMemoria` também guarda spans (sem somar duas vezes o mesmo), validações e FactSheets, e recusa número de claim que não está em `numeros`, como o Supabase. Guarda ainda a quarentena e as decisões da revisão, com as mesmas regras: uma decisão por claim, e aceitar só com FactSheet assinado.
-- `ProviderFalso` e `cliente_falso`: o LLM simulado.
+- `RepositorioMemoria` guarda também as rodadas do gate, o plano e as células, e recusa o plano sem FactSheet do run.
+- `ProviderFalso` e `cliente_falso`: o LLM simulado. `resposta_plano(*claim_ids)`: resposta do planejador que usa os claims dados nos 3 níveis.
 
 ## test_ingestao.py
 
@@ -269,7 +315,7 @@ Cobre o manifest, o grafo e o `__main__`, com repositório e checkpointer em mem
 
 ### Linhas de etapa no terminal
 
-- `test_run_escreve_inicio_e_fim_de_cada_etapa`: um run `--dev` com uma correção escreve `iniciada` e `concluída` para `referencia`, `leitura` e duas rodadas de `extract` e `validate`, nessa ordem.
+- `test_run_escreve_inicio_e_fim_de_cada_etapa`: um run `--dev` com uma correção escreve `iniciada` e `concluída` para `referencia`, `leitura`, duas rodadas de `extract` e `validate` e `adapt`, nessa ordem.
 - `test_etapa_que_falha_fica_sem_a_linha_de_fim`: com a coleta falhando, só aparece `etapa coleta: iniciada`.
 
 ## test_app.py
@@ -290,6 +336,8 @@ Integração com o Supabase local do CLI (`supabase start`, que roda o Postgres,
 
 - `test_coleta_completa_e_reaproveitamento`: em dois runs seguidos, envia o documento, registra a coleta e confere que o documento é reaproveitado; um envio direto de objeto existente é aceito sem sobrescrever; um run já vinculado tem a transação recusada; e `update` em `documentos` e `delete` em `coletas` são barrados pelo trigger de imutabilidade.
 - `test_documento_processado_grava_paginas_chunks_e_numeros` e `test_span_validacao_e_factsheet`: gravação da E1 e da E3, descritas nas seções da E1 e da E2 e E3.
+- `test_plano_editorial_rodadas_e_celulas`: o plano é recusado sem o FactSheet do run; as rodadas do gate (uma linha por problema, nível nulo para o plano inteiro), a limpeza das rodadas, o plano e as 9 células em `PENDENTE` gravados sem duplicar, e a leitura do plano para a retomada.
+- `test_span_do_adapter_aceita_nivel_nulo`: o span do `adapter` grava sem nível (a chamada única do planejador da E4) e com nível; o span do `extractor` com nível é recusado pelo banco.
 - `test_documento_que_nao_e_o_do_run_e_recusado`: a FK composta de `documentos_processados` recusa a saída da E1 de um documento que não é o vinculado ao run.
 - `test_consulta_le_o_run_completo_do_dashboard`: grava um run `--dev` completo (documento de referência, saída da E1, dois spans, duas rodadas de validação, FactSheet assinado) e confere o que a `ConsultaSupabase` devolve ao dashboard: o resumo com claims e tokens, o documento resumido, o claim com números e âncora, as rodadas em ordem e os spans em ordem de gravação. Roda as consultas contra o schema das migrations: uma coluna renomeada ou removida quebra aqui.
 - `test_consulta_nao_grava`: a conexão da consulta recusa um `delete` (transação só de leitura).

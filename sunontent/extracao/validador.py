@@ -103,6 +103,17 @@ def numeros_do_texto(claim: Claim) -> str | None:
     return None
 
 
+def datas_na_lista(claim: Claim) -> str | None:
+    """Datas não entram em numeros: a E5 troca cada número listado por um marcador, e data fica no texto.
+    None se a lista não tem data; senão, o motivo."""
+    datas = [n.bruto for n in claim.numeros if n.unidade == "data"]
+    if datas:
+        return (
+            f"datas listadas em numeros: {', '.join(datas)}; anos, datas, trimestres e numeração ficam só no texto"
+        )
+    return None
+
+
 def validar(documento: DocumentoProcessado, factsheet: FactSheet) -> dict[str, str]:
     """Motivo de cada claim reprovado, por id. Vazio quando todos passam."""
     reprovados: dict[str, str] = {}
@@ -112,7 +123,7 @@ def validar(documento: DocumentoProcessado, factsheet: FactSheet) -> dict[str, s
             reprovados[claim.id] = "id repetido no FactSheet"
             continue
         vistos.add(claim.id)
-        motivo = validar_claim(documento, claim)
+        motivo = validar_claim(documento, claim) or datas_na_lista(claim)
         if motivo is not None:
             reprovados[claim.id] = motivo
     return reprovados

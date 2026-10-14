@@ -6,7 +6,7 @@ create table llm_spans (
   span_id        uuid primary key,  -- gerado em Python por chamada; repetir o insert do mesmo span não duplica
   run_id         text not null references runs (run_id),
   no             text not null check (no in ('extractor', 'adapter', 'synthesizer', 'judge')),
-  nivel          nivel,             -- nulo só no extractor (E2)
+  nivel          nivel,             -- nulo no extractor (E2) e no adapter (E4), que planeja os 3 níveis numa chamada
   celula_id      text,              -- nulo antes do fan-out (E2, E4)
   tentativa      int check (tentativa >= 1),  -- Peca.tentativa; o retry de parse não muda este número
   modelo         text not null,
@@ -18,7 +18,8 @@ create table llm_spans (
   falha_mensagem text,
   criado_em      timestamptz not null default now(),
   foreign key (run_id, celula_id) references celulas (run_id, celula_id),
-  check ((no = 'extractor') = (nivel is null)),
+  check (no <> 'extractor' or nivel is null),
+  check (no in ('extractor', 'adapter') or nivel is not null),
   check ((no in ('synthesizer', 'judge')) = (celula_id is not null)),
   check ((celula_id is null) = (tentativa is null)),
   check (celula_id is null or split_part(celula_id, '__', 1) = nivel::text),
@@ -41,6 +42,6 @@ create table corpus_rotulado (
   criado_em      timestamptz not null default now()
 );
 
--- PENDENTE: base de conceitos financeiros (definições para os agentes) em discussão;
--- não decidido se fica em YAML no git ou em tabela aqui.
+-- PENDENTE: base vetorial de conceitos financeiros, complementar ao glossário, em avaliação
+-- (pendentes/pendencias-futuras.md); sem tabela até ser decidida.
 -- LevelSpec, glossário, models.yaml e prompts ficam no git; o banco guarda só as versões no run.

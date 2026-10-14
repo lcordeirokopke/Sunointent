@@ -78,7 +78,7 @@ Cada claim passa ou reprova, sem nota:
 2. O texto limpo no intervalo é exatamente o `literal_fonte`, e ele tem ao menos uma palavra além de números, escala e unidade (`milhões`, `bps`). Literal só de números (`'4,1'`, uma célula de tabela sem o rótulo da linha) não diz a que o número se refere e é recusado, pedindo o rótulo junto.
 3. Cada `Numero` do claim é uma entrada da `tabela_numeros`, com o mesmo valor, unidade, bruto e posição. Unidade trocada (`pp` no lugar de `pct`) é recusada com o valor e a unidade da tabela.
 4. Cada número está dentro do `literal_fonte`.
-5. O texto do claim e a lista de números dizem o mesmo: o texto é lido pelo mesmo parser da E1 (`numeros.varrer`), e cada número listado precisa aparecer no texto com o mesmo valor e unidade; cada número do texto, exceto datas, precisa estar na lista. Isso recusa claim que carrega números de outro fato e número no texto que não veio do documento.
+5. O texto do claim e a lista de números dizem o mesmo: o texto é lido pelo mesmo parser da E1 (`numeros.varrer`), e cada número listado precisa aparecer no texto com o mesmo valor e unidade; cada número do texto, exceto datas, precisa estar na lista. Isso recusa claim que carrega números de outro fato e número no texto que não veio do documento. Data listada em `numeros` também reprova: a E5 troca cada número listado por um marcador, e a data fica só no texto. Essa recusa vale no loop da E3, e não na aceitação da quarentena.
 6. Cada data com dia do texto do claim (`19/10`, `19 de outubro`, `15 e 16 de setembro de 2026`, lidas por `numeros.datas`) está no `literal_fonte`, com o mesmo dia e mês; se o texto traz o ano, o literal traz o mesmo ano. `19 de outubro de 2026` contra o literal `19/10` reprova, porque o ano foi deduzido. Mês e ano sem dia (`junho de 2026`, `dez/25`) e trimestre (`2T26`) não entram na regra.
 7. Id repetido é recusado.
 
@@ -87,10 +87,10 @@ Os claims que a E2 não ancorou também reprovam, com o motivo da E2.
 ## Loop E2/E3
 
 ```
-E1 -> E2 (rodada 1: extração) -> E3 --todos aprovados--> FactSheet assinado (fim do grafo, por enquanto)
+E1 -> E2 (rodada 1: extração) -> E3 --todos aprovados--> FactSheet assinado -> E4
                                     --reprovados, rodada < 3--> E2 (correção só dos reprovados) -> E3
                                     --reprovados, rodada = 3--> quarentena: FactSheet assinado com os válidos
-                                                                e reprovados em quarentena (fim do grafo)
+                                                                e reprovados em quarentena -> E4
 ```
 
 - Na correção, o prompt traz as mesmas regras, só os blocos do documento em volta dos claims reprovados e, para cada claim reprovado, o claim enviado e o motivo. Os blocos são, para cada claim, o chunk citado, o chunk onde o trecho foi encontrado (quando ele ancora fora do citado) e um vizinho de cada lado (`VIZINHOS` em `extractor.py`); se o claim cita um chunk que não existe, o prompt traz o documento inteiro. A chamada usa o nível de raciocínio `extractor_correcao` de `config/models.yaml`. O modelo devolve só esses claims, com o mesmo id. Id fora da lista é ignorado; claim reprovado que o modelo não devolver continua como estava e reprova de novo.
@@ -102,7 +102,7 @@ E1 -> E2 (rodada 1: extração) -> E3 --todos aprovados--> FactSheet assinado (f
 Claim reprovado depois da última rodada não derruba o run nem é perdido. O nó `quarentena`:
 
 1. Grava cada reprovado em `claims_quarentena`: o claim como o extractor o propôs (`ClaimProposto`), o motivo da última recusa e a rodada.
-2. Assina o FactSheet só com os claims válidos e o grava como na E3. O run conclui, e a linha final do terminal diz quantos claims ficaram em quarentena.
+2. Assina o FactSheet só com os claims válidos e o grava como na E3. O grafo segue para a E4, e a linha final do terminal diz quantos claims ficaram em quarentena.
 3. Se nenhum claim for válido, grava a quarentena e aborta o run com erro terminal: um FactSheet vazio não serve para a E4.
 
 O caso típico é um número que o modelo cita e a E1 não leu: a ancoragem recusa o claim porque o número não está na `tabela_numeros`, e o modelo insiste.

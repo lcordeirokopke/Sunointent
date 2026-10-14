@@ -1,0 +1,687 @@
+{
+  "run_id": "copom_20261013T193034Z_76992b",
+  "doc_sha256": "f03423dc25625aa14ae29c10fdacf7b4665b6714ab0667c0dc86a6f77c43665c",
+  "doc_id": "copom_ata_281",
+  "tipo_documento": "copom_ata",
+  "emissor": "Comitê de Política Monetária (Copom) do Banco Central do Brasil",
+  "data_documento": "2026-09-16",
+  "claims": [
+    {
+      "id": "C01",
+      "texto": "O Copom avalia que o ambiente externo permanece incerto devido a conflitos armados no Oriente Médio e à incerteza sobre a política monetária em economias avançadas, exigindo cautela de países emergentes.",
+      "numeros": [],
+      "tipo": "condicionante",
+      "tags": [
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 65,
+        "offset_fim": 387
+      },
+      "literal_fonte": "O ambiente externo permanece incerto em função da indefinição acerca dos\nconflitos armados no Oriente Médio e da incerteza sobre a política monetária em\nalgumas economias avançadas. Tal cenário exige cautela por parte de países\nemergentes em ambiente marcado por elevação da volatilidade de preços de ativos\ne commodities."
+    },
+    {
+      "id": "C02",
+      "texto": "O conjunto dos indicadores divulgados desde a reunião anterior do Copom mostra moderação gradual da atividade econômica doméstica, principalmente em setores mais cíclicos, com patamar resiliente e mercado de trabalho aquecido.",
+      "numeros": [],
+      "tipo": "resultado",
+      "tags": [
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 391,
+        "offset_fim": 645
+      },
+      "literal_fonte": "Em relação ao cenário doméstico, o conjunto dos indicadores divulgados desde a\núltima reunião mostra uma moderação gradual da atividade econômica, principalmente\nem setores mais cíclicos, embora ainda em patamar resiliente e mercado de trabalho\naquecido."
+    },
+    {
+      "id": "C03",
+      "texto": "A inflação cheia e a média de medidas subjacentes desaceleraram nas divulgações mais recentes, situando-se abaixo do limite superior do intervalo de tolerância, porém ainda acima da meta.",
+      "numeros": [],
+      "tipo": "resultado",
+      "tags": [
+        "contexto_macro",
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 646,
+        "offset_fim": 834
+      },
+      "literal_fonte": "Nas divulgações mais recentes, a inflação cheia e a média de medidas\nsubjacentes desaceleraram, situando-se abaixo do limite superior do intervalo de\ntolerância, porém ainda acima da meta."
+    },
+    {
+      "id": "C04",
+      "texto": "As expectativas de inflação para 2026 apuradas pela pesquisa Focus situam-se em 4,9%, permanecendo acima da meta.",
+      "numeros": [
+        {
+          "valor": "4.9",
+          "unidade": "pct",
+          "bruto": "4,9%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 964,
+            "offset_fim": 968
+          }
+        }
+      ],
+      "tipo": "projecao",
+      "tags": [
+        "indicador_chave",
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 838,
+        "offset_fim": 993
+      },
+      "literal_fonte": "As expectativas de inflação para 2026 e 2027 apuradas pela pesquisa Focus\npermanecem em valores acima da meta, situando-se em 4,9% e 4,3%, respectivamente."
+    },
+    {
+      "id": "C05",
+      "texto": "As expectativas de inflação para 2027 apuradas pela pesquisa Focus situam-se em 4,3%, permanecendo acima da meta.",
+      "numeros": [
+        {
+          "valor": "4.3",
+          "unidade": "pct",
+          "bruto": "4,3%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 971,
+            "offset_fim": 975
+          }
+        }
+      ],
+      "tipo": "projecao",
+      "tags": [
+        "indicador_chave",
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 838,
+        "offset_fim": 993
+      },
+      "literal_fonte": "As expectativas de inflação para 2026 e 2027 apuradas pela pesquisa Focus\npermanecem em valores acima da meta, situando-se em 4,9% e 4,3%, respectivamente."
+    },
+    {
+      "id": "C06",
+      "texto": "A leitura do PIB do segundo trimestre de 2026 confirmou a desaceleração da atividade econômica doméstica, com intensidade maior nas atividades e componentes da demanda mais sensíveis ao ciclo econômico.",
+      "numeros": [],
+      "tipo": "resultado",
+      "tags": [
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 1606,
+        "offset_fim": 1867
+      },
+      "literal_fonte": "A leitura mais recente do PIB, referente ao segundo trimestre\nde 2026, confirmou a desaceleração apontada por outros indicadores e revelou que o\nmovimento foi mais intenso nas atividades econômicas e nos componentes da demanda\nmais sensíveis ao ciclo econômico."
+    },
+    {
+      "id": "C07",
+      "texto": "O Copom relembra que o arrefecimento da demanda agregada é um elemento essencial do processo de reequilíbrio entre oferta e demanda da economia e convergência da inflação à meta.",
+      "numeros": [],
+      "tipo": "condicionante",
+      "tags": [
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 1868,
+        "offset_fim": 2047
+      },
+      "literal_fonte": "O Comitê relembra que o arrefecimento da demanda\nagregada é um elemento essencial do processo de reequilíbrio entre oferta e demanda\nda economia e convergência da inflação à meta."
+    },
+    {
+      "id": "C08",
+      "texto": "O crédito bancário com recursos livres apresentou redução nas modalidades de mais longo prazo e desaceleração na margem nas modalidades de curto prazo ou emergenciais.",
+      "numeros": [],
+      "tipo": "resultado",
+      "tags": [
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 2226,
+        "offset_fim": 2460
+      },
+      "literal_fonte": "Nota-se, em particular, redução nas modalidades de mais longo\nprazo, mais sensíveis à política monetária que as modalidades de curto prazo ou\nemergenciais, mais onerosas. Estas continuaram crescendo, porém com desaceleração\nna margem."
+    },
+    {
+      "id": "C09",
+      "texto": "Os créditos com recursos direcionados mantiveram trajetória de expansão para pessoas físicas no crédito imobiliário e para empresas em operações com fundos garantidores.",
+      "numeros": [],
+      "tipo": "resultado",
+      "tags": [
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 2461,
+        "offset_fim": 2673
+      },
+      "literal_fonte": "Por outro lado, os créditos com recursos direcionados mantiveram\ntrajetória de expansão para pessoas físicas, na linha do crédito imobiliário, e para\nempresas, sustentados pelas operações com fundos garantidores."
+    },
+    {
+      "id": "C10",
+      "texto": "A taxa de desemprego mantém-se em patamares historicamente baixos, enquanto o crescimento da taxa de ocupação vem apresentando desaceleração.",
+      "numeros": [],
+      "tipo": "resultado",
+      "tags": [
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 2740,
+        "offset_fim": 2881
+      },
+      "literal_fonte": "A taxa de\ndesemprego mantém-se em patamares historicamente baixos, enquanto o crescimento\nda taxa de ocupação vem apresentando desaceleração."
+    },
+    {
+      "id": "C11",
+      "texto": "Os rendimentos médios desaceleraram na margem em termos nominais, mas ainda crescem em termos reais a uma taxa superior à da produtividade do trabalho.",
+      "numeros": [],
+      "tipo": "resultado",
+      "tags": [
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 2882,
+        "offset_fim": 3040
+      },
+      "literal_fonte": "Os rendimentos médios\ndesaceleraram na margem, mesmo em termos nominais, mas ainda crescem em termos\nreais a uma taxa superior à da produtividade do trabalho."
+    },
+    {
+      "id": "C12",
+      "texto": "O Copom reafirma que o esmorecimento no esforço de reformas estruturais e disciplina fiscal, o aumento de crédito direcionado e incertezas sobre a estabilização da dívida pública têm o potencial de elevar a taxa de juros neutra da economia.",
+      "numeros": [],
+      "tipo": "condicionante",
+      "tags": [
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 4,
+        "offset_inicio": 158,
+        "offset_fim": 550
+      },
+      "literal_fonte": "O Comitê\nreafirma a visão de que o esmorecimento no esforço de reformas estruturais e disciplina\nfiscal, o aumento de crédito direcionado e as incertezas sobre a estabilização da dívida\npública têm o potencial de elevar a taxa de juros neutra da economia, com impactos\ndeletérios sobre a potência da política monetária e, consequentemente, sobre o custo\nde desinflação em termos de atividade."
+    },
+    {
+      "id": "C13",
+      "texto": "Segundo o Copom, as variações de preços aos produtores aceleraram nas divulgações mais recentes sob a perspectiva das variações acumuladas em 12 meses, tanto em bens intermediários quanto em bens de consumo.",
+      "numeros": [
+        {
+          "valor": "12",
+          "unidade": "contagem",
+          "bruto": "12",
+          "ancora": {
+            "pagina": 4,
+            "offset_inicio": 1103,
+            "offset_fim": 1105
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 4,
+        "offset_inicio": 1045,
+        "offset_fim": 1248
+      },
+      "literal_fonte": "Ainda sob a mesma perspectiva das variações acumuladas\nem 12 meses, nas divulgações mais recentes as variações de preços aos produtores\naceleraram, tanto em bens intermediários quanto em bens de consumo."
+    },
+    {
+      "id": "C14",
+      "texto": "O Copom concluiu que, em um ambiente de expectativas desancoradas como o atual, exige-se uma restrição monetária maior e por mais tempo do que outrora seria apropriado.",
+      "numeros": [],
+      "tipo": "condicionante",
+      "tags": [
+        "contexto_macro",
+        "impacto_pratico"
+      ],
+      "ancora": {
+        "pagina": 4,
+        "offset_inicio": 1933,
+        "offset_fim": 2182
+      },
+      "literal_fonte": "A principal conclusão obtida, e compartilhada por todos os\nmembros do Comitê, foi a de que, em um ambiente de expectativas desancoradas,\ncomo é o caso do atual, exige-se uma restrição monetária maior e por mais tempo do\nque outrora seria apropriado."
+    },
+    {
+      "id": "C15",
+      "texto": "No cenário de referência do Copom, a taxa de câmbio parte de R$5,15/US$, evoluindo segundo a paridade do poder de compra.",
+      "numeros": [
+        {
+          "valor": "5.15",
+          "unidade": "BRL",
+          "bruto": "R$5,15/US$",
+          "ancora": {
+            "pagina": 4,
+            "offset_inicio": 2351,
+            "offset_fim": 2361
+          }
+        }
+      ],
+      "tipo": "condicionante",
+      "tags": [
+        "metodologico"
+      ],
+      "ancora": {
+        "pagina": 4,
+        "offset_inicio": 2234,
+        "offset_fim": 2418
+      },
+      "literal_fonte": "No cenário de referência, a\ntrajetória para a taxa de juros é extraída da pesquisa Focus e a taxa de câmbio parte de\nR$5,15/US$2, evoluindo segundo a paridade do poder de compra (PPC)."
+    },
+    {
+      "id": "C16",
+      "texto": "No cenário de referência do Copom, o preço do petróleo segue a curva futura pelos próximos seis meses e passa a aumentar 2% ao ano posteriormente.",
+      "numeros": [
+        {
+          "valor": "2",
+          "unidade": "pct",
+          "bruto": "2%",
+          "ancora": {
+            "pagina": 4,
+            "offset_inicio": 2521,
+            "offset_fim": 2523
+          }
+        }
+      ],
+      "tipo": "condicionante",
+      "tags": [
+        "metodologico"
+      ],
+      "ancora": {
+        "pagina": 4,
+        "offset_inicio": 2419,
+        "offset_fim": 2573
+      },
+      "literal_fonte": "O preço do\npetróleo segue aproximadamente a curva futura pelos próximos seis meses e passa a\naumentar 2% ao ano posteriormente, conforme governança usual."
+    },
+    {
+      "id": "C17",
+      "texto": "O Copom adota a hipótese de bandeira tarifária amarela para as tarifas de energia elétrica em dezembro de 2026 no cenário de referência.",
+      "numeros": [],
+      "tipo": "condicionante",
+      "tags": [
+        "metodologico"
+      ],
+      "ancora": {
+        "pagina": 4,
+        "offset_inicio": 2707,
+        "offset_fim": 2824
+      },
+      "literal_fonte": "Além disso, adota-se a hipótese de bandeira tarifária\n“amarela” para tarifas de energia elétrica em dezembro de 2026."
+    },
+    {
+      "id": "C18",
+      "texto": "No cenário de referência do Copom, a projeção para a inflação acumulada em quatro trimestres para 2026 é de 5,2%.",
+      "numeros": [
+        {
+          "valor": "5.2",
+          "unidade": "pct",
+          "bruto": "5,2%",
+          "ancora": {
+            "pagina": 4,
+            "offset_inicio": 3177,
+            "offset_fim": 3181
+          }
+        }
+      ],
+      "tipo": "projecao",
+      "tags": [
+        "indicador_chave",
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 4,
+        "offset_inicio": 2966,
+        "offset_fim": 3196
+      },
+      "literal_fonte": "No cenário de referência, as projeções para a inflação acumulada em quatro\ntrimestres para 2026, 2027, e para o primeiro trimestre de 2028, atual horizonte\nrelevante de política monetária, são, respectivamente, 5,2%, 3,9%, e 3,2%."
+    },
+    {
+      "id": "C19",
+      "texto": "No cenário de referência do Copom, a projeção para a inflação acumulada em quatro trimestres para 2027 é de 3,9%.",
+      "numeros": [
+        {
+          "valor": "3.9",
+          "unidade": "pct",
+          "bruto": "3,9%",
+          "ancora": {
+            "pagina": 4,
+            "offset_inicio": 3183,
+            "offset_fim": 3187
+          }
+        }
+      ],
+      "tipo": "projecao",
+      "tags": [
+        "indicador_chave",
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 4,
+        "offset_inicio": 2966,
+        "offset_fim": 3196
+      },
+      "literal_fonte": "No cenário de referência, as projeções para a inflação acumulada em quatro\ntrimestres para 2026, 2027, e para o primeiro trimestre de 2028, atual horizonte\nrelevante de política monetária, são, respectivamente, 5,2%, 3,9%, e 3,2%."
+    },
+    {
+      "id": "C20",
+      "texto": "No cenário de referência do Copom, a projeção para a inflação acumulada em quatro trimestres para o primeiro trimestre de 2028, atual horizonte relevante de política monetária, é de 3,2%.",
+      "numeros": [
+        {
+          "valor": "3.2",
+          "unidade": "pct",
+          "bruto": "3,2%",
+          "ancora": {
+            "pagina": 4,
+            "offset_inicio": 3191,
+            "offset_fim": 3195
+          }
+        }
+      ],
+      "tipo": "projecao",
+      "tags": [
+        "indicador_chave",
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 4,
+        "offset_inicio": 2966,
+        "offset_fim": 3196
+      },
+      "literal_fonte": "No cenário de referência, as projeções para a inflação acumulada em quatro\ntrimestres para 2026, 2027, e para o primeiro trimestre de 2028, atual horizonte\nrelevante de política monetária, são, respectivamente, 5,2%, 3,9%, e 3,2%."
+    },
+    {
+      "id": "C21",
+      "texto": "O Copom avalia que os riscos para a inflação permanecem mais elevados que o usual, com assimetria altista.",
+      "numeros": [],
+      "tipo": "risco",
+      "tags": [
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 4,
+        "offset_inicio": 3201,
+        "offset_fim": 3320
+      },
+      "literal_fonte": "Os riscos para a inflação, tanto de alta quanto de baixa, permanecem mais elevados\nque o usual, com assimetria altista."
+    },
+    {
+      "id": "C22",
+      "texto": "Segundo o Copom, os riscos para a inflação permanecem mais elevados que o usual, com assimetria altista.",
+      "numeros": [],
+      "tipo": "risco",
+      "tags": [
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 4,
+        "offset_inicio": 3201,
+        "offset_fim": 3320
+      },
+      "literal_fonte": "Os riscos para a inflação, tanto de alta quanto de baixa, permanecem mais elevados\nque o usual, com assimetria altista."
+    },
+    {
+      "id": "C23",
+      "texto": "Os riscos de baixa para a inflação ressaltados pelo Copom incluem desaceleração da atividade econômica doméstica mais acentuada que o projetado, desaceleração global mais pronunciada por choques de comércio e petróleo e redução nos preços das commodities.",
+      "numeros": [],
+      "tipo": "risco",
+      "tags": [
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 5,
+        "offset_inicio": 156,
+        "offset_fim": 548
+      },
+      "literal_fonte": "Entre os\nriscos de baixa, ressaltam-se (i) uma eventual desaceleração da atividade econômica\ndoméstica mais acentuada do que a projetada, tendo impactos sobre o cenário de\ninflação; (ii) uma desaceleração global mais pronunciada decorrente dos choques de\ncomércio e do petróleo, e de um cenário de maior incerteza; e (iii) uma redução nos\npreços\ndas\ncommodities\ncom\nefeitos\ndesinflacionários."
+    },
+    {
+      "id": "C24",
+      "texto": "O Copom avalia que a inflação permanece pressionada pela demanda, exigindo que a política monetária mantenha caráter restritivo.",
+      "numeros": [],
+      "tipo": "condicionante",
+      "tags": [
+        "contexto_macro",
+        "impacto_pratico"
+      ],
+      "ancora": {
+        "pagina": 5,
+        "offset_inicio": 929,
+        "offset_fim": 1140
+      },
+      "literal_fonte": "Embora a\npolítica monetária esteja contribuindo de forma determinante para o processo de\ndesinflação, a inflação permanece pressionada pela demanda, exigindo que a política\nmonetária mantenha caráter restritivo."
+    },
+    {
+      "id": "C25",
+      "texto": "O Copom avalia que não deve reagir aos efeitos primários de choques de oferta, mas que é necessário monitorar e reagir com firmeza caso efeitos de segunda ordem se materializem.",
+      "numeros": [],
+      "tipo": "condicionante",
+      "tags": [
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 5,
+        "offset_inicio": 1283,
+        "offset_fim": 1506
+      },
+      "literal_fonte": "O Copom avalia que que\nnão deve reagir aos efeitos primários de choques dessa natureza, mas que é necessário\nmonitorar com atenção eventuais efeitos de segunda ordem, e reagir com firmeza caso\nesses efeitos se materializem."
+    },
+    {
+      "id": "C26",
+      "texto": "O Copom reitera que a magnitude do ciclo de calibração será ajustada à luz da evolução do cenário, de forma a manter a restrição adequada para assegurar a convergência da inflação à meta.",
+      "numeros": [],
+      "tipo": "condicionante",
+      "tags": [
+        "contexto_macro",
+        "impacto_pratico"
+      ],
+      "ancora": {
+        "pagina": 5,
+        "offset_inicio": 1511,
+        "offset_fim": 1824
+      },
+      "literal_fonte": "No contexto atual de incerteza em níveis historicamente elevados, com riscos\nassimétricos na direção altista para os preços, o Comitê reitera que a magnitude do ciclo\nde calibração será ajustada à luz da evolução do cenário, de forma a manter a restrição\nadequada para assegurar a convergência da inflação à meta."
+    },
+    {
+      "id": "C27",
+      "texto": "O Copom decidiu reduzir a taxa básica de juros para 13,75% a.a.",
+      "numeros": [
+        {
+          "valor": "13.75",
+          "unidade": "pct",
+          "bruto": "13,75%",
+          "ancora": {
+            "pagina": 5,
+            "offset_inicio": 1914,
+            "offset_fim": 1920
+          }
+        }
+      ],
+      "tipo": "decisao",
+      "tags": [
+        "impacto_pratico",
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 5,
+        "offset_inicio": 1862,
+        "offset_fim": 2065
+      },
+      "literal_fonte": "O Copom decidiu reduzir a taxa básica de juros para 13,75% a.a., e entende que essa\ndecisão é compatível com a estratégia de convergência da inflação para o redor da meta\nao longo do horizonte relevante."
+    },
+    {
+      "id": "C28",
+      "texto": "No cenário de referência do Copom, a projeção de inflação para os preços livres em 2026 é de 5,2%.",
+      "numeros": [
+        {
+          "valor": "5.2",
+          "unidade": "pct",
+          "bruto": "5,2",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 176,
+            "offset_fim": 179
+          }
+        }
+      ],
+      "tipo": "projecao",
+      "tags": [
+        "indicador_chave",
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 6,
+        "offset_inicio": 164,
+        "offset_fim": 187
+      },
+      "literal_fonte": "IPCA livres\n5,2\n4,1\n3,2"
+    },
+    {
+      "id": "C29",
+      "texto": "No cenário de referência do Copom, a projeção de inflação para os preços livres em 2027 é de 4,1%.",
+      "numeros": [
+        {
+          "valor": "4.1",
+          "unidade": "pct",
+          "bruto": "4,1",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 180,
+            "offset_fim": 183
+          }
+        }
+      ],
+      "tipo": "projecao",
+      "tags": [
+        "indicador_chave",
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 6,
+        "offset_inicio": 164,
+        "offset_fim": 187
+      },
+      "literal_fonte": "IPCA livres\n5,2\n4,1\n3,2"
+    },
+    {
+      "id": "C30",
+      "texto": "No cenário de referência do Copom, a projeção de inflação para os preços livres no primeiro trimestre de 2028 é de 3,2%.",
+      "numeros": [
+        {
+          "valor": "3.2",
+          "unidade": "pct",
+          "bruto": "3,2",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 184,
+            "offset_fim": 187
+          }
+        }
+      ],
+      "tipo": "projecao",
+      "tags": [
+        "indicador_chave",
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 6,
+        "offset_inicio": 164,
+        "offset_fim": 187
+      },
+      "literal_fonte": "IPCA livres\n5,2\n4,1\n3,2"
+    },
+    {
+      "id": "C31",
+      "texto": "No cenário de referência do Copom, a projeção de inflação para os preços administrados em 2026 é de 5,3%.",
+      "numeros": [
+        {
+          "valor": "5.3",
+          "unidade": "pct",
+          "bruto": "5,3",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 207,
+            "offset_fim": 210
+          }
+        }
+      ],
+      "tipo": "projecao",
+      "tags": [
+        "indicador_chave",
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 6,
+        "offset_inicio": 188,
+        "offset_fim": 218
+      },
+      "literal_fonte": "IPCA administrados\n5,3\n3,5\n3,2"
+    },
+    {
+      "id": "C32",
+      "texto": "No cenário de referência do Copom, a projeção de inflação para os preços administrados em 2027 é de 3,5%.",
+      "numeros": [
+        {
+          "valor": "3.5",
+          "unidade": "pct",
+          "bruto": "3,5",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 211,
+            "offset_fim": 214
+          }
+        }
+      ],
+      "tipo": "projecao",
+      "tags": [
+        "indicador_chave",
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 6,
+        "offset_inicio": 188,
+        "offset_fim": 218
+      },
+      "literal_fonte": "IPCA administrados\n5,3\n3,5\n3,2"
+    },
+    {
+      "id": "C33",
+      "texto": "No cenário de referência do Copom, a projeção de inflação para os preços administrados no primeiro trimestre de 2028 é de 3,2%.",
+      "numeros": [
+        {
+          "valor": "3.2",
+          "unidade": "pct",
+          "bruto": "3,2",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 215,
+            "offset_fim": 218
+          }
+        }
+      ],
+      "tipo": "projecao",
+      "tags": [
+        "indicador_chave",
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 6,
+        "offset_inicio": 188,
+        "offset_fim": 218
+      },
+      "literal_fonte": "IPCA administrados\n5,3\n3,5\n3,2"
+    }
+  ],
+  "assinado": true
+}

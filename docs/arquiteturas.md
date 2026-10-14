@@ -78,7 +78,7 @@ class Claim(BaseModel):
 
 `tipo` e `tags` não são decorativos: a E4 usa `tags` no pré-filtro e como orientação ao planejador (o nível Iniciante descarta o que é só `metodologico`), e o avaliador usa `tipo` para exigir atribuição explícita em `projecao` (uma projeção do Copom não pode virar afirmação do artigo). As tags vêm de um vocabulário fixo, definido em `docs/fluxos/extracao.md`.
 
-`texto` e `numeros` dizem o mesmo: todo número listado aparece no texto, e todo número do texto, exceto datas, está listado. Cada `Numero` do claim é uma entrada da `tabela_numeros`, na mesma posição, dentro do `literal_fonte`.
+`texto` e `numeros` dizem o mesmo: todo número listado aparece no texto, e todo número do texto, exceto datas, está listado. Datas não entram em `numeros`, e a E3 recusa o claim que as liste. Cada `Numero` do claim é uma entrada da `tabela_numeros`, na mesma posição, dentro do `literal_fonte`.
 
 ## DocumentoProcessado
 
@@ -159,12 +159,15 @@ class PlanoNivel(BaseModel):
 class PlanoEditorial(BaseModel):
     nucleo: list[str]              # 1 a 3 claim_ids: sobre o que é o documento; presentes nos 3 níveis
     niveis: list[PlanoNivel]       # exatamente 3, um por nível
+    rodadas: int                   # 1 a 3: a rodada do gate em que o plano ficou pronto (1 é o plano)
     aviso: str | None              # o que o gate ainda acusava depois da última correção
 ```
 
-O plano não tem prosa que vá para a peça: ele registra decisões (o que entra, em que ordem, com que papel, o que sai e por quê, e quais analogias usar). Quem escreve o texto é a E5, direto dos claims. Assim cada fato passa por uma única redação entre o claim e a peça.
+`rodadas` é o valor final de `rodada_plano` do estado do grafo. A rodada que passa no gate não grava linha em `validacoes_plano`, então é este campo que diz quantas rodadas houve.
 
-`descartes` com motivo existe para auditoria: no nível Iniciante, saber **o que foi cortado e por quê** é a diferença entre adaptação e trivialização. É o campo que o revisor humano olha para julgar se a simplificação perdeu algo que importava. O motivo é um código de lista fixa, e não texto livre, para que parte dos motivos seja conferida por código (ver E4.3). Cada descarte tem uma de três origens: `prefiltro` (motivo `metodologico`, pela regra das tags), `planejador` (só os motivos específicos: `redundante`, `exige_base_tecnica` e `fora_do_foco`) e `padrao` (motivo `secundario`, dado pelo código a todo candidato que o planejador não usou nem descartou com motivo específico). Assim o modelo não escreve um motivo para cada candidato não usado, que num release da B3 passaria de duzentos.
+O plano não tem texto de peça, exceto a explicação das analogias `nova`: ele registra decisões (o que entra, em que ordem, com que papel, o que sai e por quê, e quais analogias usar). Quem escreve o texto é a E5, direto dos claims. Assim cada fato passa por uma única redação entre o claim e a peça. A única redação da E4 que chega à peça é a `explicacao` de uma analogia `nova`, que o planejador escreve e o redator usa com o mesmo sentido, só encurtando para caber no orçamento do formato.
+
+`descartes` com motivo existe para auditoria: no nível Iniciante, saber **o que foi cortado e por quê** é a diferença entre adaptação e trivialização. É o campo que o revisor humano olha para julgar se a simplificação perdeu algo que importava. O motivo é um código de lista fixa, e não texto livre, para que parte dos motivos seja conferida por código (ver E4.3). Cada descarte tem uma de três origens: `prefiltro` (motivo `metodologico`, pela regra das tags), `planejador` (só os motivos específicos: `redundante`, `exige_base_tecnica` e `fora_do_foco`) e `padrao` (motivo `secundario`, dado pelo código a todo candidato que o planejador não usou nem descartou com motivo específico). Assim o modelo não escreve um motivo para cada candidato não usado, que num release da B3 passaria de duzentos. A saída do planejador tem schema próprio, separado do `PlanoEditorial`, em que o motivo do descarte só aceita os três motivos específicos e não há `origem`: o `llm.py` recusa `metodologico` ou `secundario` na decodificação, e o código preenche a `origem`.
 
 `atribuir_fonte` não é decisão do modelo: o código o preenche com `true` quando o tipo do claim é `projecao`, `condicionante` ou `risco`, os tipos cujo texto a E2 já escreve com atribuição ("Segundo o Copom, ...").
 
@@ -313,7 +316,7 @@ flowchart TD
     PRE --> PLA["E4.2 Planejador dos 3 niveis (LLM, 1 chamada)"]
     PLA --> GAT["E4.3 Complemento e gate do plano (deterministico)"]
     GAT -->|"problema e rodada menor que 3: devolve so os problemas"| PLA
-    GAT -->|"plano ok, ou ultima rodada com aviso"| PE[("PlanoEditorial: nucleo + 1 plano por nivel, sem prosa")]
+    GAT -->|"plano ok, ou ultima rodada com aviso"| PE[("PlanoEditorial: nucleo + 1 plano por nivel, sem texto de peca")]
 
     PE --> FAN{{"Fan-out 3 para 9: cada nivel se abre em 3 formatos"}}
     FAN --> SY["E5. Format Synthesizer: pacote (codigo), redator (LLM), montagem (codigo); 9 instancias isoladas"]
@@ -426,6 +429,8 @@ O modelo nunca escreve página, offset nem valor: o que ele cita e não existe n
 
 ## E4. Plano editorial (pré-filtro, planejador e gate)
 
+Valores do LevelSpec, modelo, leitor do glossário, gravação e fim do grafo em `docs/fluxos/plano-editorial.md`.
+
 **Representa:** a adaptação conceitual, separada da adaptação de forma. Aqui se decide **o que dizer, em que ordem e com que profundidade** para cada nível; ainda não se decide se é artigo, carrossel ou vídeo, e nenhum texto da peça é escrito.
 
 Essa separação é o que evita a trivialização por encurtamento: se adaptar o nível e formatar fossem o mesmo nó, "versão iniciante do carrossel" tenderia a virar "o mesmo carrossel com menos palavras". Aqui o Iniciante e o Avançado partem do mesmo FactSheet e **fazem escolhas de conteúdo diferentes**, não só de vocabulário.
@@ -441,18 +446,20 @@ Para cada nível, cada claim vira **candidato** ou **descartado por regra**:
 - descartado por regra quando **todas** as tags do claim estão em `tags_descartaveis` do nível, com o motivo `metodologico` e `origem="prefiltro"`. Um claim com uma tag descartável e outra não descartável continua candidato;
 - candidato nos demais casos.
 
+`tags_descartaveis` só aceita a tag `metodologico`, a única que corresponde a um motivo de descarte; o `levelspec.py` recusa qualquer outra tag nesse campo.
+
 O pré-filtro só remove o óbvio. A prioridade entre os candidatos não é decidida por tag, porque as tags atribuídas pela E2 diferenciam pouco os claims (num release da B3, a maioria sai como `indicador_chave`; numa ata do Copom, a maioria sai como `contexto_macro`).
 
 ### E4.2 Planejador dos 3 níveis (LLM, 1 chamada)
 
-**Recebe:** os claims (id, texto, tipo e tags), os candidatos e os descartes do pré-filtro por nível, o LevelSpec dos 3 níveis renderizado em instruções concretas (`foco`, `tags_priorizadas`, `max_claims`) e a lista dos termos do glossário com `nivel_minimo` acima de iniciante encontrados no texto dos candidatos do Iniciante que não têm nenhuma analogia no glossário.
+**Recebe:** os claims (id, texto, tipo e tags), os candidatos e os descartes do pré-filtro por nível, com a marca dos claims candidatos nos 3 níveis, o LevelSpec dos 3 níveis renderizado em instruções concretas (`foco`, `tags_priorizadas`, `max_claims`) e a lista dos termos do glossário com `nivel_minimo` acima de iniciante encontrados no texto dos candidatos do Iniciante que não têm nenhuma analogia no glossário.
 
 **Devolve,** com os campos nesta ordem no schema, porque em saída estruturada o modelo escreve na ordem do schema e primeiro justifica para depois decidir:
 
-1. `nucleo`: de 1 a 3 claims que respondem "sobre o que é este documento" (numa ata do Copom, a decisão de juros; num fato relevante, o evento principal). O núcleo entra nos 3 níveis.
+1. `nucleo`: de 1 a 3 claims que respondem "sobre o que é este documento" (numa ata do Copom, a decisão de juros; num fato relevante, o evento principal). O núcleo entra nos 3 níveis, por isso só pode ser escolhido entre os claims candidatos nos 3 níveis: um claim descartado pelo pré-filtro em algum nível não pode ser núcleo.
 2. Para cada nível: os descartes com motivo específico (`redundante`, com o claim usado que já diz o mesmo, `exige_base_tecnica` ou `fora_do_foco`); os claims que entram, em ordem de leitura, com o papel; a tese, com os claims que a sustentam; e, no Iniciante, as analogias `nova` para os termos da lista que estiverem nos claims usados.
 
-O planejador fica só com o que exige julgamento editorial: núcleo, seleção, ordem, papel, tese e analogias para termos sem cadastro. O que é regra fixa (`atribuir_fonte`, o descarte `secundario` dos candidatos restantes e as analogias que o glossário já tem) é feito pelo código no passo seguinte.
+O planejador fica só com o que exige julgamento editorial: núcleo, seleção, ordem, papel, tese e analogias para termos do glossário sem analogia. O que é regra fixa (`atribuir_fonte`, o descarte `secundario` dos candidatos restantes e as analogias que o glossário já tem) é feito pelo código no passo seguinte.
 
 Uma chamada para os 3 níveis, e não uma por nível: o modelo enxerga o contraste e diferencia os níveis de propósito, que é o que a matriz de confusão de níveis do Entregável 6 mede. O isolamento por nível não traria ganho aqui, porque a E4 nunca é refeita no retry das células. Se os runs mostrarem seleção ruim (gate reprovando com frequência, ou o revisor da E8 discordando das seleções), a alternativa é 1 chamada para o núcleo e 3 em paralelo, uma por nível, com o núcleo fixo.
 
@@ -469,15 +476,17 @@ Uma chamada para os 3 níveis, e não uma por nível: o modelo enxerga o contras
 | Regra | Comparação |
 |---|---|
 | `id_inexistente` | todo `claim_id` do plano (núcleo, claims, descartes, `relacionado`, `tese_claim_ids`) existe no FactSheet |
-| `contraditorio` | nenhum claim está ao mesmo tempo nos claims e nos descartes de um nível |
-| `nucleo_ausente` | todo claim do núcleo está nos claims dos 3 níveis |
+| `contraditorio` | nenhum claim está ao mesmo tempo nos claims e nos descartes de um nível, nem em dois descartes do mesmo nível (por exemplo, descartado pelo pré-filtro e de novo pelo planejador) |
+| `nucleo_ausente` | todo claim do núcleo é candidato nos 3 níveis e está nos claims dos 3 níveis |
 | `acima_do_limite` | claims usados no nível <= `max_claims` do LevelSpec |
 | `jargao_sem_analogia` | no Iniciante, todo termo do glossário com `nivel_minimo` acima de iniciante encontrado no texto de um claim usado tem analogia no plano, do glossário ou `nova` |
 | `motivo_invalido` | `redundante` tem `relacionado`, e o relacionado está nos claims do nível; `exige_base_tecnica` só em claim com termo do glossário de `nivel_minimo` acima do nível |
 
 `fora_do_foco` e `secundario` não têm conferência por código: quem os confere é o revisor humano na E8, que vê a lista de descartes. O gate também não julga se o núcleo escolhido é o mais importante do documento.
 
-Com algum problema, o código devolve ao planejador só a lista de problemas, como o loop E2/E3, com no máximo 3 rodadas (o plano e 2 correções). Se ainda houver problema depois da última rodada, o run segue: o código retira do plano o que a E5 não consegue usar (ids inexistentes), grava os problemas restantes em `aviso`, e as 3 células de cada nível afetado chegam à E8 com esse aviso.
+Com algum problema, o código devolve ao planejador só a lista de problemas, como o loop E2/E3, com no máximo 3 rodadas (o plano e 2 correções). Se ainda houver problema depois da última rodada, o run segue: o código retira do plano o que a E5 não consegue usar (ids inexistentes), grava os problemas restantes em `aviso`, e as 3 células de cada nível afetado chegam à E8 com esse aviso. O `aviso` é um texto do plano inteiro; a E8 descobre os níveis afetados pelas linhas de `validacoes_plano` da última rodada, em que `nivel` nulo vale para os 3 níveis. Essas linhas registram o plano antes da retirada dos ids inexistentes.
+
+Se a retirada deixar o núcleo vazio, ou um nível sem nenhum claim, o run aborta com erro terminal, depois de gravar as rodadas em `validacoes_plano`: sem núcleo ou sem claims num nível, a matriz de 9 células não tem o que escrever.
 
 **Decide:** núcleo, seleção de conteúdo por nível, ordem, papel, tese e analogias.
 
@@ -486,26 +495,6 @@ Com algum problema, o código devolve ao planejador só a lista de problemas, co
 **Natureza:** determinístico, LLM e determinístico.
 
 **Como falha:** trivialização (descarta claim essencial e mantém só o trivial; o gate pega o núcleo ausente, e o revisor da E8 vê os descartes), núcleo mal escolhido (só o humano pega), analogia enganosa (a analogia está lá, é estruturada, e explica errado: só o juiz LLM da etapa 6 pega isso; as analogias aprovadas do glossário reduzem o risco), e **duplicação de prompt**: o planejador tem um template único, `prompts/adapter.j2`, parametrizado pelo LevelSpec.
-
-### Proposta em avaliação: base de conceitos financeiros (banco vetorial)
-
-**Ideia:** um banco vetorial com o que é cada termo e cada conceito financeiro (definição, mecanismo, analogias aprovadas), consultado pelo planejador (E4.2) como repertório, para que as explicações não sejam inventadas pelo modelo.
-
-**O que ela ataca:** o erro de **conceito** ("Selic é a taxa do cartão de crédito", analogia que explica errado). Não ataca o erro sobre o **documento** (número ou fato trocado), que já é coberto por FactSheet, M1 e M6.
-
-**Uso previsto:** o planejador (E4.2) recebe a definição e as analogias aprovadas dos termos presentes nos claims candidatos. O juiz (M6) pode receber a mesma definição como referência ao julgar se uma analogia está correta. O extractor (E2) **não** consulta a base: ele lê só o documento.
-
-**Problemas possíveis:**
-
-1. **Segunda fonte de fatos.** Uma definição com número ou data ("a Selic, hoje em 10,5%") pode vazar para a peça, e uma peça passaria a afirmar algo que não vem do documento. Regras necessárias: entradas atemporais, sem números nem datas; conteúdo da base só em explicações e analogias, nunca como afirmação sobre o documento; os `claim_ids` de cada unidade da peça continuam obrigatórios e a `Analogia` aponta para um `conceito_id`.
-2. **Alucinação transferida para a base.** Se as entradas forem escritas por LLM, o erro só muda de lugar e passa a ter aparência de fonte confiável. Exige fontes oficiais (Banco Central, CVM, B3, Tesouro Direto) com link guardado por entrada e revisão humana de cada uma.
-3. **Mecanismo geral confundido com causa específica.** A base diz que juros altos tendem a encarecer o crédito; o modelo pode transformar isso em "o Copom subiu os juros para encarecer o crédito", que é afirmação sobre o documento sem lastro nele. O motivo de cada decisão continua vindo só da FactSheet.
-4. **Busca por similaridade onde a pergunta é exata.** A maior parte das consultas é por nome do termo, que é busca exata pela forma base da palavra. Usar só vetorial devolve sempre os vizinhos mais próximos, mesmo irrelevantes (definição de CDI quando o termo era Selic), e depende de limiar arbitrário. Caminho previsto: busca exata pelo termo primeiro, vetorial só como complemento para conceitos não nomeados e mecanismos.
-5. **Duplicação com o glossário.** Termo, nível mínimo e analogias já pertencem ao `config/glossario.yaml`, lido pela M4 e pela M5. Com a informação em dois lugares, prompt e avaliador podem passar a ler versões diferentes, o mesmo desalinhamento que o LevelSpec de fonte única evita. Exige decidir qual é a fonte original: o YAML copiado para o banco por script, ou o banco como fonte.
-6. **Reprodutibilidade.** Se a base for editada sem versão, o mesmo documento gera peças diferentes conforme o dia. A versão da base usada precisa entrar no `RunManifest`.
-7. **Contexto maior e mais caro.** A chamada do planejador (e a do juiz, se ele também consultar) recebe mais texto, e o planejador pode passar a explicar conceitos demais, inflando a peça e prejudicando M2 e M3.
-8. **Viés de vocabulário.** Se a base trouxer definições técnicas para o nível Iniciante, o modelo tende a copiar o jargão da definição. A entrada precisa ter versões por nível (definição simples e técnica), e o planejador recebe só a do nível.
-9. **Custo de manutenção.** A base precisa ser montada, revisada e atualizada antes de ter valor, e cobre só os conceitos cadastrados: termo ausente volta ao comportamento de hoje, sem aviso.
 
 ## E5. Format Synthesizer (9 instâncias isoladas)
 
@@ -517,9 +506,9 @@ A etapa tem três passos, e só o do meio chama o modelo.
 
 ### E5.1 Pacote da célula (determinístico)
 
-1. **Claims com marcadores.** Para cada claim do plano, o código troca cada número do texto do claim pelo seu marcador, `{{<claim_id>.<ordem>}}`: em "O Copom decidiu reduzir a taxa básica de juros para 13,75% a.a.", o `13,75%` vira `{{C27.1}}`. A E3 já garante que o texto e a lista de números do claim dizem o mesmo, então a troca é exata. O redator recebe o texto com marcadores e a tabela de cada marcador com o seu valor, como está no documento.
+1. **Claims com marcadores.** Para cada claim do plano, o código troca cada número do texto do claim que não seja data pelo seu marcador, `{{<claim_id>.<ordem>}}`: em "O Copom decidiu reduzir a taxa básica de juros para 13,75% a.a.", o `13,75%` vira `{{C27.1}}`. As datas ficam no texto, sem marcador. A E3 já garante que o texto e a lista de números do claim dizem o mesmo e que a lista não tem datas, então a troca é exata. O redator recebe o texto com marcadores e a tabela de cada marcador com o seu valor, como está no documento.
 2. **Contrato do formato com a conta feita.** O código lê o contrato do formato no LevelSpec e calcula o espaço disponível: no carrossel, quantos slides de corpo cabem entre o gancho e a conclusão e o limite de caracteres; no roteiro, o total de palavras (duração × palavras por segundo) e a sua divisão pelas cenas; no artigo, a faixa de palavras dividida entre as seções pelo papel de cada claim. O modelo recebe o orçamento pronto, sem precisar fazer a conta.
-3. **O plano do nível:** tese, ordem, papel e `atribuir_fonte` de cada claim, e as analogias, com a explicação fixa.
+3. **O plano do nível:** tese, ordem, papel e `atribuir_fonte` de cada claim, e as analogias, com a explicação, que o redator mantém no sentido e só encurta para caber no orçamento do formato.
 
 ### E5.2 Redator (LLM)
 
@@ -527,7 +516,7 @@ Um único template, `prompts/synthesizer.j2`, com três partes: as regras comuns
 
 O modelo devolve o payload do formato com marcadores no texto. O schema impõe a estrutura que dá para impor na decodificação (quantidade de slides, um `gancho` no início e uma `conclusao` no fim); a resposta fora do schema volta ao modelo pelo `llm.py` e não consome o orçamento `K`.
 
-No retry, recebe também o relatório corretivo da tentativa anterior e reescreve. O plano não muda.
+No retry, recebe também o relatório corretivo da tentativa anterior e reescreve. O plano não muda. Só o redator chama o modelo de novo: o pacote da E5.1 depende só do plano e é reaproveitado, com os mesmos marcadores que a instrução corretiva da M1 cita, e a montagem da E5.3 roda de novo sobre o texto novo.
 
 ### E5.3 Montagem (determinística)
 
@@ -580,19 +569,20 @@ As duas razões, em ordem de importância:
 
 ### As métricas
 
-**M1. Numeric Fidelity Check (determinístico).** Extrai todo número+unidade da peça e assere que cada um pertence à `tabela_numeros` **ou** é uma derivação declarada e recalculada em Python (`delta`, `soma`, `percentual_de`). Um número que não fecha reprova a célula, sem opinião de modelo nenhum. Três desfechos distintos, e a distinção importa para a instrução corretiva:
+**M1. Numeric Fidelity Check (determinístico).** Extrai todo número+unidade da peça (`numeros.varrer`, o mesmo parser da E1) e assere que cada um que não seja data veio de um marcador, ou seja, coincide com uma posição de `Peca.numeros_usados`. Um número que não fecha reprova a célula, sem opinião de modelo nenhum. Quatro desfechos distintos, e a distinção importa para a instrução corretiva:
 
-- presente na `tabela_numeros` e citado por um claim da peça: ok;
-- presente na `tabela_numeros` mas sem claim que o suporte: violação de lastro, instrução "cite o claim ou remova";
-- ausente da `tabela_numeros`: alucinação, instrução "este número não existe no documento, remova".
+- em `numeros_usados`: ok;
+- fora de marcador, com o mesmo valor e unidade de um número de claim do plano do nível: violação, instrução "use o marcador {{<claim_id>.<ordem>}} no lugar deste número";
+- fora de marcador, presente na `tabela_numeros` mas em nenhum claim do plano do nível: violação de lastro, instrução "este número existe no documento, mas não é fato do plano, remova";
+- fora de marcador e ausente da `tabela_numeros`: alucinação, instrução "este número não existe no documento, remova".
 
-Todo número da peça que não seja data precisa coincidir com uma posição de `Peca.numeros_usados`, ou seja, ter vindo de um marcador. Número escrito à mão pelo modelo é violação mesmo quando o valor existe na `tabela_numeros`, com a instrução "use o marcador do claim no lugar deste número".
+Número escrito à mão pelo modelo é violação mesmo quando o valor existe na `tabela_numeros`: todo número da peça que não seja data vem de um marcador.
 
 **M2. Format Contract Check (determinístico).** Aritmética sobre o payload estruturado. Artigo: palavras na faixa do nível. Carrossel: 5 a 8 slides, um `gancho` no início, uma `conclusao` no fim, limite de caracteres por slide. Roteiro: soma das cenas <= 60s, sem lacuna nem sobreposição, palavras por segundo na faixa falável.
 
 **M3. Legibilidade (determinístico).** Índice de facilidade de leitura adaptado ao português. A implementação (`textstat` com configuração pt, ou a adaptação brasileira do Flesch) e as constantes precisam ser escolhidas e fixadas: a fórmula original é calibrada para inglês e os limiares em português **não** são os mesmos números da escala inglesa. Emite o índice, a distribuição de tamanho de sentença e as sentenças que puxam o índice para baixo, porque é isso que a instrução corretiva precisa apontar.
 
-**M4. Domain Term Density Score (determinístico).** Lematiza via spaCy e casa contra o glossário financeiro. Densidade = termos técnicos únicos / total de tokens de conteúdo. Emite a densidade, a lista de termos encontrados e a posição de cada um. Tem piso e teto: no nível Avançado, densidade **baixa demais** também reprova, porque o objetivo é calibração, não simplificação.
+**M4. Domain Term Density Score (determinístico).** Casa a peça contra o glossário financeiro pela regra de casamento de `docs/glossario.md`, a mesma da E4 e da M5, sem lematizar; o spaCy entra só para separar os tokens de conteúdo. Densidade = termos técnicos únicos / total de tokens de conteúdo. Emite a densidade, a lista de termos encontrados e a posição de cada um. Tem piso e teto: no nível Avançado, densidade **baixa demais** também reprova, porque o objetivo é calibração, não simplificação.
 
 **M5. Regra de analogia (determinístico).** Para o nível Iniciante: todo termo do glossário com `nivel_minimo` acima de iniciante encontrado no texto precisa ter uma `Analogia` no plano do nível **e** um marcador de analogia no texto dentro de uma janela de N tokens antes da primeira ocorrência do termo (padrões como "é como", "funciona parecido com", "imagine que", "na prática significa"). Termo do glossário sem analogia é violação, com o trecho exato.
 
@@ -647,12 +637,12 @@ O dashboard fica em `app/` (FastAPI, com HTML, CSS e JS sem build) e escuta só 
 
 ### Revisão das analogias novas e entrada no glossário
 
-As analogias `nova`, criadas pelo planejador para termos sem analogia no glossário, são revisadas numa seção separada do dashboard, e não junto da decisão de publicar a célula: publicar uma peça não é aprovar a analogia que ela usa. Na seção, o humano vê cada analogia nova do run com o termo, o nível e as peças em que aparece, e marca aprovar ou rejeitar. A decisão é gravada em `decisoes_analogia`, no Supabase e na cópia local, e é final.
+As analogias `nova`, criadas pelo planejador para termos sem analogia no glossário, são revisadas numa seção separada do dashboard, e não junto da decisão de publicar a célula: publicar uma peça não é aprovar a analogia que ela usa. Na seção, o humano vê cada analogia nova do run com o termo, o nível e as peças em que aparece, e marca aprovar ou rejeitar. Ao aprovar, escreve o `limite` da analogia (onde ela deixa de valer), que o glossário exige e o plano não tem; sem `limite`, a aprovação é recusada. A decisão é gravada em `decisoes_analogia`, no Supabase e na cópia local, e é final.
 
 A analogia aprovada não entra sozinha no glossário: o glossário fica no git, e o dashboard grava só no Supabase. Um comando, executado à mão, lê as analogias aprovadas pela `ConsultaSupabase` e gera a alteração em `config/glossario.yaml`, para revisão e commit humanos:
 
-- termo já cadastrado (pelo `termo` ou por uma `variante`): a analogia entra no fim da lista do termo, com `status: aprovada`, para não mudar as referências das analogias existentes;
-- termo sem cadastro: o comando cria a entrada com `id`, `termo` e a analogia aprovada, e deixa em branco `nivel_minimo`, `definicao_simples`, `definicao_tecnica`, `categoria` e `fonte`. Aprovar a analogia não basta: alguém completa esses campos antes do commit. O carregamento do glossário recusa entrada com campo obrigatório em branco, então o arquivo incompleto não chega a um run;
+- termo já cadastrado (pelo `termo` ou por uma `variante`): a analogia entra no fim da lista do termo, com o `texto` do plano, o `limite` escrito na revisão e `status: aprovada`, para não mudar as referências das analogias existentes;
+- termo sem cadastro: o comando cria a entrada com `id`, `termo` e a analogia aprovada (`texto`, `limite` e `status: aprovada`), e deixa em branco `variantes`, `categoria`, `nivel_minimo`, `definicao_simples`, `definicao_tecnica`, `ambiguo` e `fonte`. Aprovar a analogia não basta: alguém completa esses campos antes do commit. O carregamento do glossário recusa entrada com campo obrigatório em branco, então o arquivo incompleto não chega a um run;
 - analogia que já está no glossário com o mesmo texto não é repetida, e rodar o comando de novo não muda nada;
 - a `versao` do glossário sobe.
 
@@ -799,7 +789,7 @@ Isso não é otimização, é o que sustenta a conta de custo desta arquitetura.
 
 Se você usar LangGraph, isso significa usar o checkpointer com um thread por célula no fan-out, e não um único thread para o documento.
 
-O checkpointer é o `PostgresSaver` (`langgraph-checkpoint-postgres`) no Postgres do Supabase do site, no schema `langgraph`, que fica fora dos schemas expostos pela Data API. A conexão do checkpointer é criada por `sunontent/persistencia.py` a partir de `SUPABASE_DB_URL`, é separada da conexão das tabelas do projeto, usa `search_path = langgraph`, `autocommit=True` e `row_factory=dict_row`, e passa pelo session pooler (porta 5432) ou pela conexão direta, porque o modo transação do pooler não suporta prepared statements. `setup()` cria as tabelas na primeira execução. O `thread_id` de cada célula é `<run_id>:<celula_id>`; enquanto o grafo não tem células, o `thread_id` é o próprio `run_id` (`docs/execucao.md`). O checkpoint não tem cópia local: as saídas de cada etapa são gravadas pelas funções do projeto no Supabase e em `data/runs/<run_id>/`. Na retomada, o checkpoint decide qual nó roda; antes de chamar o modelo, cada nó confere nas tabelas se a sua linha já existe e a reaproveita.
+O checkpointer é o `PostgresSaver` (`langgraph-checkpoint-postgres`) no Postgres do Supabase do site, no schema `langgraph`, que fica fora dos schemas expostos pela Data API. A conexão do checkpointer é criada por `sunontent/persistencia.py` a partir de `SUPABASE_DB_URL`, é separada da conexão das tabelas do projeto, usa `search_path = langgraph`, `autocommit=True` e `row_factory=dict_row`, e passa pelo session pooler (porta 5432) ou pela conexão direta, porque o modo transação do pooler não suporta prepared statements. `setup()` cria as tabelas na primeira execução. O `thread_id` de cada célula é `<run_id>:<celula_id>`; antes do fan-out da E5, o `thread_id` é o próprio `run_id` (`docs/execucao.md`). O checkpoint não tem cópia local: as saídas de cada etapa são gravadas pelas funções do projeto no Supabase e em `data/runs/<run_id>/`. Na retomada, o checkpoint decide qual nó roda; antes de chamar o modelo, cada nó confere nas tabelas se a sua linha já existe e a reaproveita.
 
 ---
 
@@ -837,7 +827,7 @@ Invariantes:
 - O contador de retry de parse é **separado** do orçamento `K` de qualidade. Misturar os dois faz um JSON quebrado consumir o orçamento de reescrita.
 - Toda chamada emite um span com nó, modelo, tokens de entrada e saída, e custo.
 
-Config: `models.{extractor, adapter, synthesizer, judge}`, cada um pinado em snapshot, não só em família, em `config/models.yaml`, junto com o preço em US$ por milhão de tokens de cada snapshot e a cotação USD/BRL usada para estimar o custo. Hoje só o extractor tem modelo (`gemini-3.8-flash`). A falha de infraestrutura repete com backoff até 4 tentativas, e a resposta fora do schema, até 3; detalhes em `docs/fluxos/extracao.md`.
+Config: `models.{extractor, adapter, synthesizer, judge}`, cada um pinado em snapshot, não só em família, em `config/models.yaml`, junto com o preço em US$ por milhão de tokens de cada snapshot e a cotação USD/BRL usada para estimar o custo. Hoje o extractor e o adapter têm modelo (`gemini-3.8-flash`). A falha de infraestrutura repete com backoff até 4 tentativas, e a resposta fora do schema, até 3; detalhes em `docs/fluxos/extracao.md`.
 
 ## 2. Context assembly
 
@@ -928,11 +918,21 @@ As credenciais ficam no `.env`, fora do git. O `.env.example` versionado lista a
 
 O contrato que define cada nível. Uma fonte, lida pelo prompt e pelo avaliador.
 
-```yaml
-# levels/iniciante.yaml
-nivel: iniciante
-versao: 1
+Hoje cada arquivo tem os campos da E4, validados por `sunontent/levelspec.py`, que recusa campo desconhecido (valores e motivos em `docs/fluxos/plano-editorial.md`, LevelSpec da E4):
 
+```yaml
+# config/levels/iniciante.yaml
+nivel: iniciante
+versao: 2
+foco: "impacto prático no bolso do leitor"
+tags_priorizadas: [impacto_pratico]
+tags_descartaveis: [metodologico]
+max_claims: 5                # claims usados no plano do nível (E4.3)
+```
+
+Os campos das métricas e dos formatos entram no mesmo arquivo junto com a M2 a M5 e a E5, e o `levelspec.py` passa a aceitá-los nesse momento. O desenho previsto:
+
+```yaml
 # ATENÇÃO: os números abaixo são PLACEHOLDER e precisam ser calibrados.
 # Procedimento de calibração: montar um corpus de conteúdo financeiro real
 # rotulado por nível pela equipe editorial, medir as métricas sobre ele, e
@@ -943,10 +943,6 @@ legibilidade:
 densidade_termos: {min: 0.00, max: 0.02}   # A CALIBRAR
 analogia_obrigatoria: true
 janela_analogia_tokens: 40                  # A CALIBRAR
-tags_priorizadas: [impacto_pratico]
-tags_descartaveis: [metodologico]
-foco: "impacto pratico no bolso do leitor"
-max_claims: 7                               # A CALIBRAR: claims usados no plano do nível (E4.3)
 formatos:
   artigo:    {palavras: {min: 400, max: 700}}
   carrossel: {slides: {min: 5, max: 7}, chars_por_slide: {max: 220}}
@@ -985,7 +981,7 @@ termos:
       url: "https://..."
 ```
 
-`nivel_minimo`: `iniciante` para palavra do dia a dia (inflação, juros), que dispensa analogia; `intermediario` para o vocabulário padrão de mercado (Selic, CDI, IPCA, dividendos, JCP), que pede analogia no Iniciante; `avancado` para o jargão pleno (forward guidance, hiato do produto, EBITDA ajustado, covenants), que pede analogia no Iniciante e contexto no Intermediário.
+`nivel_minimo`: `iniciante` para palavra do dia a dia (inflação, juros), que dispensa analogia; `intermediario` para o vocabulário padrão de mercado (Selic, CDI, IPCA, dividendos, JCP), que pede analogia no Iniciante; `avancado` para o jargão pleno (forward guidance, hiato do produto, EBITDA ajustado, covenants), que também pede analogia no Iniciante.
 
 Definições e analogias são atemporais: sem números, sem datas e sem citar decisões ou eventos específicos, para que o glossário explique conceitos e nunca vire uma segunda fonte de fatos. Toda entrada tem fonte oficial ou institucional com URL. Palavras ambíguas (ação, papel, meta, margem) ficam com `ambiguo: true` e casam pelas variantes de mais de uma palavra, para a M4 não contar o sentido comum como jargão.
 
@@ -1028,12 +1024,13 @@ Ordem por dependência, não por importância:
 2. **Harness 1 e 2** (model client, context assembly). Todos os nós dependem deles. Escrever os nós primeiro produz 6 tratamentos de erro diferentes e uma refatoração garantida.
 3. **E1 Leitura**, com teste de igualdade exata contra fixture, e paranoia no parsing de número.
 4. **E2 + E3** em conjunto, com fixture de documento anotado à mão.
-5. **As métricas determinísticas M1 a M5, isoladas**, com teste unitário direto. Elas não dependem de nenhuma chamada de LLM e são o Entregável 2. Podem e devem ser construídas antes de existir qualquer geração.
-6. **E4 + E5** para uma única célula, ponta a ponta.
-7. **E7 Router + refinement loop** naquela única célula, até ver uma correção acontecer de verdade.
-8. **Fan-out para 9** com checkpoint por célula.
-9. **M6 LLM Judge.**
-10. **E8 dashboard** com a rastreabilidade que o trace já estiver guardando.
-11. **E9 materialização no Figma**, por último e só para o carrossel. Depende de a peça já sair aprovada e de o template existir como componente. Não bloqueia nada antes dela: se a integração falhar, o pipeline continua entregando as 9 células.
+5. **E4 Plano editorial**, com o LevelSpec só com os campos da E4 e o leitor do glossário com o casamento de termos que a M4 e a M5 também usam (`docs/fluxos/plano-editorial.md`). O grafo termina na E4, com as 9 células em `PENDENTE`.
+6. **As métricas determinísticas M1 a M5, isoladas**, com teste unitário direto. Elas não dependem de nenhuma chamada de LLM e são o Entregável 2. Podem e devem ser construídas antes de existir qualquer peça.
+7. **E5** para uma única célula, ponta a ponta.
+8. **E7 Router + refinement loop** naquela única célula, até ver uma correção acontecer de verdade.
+9. **Fan-out para 9** com checkpoint por célula.
+10. **M6 LLM Judge.**
+11. **E8 dashboard** com a rastreabilidade que o trace já estiver guardando.
+12. **E9 materialização no Figma**, por último e só para o carrossel. Depende de a peça já sair aprovada e de o template existir como componente. Não bloqueia nada antes dela: se a integração falhar, o pipeline continua entregando as 9 células.
 
-O passo 5 antes do 6 é a inversão que importa: as métricas são testáveis sem pipeline, e construí-las primeiro força o LevelSpec a ser concreto antes de qualquer prompt ser escrito.
+O passo 6 antes do 7 é a inversão que importa: as métricas são testáveis sem pipeline, e construí-las antes da E5 força o LevelSpec do nível e do formato a ser concreto antes de o redator escrever qualquer peça. A E4 vem antes delas porque não escreve texto de peça: o que ela precisa do LevelSpec e do glossário (tags, limite de claims e casamento de termos) não depende dos limiares das métricas.

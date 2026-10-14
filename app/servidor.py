@@ -74,6 +74,7 @@ def criar_app(raiz: Path = RAIZ, gerenciador: execucao.Gerenciador | None = None
                 {"de": a.source, "para": a.target, "condicional": a.conditional} for a in desenho.edges
             ],
             "rodadas_extracao": graph.RODADAS_EXTRACAO,
+            "rodadas_plano": graph.RODADAS_PLANO,
             "k": graph.K,
         }
 

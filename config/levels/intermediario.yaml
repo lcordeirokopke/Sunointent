@@ -1,3 +1,7 @@
 nivel: intermediario
-versao: 1
-foco: "alocacao e tendencias"
+versao: 2
+# Campos da E4 (docs/fluxos/plano-editorial.md, LevelSpec da E4). Valores de partida.
+foco: "alocação e tendências"
+tags_priorizadas: [indicador_chave, contexto_macro]
+tags_descartaveis: []
+max_claims: 7

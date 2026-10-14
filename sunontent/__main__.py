@@ -145,9 +145,12 @@ def executar(
     claims = len(resultado["factsheet"].claims)
     # Com o run concluído, as correções que restam são os claims que foram para a quarentena.
     em_quarentena = len(resultado["correcoes"])
+    plano = resultado["plano"]
     print(
         f"concluído: {documento.doc_id} ({documento.doc_sha256[:12]}), {claims} claims,"
         + (f" {em_quarentena} em quarentena," if em_quarentena else "")
+        + f" plano em {plano.rodadas} {'rodada' if plano.rodadas == 1 else 'rodadas'}"
+        + (" (com aviso)," if plano.aviso else ",")
         + f" {cliente_llm.custo_total_tokens} tokens, R$ {cliente_llm.custo_total_brl:.4f}"
     )
     return 0

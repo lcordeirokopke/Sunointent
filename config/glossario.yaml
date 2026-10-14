@@ -1,4 +1,4 @@
-versao: 2
+versao: 4
 termos:
   # ---------------------------------------------------------------- juros
   - id: juros
@@ -694,6 +694,7 @@ termos:
       - Índice de Preços ao Produtor
       - Índice de Preços no Atacado
       - preços ao produtor
+      - preços aos produtores
     categoria: inflacao
     nivel_minimo: avancado
     definicao_simples: "Medida da variação de preços cobrados por quem produz, antes de os produtos chegarem às lojas."
@@ -742,7 +743,7 @@ termos:
       - texto: "É como o alvo no tiro ao alvo: o Banco Central mira no centro, e há uma faixa ao redor em que o tiro ainda conta como acerto."
         limite: "O Banco Central não controla a inflação diretamente; ele ajusta os juros, e choques fora do seu controle podem desviar o tiro por um tempo."
         status: rascunho
-    ambiguo: true
+    ambiguo: false
     fonte:
       nome: "Banco Central do Brasil, Metas para a inflação"
       url: "https://www.bcb.gov.br/controleinflacao/metainflacao"
@@ -855,7 +856,6 @@ termos:
     termo: núcleo de inflação
     variantes:
       - núcleos de inflação
-      - núcleos
       - medidas subjacentes
       - medida subjacente
       - inflação subjacente
@@ -868,7 +868,7 @@ termos:
       - texto: "É como tirar a média das notas de um aluno sem contar a prova em que ele estava doente: mostra melhor o desempenho de sempre."
         limite: "Os itens retirados também fazem parte do custo de vida; o núcleo indica tendência, mas não substitui a inflação cheia que as famílias sentem."
         status: rascunho
-    ambiguo: true
+    ambiguo: false
     fonte:
       nome: "Banco Central do Brasil, Glossário"
       url: "https://www.bcb.gov.br/acessoinformacao/glossario"
@@ -878,7 +878,6 @@ termos:
     variantes:
       - preço administrado
       - preços monitorados
-      - administrados
       - IPCA administrados
     categoria: inflacao
     nivel_minimo: intermediario
@@ -888,7 +887,7 @@ termos:
       - texto: "São como preços tabelados por contrato: não sobem nem descem com a procura do dia a dia, mas em datas e regras definidas."
         limite: "Nem todo preço administrado é fixado diretamente pelo governo, e alguns seguem parcialmente o mercado."
         status: rascunho
-    ambiguo: true
+    ambiguo: false
     fonte:
       nome: "Banco Central do Brasil, Nota Técnica: Núcleos de inflação e outras séries analíticas derivadas do IPCA"
       url: "https://www.bcb.gov.br/content/publicacoes/notastecnicas/NT_57_202512.pdf"
@@ -898,7 +897,6 @@ termos:
     variantes:
       - preço livre
       - IPCA livres
-      - livres
     categoria: inflacao
     nivel_minimo: intermediario
     definicao_simples: "Preços que variam conforme a procura e a oferta do mercado, sem regra do governo, como alimentos, roupas e muitos serviços."
@@ -907,7 +905,7 @@ termos:
       - texto: "São como os preços de uma feira: mudam conforme a procura, a safra e a concorrência."
         limite: "A divisão entre livres e administrados é analítica e não estrita; alguns itens ficam numa zona intermediária."
         status: rascunho
-    ambiguo: true
+    ambiguo: false
     fonte:
       nome: "Banco Central do Brasil, Nota Técnica: Núcleos de inflação e outras séries analíticas derivadas do IPCA"
       url: "https://www.bcb.gov.br/content/publicacoes/notastecnicas/NT_57_202512.pdf"
@@ -934,13 +932,12 @@ termos:
     termo: bens industriais
     variantes:
       - bens industrializados
-      - industriais
     categoria: inflacao
     nivel_minimo: avancado
     definicao_simples: "Grupo de produtos físicos fabricados, como roupas, eletrodomésticos e carros, acompanhado à parte nas medidas de inflação."
     definicao_tecnica: "Segmento dos preços livres do IPCA que abrange produtos tangíveis não classificados em alimentação no domicílio; costuma ser mais sensível ao câmbio e a preços internacionais."
     analogias: []
-    ambiguo: true
+    ambiguo: false
     fonte:
       nome: "Banco Central do Brasil, Nota Técnica: Núcleos de inflação e outras séries analíticas derivadas do IPCA"
       url: "https://www.bcb.gov.br/content/publicacoes/notastecnicas/NT_57_202512.pdf"
@@ -948,7 +945,6 @@ termos:
   - id: indice_de_difusao
     termo: índice de difusão
     variantes:
-      - difusão
       - difusão da inflação
     categoria: inflacao
     nivel_minimo: avancado
@@ -958,7 +954,7 @@ termos:
       - texto: "É como contar quantos alunos da turma tiveram febre, e não só a temperatura média: mostra se o problema é de poucos ou de quase todos."
         limite: "A difusão não diz o tamanho das altas; muitos aumentos pequenos podem ter difusão alta com inflação baixa."
         status: rascunho
-    ambiguo: true
+    ambiguo: false
     fonte:
       nome: "Banco Central do Brasil, Nota Técnica: Núcleos de inflação e outras séries analíticas derivadas do IPCA"
       url: "https://www.bcb.gov.br/content/publicacoes/notastecnicas/NT_57_202512.pdf"
@@ -1682,13 +1678,12 @@ termos:
     termo: dívida bruta do governo geral
     variantes:
       - DBGG
-      - dívida bruta
     categoria: fiscal
     nivel_minimo: avancado
     definicao_simples: "Total das dívidas dos governos federal, estaduais e municipais, sem descontar o que eles têm a receber."
     definicao_tecnica: "Montante das dívidas de responsabilidade dos governos federal, estaduais e municipais, incluindo as operações compromissadas do Banco Central; principal indicador de endividamento usado na comparação internacional."
     analogias: []
-    ambiguo: true
+    ambiguo: false
     fonte:
       nome: "Banco Central do Brasil, Glossário"
       url: "https://www.bcb.gov.br/acessoinformacao/glossario"
@@ -1920,7 +1915,7 @@ termos:
       - texto: "É como o dono da maioria dos apartamentos de um prédio: na assembleia, a vontade dele costuma prevalecer."
         limite: "O controlador tem deveres legais com os demais sócios e não pode usar o controle em prejuízo deles."
         status: rascunho
-    ambiguo: true
+    ambiguo: false
     fonte:
       nome: "B3, Bora Investir, Glossário: Acionista controlador"
       url: "https://borainvestir.b3.com.br/glossario/acionista-controlador/"
@@ -2060,8 +2055,6 @@ termos:
       - cotas de fundos
       - cotas do fundo
       - cota do fundo
-      - cotista
-      - cotistas
     categoria: mercado
     nivel_minimo: intermediario
     definicao_simples: "Menor parte de um fundo; quem aplica no fundo compra partes dele."
@@ -2534,7 +2527,6 @@ termos:
     variantes:
       - depositária central
       - central depositária
-      - depositária
     categoria: mercado
     nivel_minimo: avancado
     definicao_simples: "Instituição que guarda o registro oficial de quem é dono de cada ação e título negociado."
@@ -2543,7 +2535,7 @@ termos:
       - texto: "É como o cartório de registro de imóveis do mercado financeiro: o registro oficial de quem é dono de quê."
         limite: "O registro é eletrônico e atualizado a cada negociação, muito mais rápido que num cartório."
         status: rascunho
-    ambiguo: true
+    ambiguo: false
     fonte:
       nome: "B3, Bora Investir, Glossário: Depositário central"
       url: "https://borainvestir.b3.com.br/glossario/depositario-central/"
@@ -2551,7 +2543,6 @@ termos:
   - id: mercado_de_balcao
     termo: mercado de balcão
     variantes:
-      - balcão
       - balcão organizado
       - OTC
       - mercado fora de bolsa
@@ -2563,7 +2554,7 @@ termos:
       - texto: "É como comprar algo direto do vendedor, combinando preço e condições, em vez de ir a um leilão aberto."
         limite: "Mesmo no balcão, muitas operações são registradas e supervisionadas; não é um mercado informal."
         status: rascunho
-    ambiguo: true
+    ambiguo: false
     fonte:
       nome: "B3, Bora Investir, Glossário: Mercado de balcão"
       url: "https://borainvestir.b3.com.br/glossario/mercado-de-balcao/"
@@ -2581,7 +2572,7 @@ termos:
       - texto: "É como comprar no caixa da loja: paga e leva, em vez de encomendar para depois."
         limite: "Na bolsa, a liquidação leva um prazo curto de alguns dias úteis, não é instantânea."
         status: rascunho
-    ambiguo: true
+    ambiguo: false
     fonte:
       nome: "B3, Bora Investir, Glossário: Mercado à vista"
       url: "https://borainvestir.b3.com.br/glossario/mercado-a-vista/"
@@ -2963,8 +2954,8 @@ termos:
   - id: duration
     termo: duration
     variantes:
-      - duração
       - prazo médio
+      - prazos médios
       - prazo médio ponderado
     categoria: mercado
     nivel_minimo: avancado
@@ -2974,7 +2965,7 @@ termos:
       - texto: "É como calcular, num empréstimo pago em parcelas, em que momento médio o dinheiro volta para o bolso."
         limite: "Quanto maior a duration, mais o preço do título oscila quando os juros mudam; a analogia não mostra esse efeito."
         status: rascunho
-    ambiguo: true
+    ambiguo: false
     fonte:
       nome: "B3, Bora Investir, Glossário: Duração (Duration)"
       url: "https://borainvestir.b3.com.br/glossario/duracao-duration/"
@@ -3548,7 +3539,6 @@ termos:
       - incorporação da companhia
       - companhia incorporadora
       - sociedade incorporada
-      - incorporadas
     categoria: societario
     nivel_minimo: avancado
     definicao_simples: "Operação em que uma empresa absorve outra, que deixa de existir, e assume todos os seus direitos e dívidas."
@@ -3596,7 +3586,7 @@ termos:
       - texto: "É como duas bandas que se juntam e lançam um novo nome: nenhuma das antigas continua, nasce uma terceira."
         limite: "No uso do mercado, fusão às vezes é dito para qualquer união de empresas, mas juridicamente difere da incorporação, em que uma absorve a outra."
         status: rascunho
-    ambiguo: true
+    ambiguo: false
     fonte:
       nome: "Presidência da República, Lei nº 6.404 (Lei das S.A.)"
       url: "https://www.planalto.gov.br/ccivil_03/leis/l6404consol.htm"
@@ -3861,7 +3851,7 @@ termos:
       - texto: "É o nome guarda-chuva para tudo que a empresa entrega aos sócios por serem sócios."
         limite: "Cada tipo de provento tem regra e tributação próprias."
         status: rascunho
-    ambiguo: true
+    ambiguo: false
     fonte:
       nome: "B3, Bora Investir, Glossário: Proventos"
       url: "https://borainvestir.b3.com.br/glossario/proventos/"
@@ -3908,7 +3898,6 @@ termos:
   - id: desdobramento
     termo: desdobramento de ações
     variantes:
-      - desdobramento
       - split
     categoria: societario
     nivel_minimo: intermediario
@@ -3918,7 +3907,7 @@ termos:
       - texto: "É como trocar uma nota grande por várias notas menores: a quantia é a mesma."
         limite: "Não cria valor; eventuais efeitos no preço vêm de liquidez e percepção, não da operação em si."
         status: rascunho
-    ambiguo: true
+    ambiguo: false
     fonte:
       nome: "B3, Bora Investir, Glossário: Desdobramento de ações"
       url: "https://borainvestir.b3.com.br/glossario/desdobramento-de-acoes/"
@@ -3937,7 +3926,7 @@ termos:
       - texto: "É como trocar várias notas pequenas por uma nota maior de mesmo valor total."
         limite: "Quem tem quantidade que não fecha a conta fica com frações, que costumam ser vendidas e pagas em dinheiro."
         status: rascunho
-    ambiguo: true
+    ambiguo: false
     fonte:
       nome: "B3, Bora Investir, Glossário: Grupamento de ações"
       url: "https://borainvestir.b3.com.br/glossario/grupamento-de-acoes/"
@@ -3966,13 +3955,12 @@ termos:
     termo: ações em tesouraria
     variantes:
       - ação em tesouraria
-      - tesouraria
     categoria: societario
     nivel_minimo: avancado
     definicao_simples: "Ações que a própria empresa comprou de volta e guardou, sem direito a voto nem a receber parte do lucro enquanto estiverem com ela."
     definicao_tecnica: "Ações de própria emissão recompradas e mantidas pela companhia, sem direito a voto ou a dividendos enquanto permanecerem em tesouraria; podem ser canceladas ou recolocadas no mercado."
     analogias: []
-    ambiguo: true
+    ambiguo: false
     fonte:
       nome: "B3, Bora Investir, Glossário: Ação em tesouraria"
       url: "https://borainvestir.b3.com.br/glossario/acao-em-tesouraria/"
@@ -4102,10 +4090,6 @@ termos:
     variantes:
       - empresa controlada
       - sociedade controlada
-      - controladas
-      - coligada
-      - coligadas
-      - controladora
     categoria: societario
     nivel_minimo: avancado
     definicao_simples: "Empresa comandada por outra, que detém o poder de decidir sobre ela; se a influência é relevante mas sem comando, chama-se coligada."
@@ -4742,7 +4726,6 @@ termos:
   - id: provisao
     termo: provisão
     variantes:
-      - provisões
       - provisão para contingências
       - passivo contingente
       - passivos contingentes
@@ -4817,7 +4800,6 @@ termos:
   - id: demonstracoes_consolidadas
     termo: demonstrações consolidadas
     variantes:
-      - consolidado
       - balanço consolidado
       - resultado consolidado
       - demonstrações financeiras consolidadas
@@ -4829,7 +4811,7 @@ termos:
       - texto: "É como o orçamento da família inteira, somando a conta de todos e tirando as transferências entre irmãos."
         limite: "O consolidado esconde a situação de cada empresa do grupo; uma pode estar bem e outra mal."
         status: rascunho
-    ambiguo: true
+    ambiguo: false
     fonte:
       nome: "Comitê de Pronunciamentos Contábeis, CPC 36 (Demonstrações Consolidadas)"
       url: "https://www.cpc.org.br/CPC/Documentos-Emitidos/Pronunciamentos/Pronunciamento?Id=67"
@@ -4878,7 +4860,6 @@ termos:
       - passivo total
       - passivo circulante
       - passivo não circulante
-      - passivos
     categoria: contabil
     nivel_minimo: intermediario
     definicao_simples: "Conjunto das dívidas e obrigações da empresa com terceiros, como fornecedores, bancos e impostos."
@@ -4896,7 +4877,6 @@ termos:
     termo: balanço patrimonial
     variantes:
       - balanços patrimoniais
-      - balanço
       - demonstrações financeiras
       - demonstrações contábeis
     categoria: contabil
@@ -4907,7 +4887,7 @@ termos:
       - texto: "É como uma foto da situação financeira da empresa num dia específico."
         limite: "A foto muda no dia seguinte; para ver o filme do período é preciso olhar o resultado e o fluxo de caixa."
         status: rascunho
-    ambiguo: true
+    ambiguo: false
     fonte:
       nome: "Comitê de Pronunciamentos Contábeis, CPC 26 (Apresentação das Demonstrações Contábeis)"
       url: "https://www.cpc.org.br/CPC/Documentos-Emitidos/Pronunciamentos/Pronunciamento?Id=57"

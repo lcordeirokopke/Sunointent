@@ -1,0 +1,2893 @@
+{
+  "run_id": "b3_20261013T192226Z_1df94a",
+  "doc_sha256": "2d4647af3c9b6558fe0db65f8bdedcd0bca1d16f29089f7d5aa7bc6cda1bd09b",
+  "doc_id": "b3_release_2026_2T",
+  "tipo_documento": "b3_release",
+  "emissor": "B3 S.A. - Brasil, Bolsa, Balcão",
+  "data_documento": "2026-06-30",
+  "claims": [
+    {
+      "id": "C01",
+      "texto": "As ofertas públicas na B3 totalizaram R$11,6 bilhões no segundo trimestre de 2026.",
+      "numeros": [
+        {
+          "valor": "11600",
+          "unidade": "BRL_mi",
+          "bruto": "R$11,6 bilhões",
+          "ancora": {
+            "pagina": 2,
+            "offset_inicio": 352,
+            "offset_fim": 366
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 2,
+        "offset_inicio": 323,
+        "offset_fim": 450
+      },
+      "literal_fonte": "Ofertas públicas totalizaram R$11,6 bilhões, sendo um IPO de R$3,0 bilhões, o primeiro em 5 anos, e R$8,6 bilhões\nem follow-ons"
+    },
+    {
+      "id": "C02",
+      "texto": "A B3 registrou uma oferta pública inicial de ações (IPO) de R$3,0 bilhões no segundo trimestre de 2026, a primeira em 5 anos.",
+      "numeros": [
+        {
+          "valor": "3000",
+          "unidade": "BRL_mi",
+          "bruto": "R$3,0 bilhões",
+          "ancora": {
+            "pagina": 2,
+            "offset_inicio": 384,
+            "offset_fim": 397
+          }
+        },
+        {
+          "valor": "5",
+          "unidade": "contagem",
+          "bruto": "5",
+          "ancora": {
+            "pagina": 2,
+            "offset_inicio": 413,
+            "offset_fim": 414
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 2,
+        "offset_inicio": 368,
+        "offset_fim": 419
+      },
+      "literal_fonte": "sendo um IPO de R$3,0 bilhões, o primeiro em 5 anos"
+    },
+    {
+      "id": "C03",
+      "texto": "As ofertas subsequentes de ações (follow-ons) totalizaram R$8,6 bilhões no segundo trimestre de 2026 na B3.",
+      "numeros": [
+        {
+          "valor": "8600",
+          "unidade": "BRL_mi",
+          "bruto": "R$8,6 bilhões",
+          "ancora": {
+            "pagina": 2,
+            "offset_inicio": 423,
+            "offset_fim": 436
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 2,
+        "offset_inicio": 421,
+        "offset_fim": 450
+      },
+      "literal_fonte": "e R$8,6 bilhões\nem follow-ons"
+    },
+    {
+      "id": "C04",
+      "texto": "A receita líquida da B3 atingiu R$ 2.765,7 milhões no segundo trimestre de 2026, com expansão de 8,8% em relação ao segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "2765.7",
+          "unidade": "BRL_mi",
+          "bruto": "2.765,7",
+          "ancora": {
+            "pagina": 2,
+            "offset_inicio": 1839,
+            "offset_fim": 1846
+          }
+        },
+        {
+          "valor": "8.8",
+          "unidade": "pct",
+          "bruto": "8,8%",
+          "ancora": {
+            "pagina": 2,
+            "offset_inicio": 1855,
+            "offset_fim": 1859
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 2,
+        "offset_inicio": 1823,
+        "offset_fim": 1859
+      },
+      "literal_fonte": "Receita líquida\n2.765,7\n2.542,3\n8,8%"
+    },
+    {
+      "id": "C05",
+      "texto": "A receita da B3 totalizou R$ 3,1 bilhões no segundo trimestre de 2026, apresentando crescimento de 12,2% na comparação com o segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "3100",
+          "unidade": "BRL_mi",
+          "bruto": "R$ 3,1 bilhões",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 51,
+            "offset_fim": 65
+          }
+        },
+        {
+          "valor": "12.2",
+          "unidade": "pct",
+          "bruto": "12,2%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 93,
+            "offset_fim": 98
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 26,
+        "offset_fim": 117
+      },
+      "literal_fonte": "A receita da B3 alcançou R$ 3,1 bilhões no 2T26,\num crescimento de 12,2% em relação ao 2T25"
+    },
+    {
+      "id": "C06",
+      "texto": "As receitas pró-cíclicas da B3 registraram alta de 7,9% na comparação anual no segundo trimestre de 2026.",
+      "numeros": [
+        {
+          "valor": "7.9",
+          "unidade": "pct",
+          "bruto": "7,9%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 334,
+            "offset_fim": 338
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 270,
+        "offset_fim": 358
+      },
+      "literal_fonte": "receitas\npró-cíclicas mantiveram desempenho sólido, com alta de\n7,9% na comparação anual"
+    },
+    {
+      "id": "C07",
+      "texto": "As receitas recorrentes da B3 apresentaram avanço de 17,3% no segundo trimestre de 2026 em relação ao mesmo período do ano anterior.",
+      "numeros": [
+        {
+          "valor": "17.3",
+          "unidade": "pct",
+          "bruto": "17,3%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 403,
+            "offset_fim": 408
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 360,
+        "offset_fim": 408
+      },
+      "literal_fonte": "enquanto as\nreceitas recorrentes avançaram\n17,3%"
+    },
+    {
+      "id": "C08",
+      "texto": "O volume médio diário negociado em Derivativos da B3 totalizou 11,1 milhões de contratos no segundo trimestre de 2026, representando uma retração de 8,3% contra o segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "11100000",
+          "unidade": "contagem",
+          "bruto": "11,1 milhões",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 587,
+            "offset_fim": 599
+          }
+        },
+        {
+          "valor": "8.3",
+          "unidade": "pct",
+          "bruto": "8,3%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 623,
+            "offset_fim": 627
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 523,
+        "offset_fim": 646
+      },
+      "literal_fonte": "Em Derivativos, o\nvolume médio diário negociado (ADV) totalizou 11,1 milhões de contratos, queda de 8,3% em relação ao 2T25"
+    },
+    {
+      "id": "C09",
+      "texto": "A queda no volume de Derivativos no segundo trimestre de 2026 decorreu principalmente da redução no volume em Criptoativos por alterações nas margens exigidas e menor atividade de mercado.",
+      "numeros": [],
+      "tipo": "condicionante",
+      "tags": [
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 648,
+        "offset_fim": 878
+      },
+      "literal_fonte": "principalmente em função do menor volume negociado em Criptoativos, em grande parte explicada pelas alterações nas margens\nrequeridas para negociação desses produtos, além de um ambiente de menor atividade observado nesse mercado."
+    },
+    {
+      "id": "C10",
+      "texto": "O estoque de derivativos de balcão da B3 somou R$8,9 trilhões no segundo trimestre de 2026, com elevação de 10,9% em relação ao segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "8900000",
+          "unidade": "BRL_mi",
+          "bruto": "R$8,9 trilhões",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 925,
+            "offset_fim": 939
+          }
+        },
+        {
+          "valor": "10.9",
+          "unidade": "pct",
+          "bruto": "10,9%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 949,
+            "offset_fim": 954
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 879,
+        "offset_fim": 969
+      },
+      "literal_fonte": "Em derivativos\nde balcão, o estoque totalizou R$8,9 trilhões, alta de 10,9% contra\no 2T25."
+    },
+    {
+      "id": "C11",
+      "texto": "A B3 lançou dois Contratos de Eventos Financeiros vinculados ao IPCA e ao PIB durante o segundo trimestre de 2026.",
+      "numeros": [],
+      "tipo": "decisao",
+      "tags": [
+        "impacto_pratico"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 1101,
+        "offset_fim": 1302
+      },
+      "literal_fonte": "a Companhia lançou dois\nContratos de Eventos\nFinanceiros vinculados ao IPCA e ao PIB, possibilitando a negociação de expectativas sobre inflação e crescimento econômico de\nforma simples e transparente."
+    },
+    {
+      "id": "C12",
+      "texto": "O volume financeiro médio diário negociado no mercado à vista de Renda Variável da B3 totalizou R$31,3 bilhões no segundo trimestre de 2026, alta de 20,1% frente ao segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "31300",
+          "unidade": "BRL_mi",
+          "bruto": "R$31,3 bilhões",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 1401,
+            "offset_fim": 1415
+          }
+        },
+        {
+          "valor": "20.1",
+          "unidade": "pct",
+          "bruto": "20,1%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 1435,
+            "offset_fim": 1440
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 1303,
+        "offset_fim": 1459
+      },
+      "literal_fonte": "Em Renda Variável, o volume financeiro médio diário negociado (ADTV) no mercado à vista totalizou R$31,3 bilhões, um\ncrescimento de 20,1% em relação ao 2T25"
+    },
+    {
+      "id": "C13",
+      "texto": "O volume financeiro médio diário de BDRs na B3 registrou expansão de 41,8% no segundo trimestre de 2026 em relação ao segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "41.8",
+          "unidade": "pct",
+          "bruto": "41,8%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 1498,
+            "offset_fim": 1503
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 1465,
+        "offset_fim": 1519
+      },
+      "literal_fonte": "destaque para os crescimentos de\n41,8% no ADTV de BDRs"
+    },
+    {
+      "id": "C14",
+      "texto": "O volume financeiro médio diário de Fundos Listados na B3 avançou 73,6% no segundo trimestre de 2026 contra o segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "73.6",
+          "unidade": "pct",
+          "bruto": "73,6%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 1525,
+            "offset_fim": 1530
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 1520,
+        "offset_fim": 1550
+      },
+      "literal_fonte": "e de 73,6% em Fundos\nListados."
+    },
+    {
+      "id": "C15",
+      "texto": "A B3 expandiu o rol de ativos elegíveis ao programa Retail Liquidity Provider mediante a inclusão gradual de ações, BDRs, ETFs e fundos listados.",
+      "numeros": [],
+      "tipo": "decisao",
+      "tags": [
+        "impacto_pratico"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 1738,
+        "offset_fim": 1877
+      },
+      "literal_fonte": "a lista de ativos elegíveis ao RLP\n(Retail Liquidity\nProvider) foi expandida, com a\ninclusão gradual de ações, BDRs, ETFs e fundos listados"
+    },
+    {
+      "id": "C16",
+      "texto": "As emissões no segmento de Renda Fixa e Crédito da B3 avançaram 3,3% no segundo trimestre de 2026 comparadas ao segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "3.3",
+          "unidade": "pct",
+          "bruto": "3,3%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 2044,
+            "offset_fim": 2048
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 1975,
+        "offset_fim": 2092
+      },
+      "literal_fonte": "No segmento de Renda Fixa e Crédito, as\nemissões e estoque cresceram 3,3% e 16,5% em relação ao 2T25, respectivamente"
+    },
+    {
+      "id": "C17",
+      "texto": "O estoque do segmento de Renda Fixa e Crédito da B3 cresceu 16,5% no segundo trimestre de 2026 em relação ao segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "16.5",
+          "unidade": "pct",
+          "bruto": "16,5%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 2051,
+            "offset_fim": 2056
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 1975,
+        "offset_fim": 2092
+      },
+      "literal_fonte": "No segmento de Renda Fixa e Crédito, as\nemissões e estoque cresceram 3,3% e 16,5% em relação ao 2T25, respectivamente"
+    },
+    {
+      "id": "C18",
+      "texto": "O estoque de dívida corporativa na B3 registrou expansão de 14,4% no segundo trimestre de 2026 em relação ao mesmo período do ano anterior.",
+      "numeros": [
+        {
+          "valor": "14.4",
+          "unidade": "pct",
+          "bruto": "14,4%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 2193,
+            "offset_fim": 2198
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 2152,
+        "offset_fim": 2198
+      },
+      "literal_fonte": "Em dívida corporativa, o estoque avançou 14,4%"
+    },
+    {
+      "id": "C19",
+      "texto": "O estoque do Tesouro Direto na B3 aumentou 43,7% no segundo trimestre de 2026 em relação ao segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "43.7",
+          "unidade": "pct",
+          "bruto": "43,7%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 2251,
+            "offset_fim": 2256
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 2200,
+        "offset_fim": 2278
+      },
+      "literal_fonte": "enquanto no\nTesouro Direto destaca-se o aumento de 43,7% no estoque do produto"
+    },
+    {
+      "id": "C20",
+      "texto": "A base do Tesouro Direto superou 3,5 milhões de investidores no encerramento do segundo trimestre de 2026.",
+      "numeros": [
+        {
+          "valor": "3500000",
+          "unidade": "contagem",
+          "bruto": "3,5 milhões",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 2292,
+            "offset_fim": 2303
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 2280,
+        "offset_fim": 2342
+      },
+      "literal_fonte": "com mais de 3,5 milhões de investidores ao final do\ntrimestre."
+    },
+    {
+      "id": "C21",
+      "texto": "A B3 implementou o programa de formadores de mercado para debêntures na plataforma Trademate com o objetivo de incentivar a liquidez no mercado secundário.",
+      "numeros": [],
+      "tipo": "decisao",
+      "tags": [
+        "impacto_pratico"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 2355,
+        "offset_fim": 2507
+      },
+      "literal_fonte": "foi lançado o\nprograma de formadores de mercado para debêntures no Trademate, visando estimular a\nliquidez e a formação de preços no mercado secundário."
+    },
+    {
+      "id": "C22",
+      "texto": "A B3 obteve aprovação regulatória para operar a escrituração de duplicatas e deu início à etapa de produção assistida em julho de 2026.",
+      "numeros": [],
+      "tipo": "decisao",
+      "tags": [
+        "governanca",
+        "impacto_pratico"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 2530,
+        "offset_fim": 2668
+      },
+      "literal_fonte": "a\nB3 recebeu autorização regulatória para atuar\nna atividade de escrituração de duplicatas\ne iniciou a fase de\nprodução assistida em julho"
+    },
+    {
+      "id": "C23",
+      "texto": "O segmento de Soluções para Mercado de Capitais da B3 auferiu receita de R$201,0 milhões no segundo trimestre de 2026, com alta anual de 25,8%.",
+      "numeros": [
+        {
+          "valor": "201.0",
+          "unidade": "BRL_mi",
+          "bruto": "R$201,0 milhões",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 2863,
+            "offset_fim": 2878
+          }
+        },
+        {
+          "valor": "25.8",
+          "unidade": "pct",
+          "bruto": "25,8%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 2888,
+            "offset_fim": 2893
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 2808,
+        "offset_fim": 2913
+      },
+      "literal_fonte": "Soluções para Mercado de Capitais registrou receita de R$201,0 milhões, alta de 25,8%\nem relação ao\n2T25."
+    },
+    {
+      "id": "C24",
+      "texto": "A B3 disponibilizou três índices da família B3 Tesouro IPCA com prazos médios de referência fixados em 2, 5 e 10 anos.",
+      "numeros": [
+        {
+          "valor": "2",
+          "unidade": "contagem",
+          "bruto": "2",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 3027,
+            "offset_fim": 3028
+          }
+        },
+        {
+          "valor": "5",
+          "unidade": "contagem",
+          "bruto": "5",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 3030,
+            "offset_fim": 3031
+          }
+        },
+        {
+          "valor": "10",
+          "unidade": "contagem",
+          "bruto": "10",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 3034,
+            "offset_fim": 3036
+          }
+        }
+      ],
+      "tipo": "decisao",
+      "tags": [
+        "impacto_pratico"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 2937,
+        "offset_fim": 3041
+      },
+      "literal_fonte": "foram lançados três índices da família B3 Tesouro IPCA, com referências\nde prazo médio de 2,\n5 e\n10 anos"
+    },
+    {
+      "id": "C25",
+      "texto": "A B3 iniciou o período de testes da infraestrutura de sua moeda digital pareada ao real (stablecoin), a B3RL.",
+      "numeros": [],
+      "tipo": "decisao",
+      "tags": [
+        "impacto_pratico"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 3204,
+        "offset_fim": 3338
+      },
+      "literal_fonte": "com destaque para\no início do período de testes da\ninfraestrutura de sua stablecoin,\nB3RL, buscando viabilizar a tokenização de ativos"
+    },
+    {
+      "id": "C26",
+      "texto": "A receita de Soluções Analíticas de Dados (Trillia) somou R$315,2 milhões no segundo trimestre de 2026, correspondendo a um crescimento de 22,0% em relação ao segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "315.2",
+          "unidade": "BRL_mi",
+          "bruto": "R$315,2 milhões",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 3475,
+            "offset_fim": 3490
+          }
+        },
+        {
+          "valor": "22.0",
+          "unidade": "pct",
+          "bruto": "22,0%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 3507,
+            "offset_fim": 3512
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 3416,
+        "offset_fim": 3512
+      },
+      "literal_fonte": "Em\nSoluções Analíticas de Dados (Trillia), a receita somou R$315,2 milhões, crescimento de 22,0%"
+    },
+    {
+      "id": "C27",
+      "texto": "A receita da unidade de Tecnologia e Plataformas da B3 alcançou R$526,8 milhões no segundo trimestre de 2026, com valorização anual de 15,7%.",
+      "numeros": [
+        {
+          "valor": "526.8",
+          "unidade": "BRL_mi",
+          "bruto": "R$526,8 milhões",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 3634,
+            "offset_fim": 3649
+          }
+        },
+        {
+          "valor": "15.7",
+          "unidade": "pct",
+          "bruto": "15,7%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 3661,
+            "offset_fim": 3666
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 3587,
+        "offset_fim": 3687
+      },
+      "literal_fonte": "Tecnologia e Plataformas apresentou receita de R$526,8 milhões, avanço de 15,7%\nna\ncomparação anual."
+    },
+    {
+      "id": "C28",
+      "texto": "As despesas totais da B3 totalizaram R$975,6 milhões no segundo trimestre de 2026, registrando aumento de 15,5% em comparação com o segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "975.6",
+          "unidade": "BRL_mi",
+          "bruto": "R$975,6 milhões",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 3928,
+            "offset_fim": 3943
+          }
+        },
+        {
+          "valor": "15.5",
+          "unidade": "pct",
+          "bruto": "15,5%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 3953,
+            "offset_fim": 3958
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 3904,
+        "offset_fim": 3977
+      },
+      "literal_fonte": "As despesas totalizaram R$975,6 milhões, alta de 15,5% em relação ao 2T25"
+    },
+    {
+      "id": "C29",
+      "texto": "As despesas ajustadas da B3 aumentaram 6,2% no segundo trimestre de 2026 em relação ao mesmo período de 2025, equivalendo à variação do IPCA acrescida de 1,5%.",
+      "numeros": [
+        {
+          "valor": "6.2",
+          "unidade": "pct",
+          "bruto": "6,2%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 4227,
+            "offset_fim": 4231
+          }
+        },
+        {
+          "valor": "1.5",
+          "unidade": "pct",
+          "bruto": "1,5%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 4243,
+            "offset_fim": 4247
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 4177,
+        "offset_fim": 4247
+      },
+      "literal_fonte": "As despesas ajustadas apresentaram crescimento de 6,2%, ou IPCA + 1,5%"
+    },
+    {
+      "id": "C30",
+      "texto": "A B3 exerceu opção de venda de toda a sua fatia de 37,5% na Dimensa pelo valor total de R$665 milhões.",
+      "numeros": [
+        {
+          "valor": "37.5",
+          "unidade": "pct",
+          "bruto": "37,5%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 4492,
+            "offset_fim": 4497
+          }
+        },
+        {
+          "valor": "665",
+          "unidade": "BRL_mi",
+          "bruto": "R$665\nmilhões",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 4526,
+            "offset_fim": 4539
+          }
+        }
+      ],
+      "tipo": "decisao",
+      "tags": [
+        "governanca",
+        "impacto_pratico"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 4425,
+        "offset_fim": 4539
+      },
+      "literal_fonte": "a B3 exerceu a opção de venda da totalidade de sua participação de 37,5% na Dimensa pelo montante de R$665\nmilhões"
+    },
+    {
+      "id": "C31",
+      "texto": "A venda da fatia na Dimensa gerou um efeito positivo não recorrente de R$123,9 milhões no resultado da B3 no segundo trimestre de 2026.",
+      "numeros": [
+        {
+          "valor": "123.9",
+          "unidade": "BRL_mi",
+          "bruto": "R$123,9 milhões",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 4610,
+            "offset_fim": 4625
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 4541,
+        "offset_fim": 4634
+      },
+      "literal_fonte": "resultando no reconhecimento de\num efeito positivo não recorrente de R$123,9 milhões no 2T26."
+    },
+    {
+      "id": "C32",
+      "texto": "A B3 anunciou a distribuição de R$1.106,0 milhões sob a forma de juros sobre o capital próprio, sendo R$356 milhões ordinários e R$750 milhões extraordinários.",
+      "numeros": [
+        {
+          "valor": "1106.0",
+          "unidade": "BRL_mi",
+          "bruto": "R$1.106,0 milhões",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 4671,
+            "offset_fim": 4688
+          }
+        },
+        {
+          "valor": "356",
+          "unidade": "BRL_mi",
+          "bruto": "R$356 milhões",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 4735,
+            "offset_fim": 4748
+          }
+        },
+        {
+          "valor": "750",
+          "unidade": "BRL_mi",
+          "bruto": "R$750 milhões",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 4762,
+            "offset_fim": 4775
+          }
+        }
+      ],
+      "tipo": "decisao",
+      "tags": [
+        "impacto_pratico",
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 4635,
+        "offset_fim": 4791
+      },
+      "literal_fonte": "A Companhia anunciou\no pagamento de R$1.106,0 milhões em juros sobre o capital próprio (JCP), sendo R$356 milhões ordinários\ne R$750 milhões extraordinários"
+    },
+    {
+      "id": "C33",
+      "texto": "As recompras de ações efetuadas pela B3 totalizaram R$196,9 milhões no segundo trimestre de 2026.",
+      "numeros": [
+        {
+          "valor": "196.9",
+          "unidade": "BRL_mi",
+          "bruto": "R$196,9 milhões",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 4889,
+            "offset_fim": 4904
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "impacto_pratico",
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 4867,
+        "offset_fim": 4904
+      },
+      "literal_fonte": "recompras de ações\nde R$196,9 milhões"
+    },
+    {
+      "id": "C34",
+      "texto": "O total de recursos distribuídos aos acionistas da B3 no segundo trimestre de 2026 somou R$1.302,9 milhões.",
+      "numeros": [
+        {
+          "valor": "1302.9",
+          "unidade": "BRL_mi",
+          "bruto": "R$1.302,9 milhões",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 4950,
+            "offset_fim": 4967
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "impacto_pratico",
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 4906,
+        "offset_fim": 4975
+      },
+      "literal_fonte": "as distribuições aos acionistas totalizaram R$1.302,9 milhões no 2T26"
+    },
+    {
+      "id": "C35",
+      "texto": "O lucro líquido societário consolidado da B3 totalizou R$1.701,2 milhões no segundo trimestre de 2026, com expansão de 28,2% sobre o segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "1701.2",
+          "unidade": "BRL_mi",
+          "bruto": "R$1.701,2\nmilhões",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 5122,
+            "offset_fim": 5139
+          }
+        },
+        {
+          "valor": "28.2",
+          "unidade": "pct",
+          "bruto": "28,2%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 5153,
+            "offset_fim": 5158
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 5085,
+        "offset_fim": 5177
+      },
+      "literal_fonte": "O lucro líquido societário totalizou R$1.701,2\nmilhões, uma alta de 28,2% em relação ao 2T25"
+    },
+    {
+      "id": "C36",
+      "texto": "A B3 registrou lucro por ação de R$0,34 no segundo trimestre de 2026, correspondendo a uma valorização de 33,3%.",
+      "numeros": [
+        {
+          "valor": "0.34",
+          "unidade": "BRL",
+          "bruto": "R$0,34",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 5215,
+            "offset_fim": 5221
+          }
+        },
+        {
+          "valor": "33.3",
+          "unidade": "pct",
+          "bruto": "33,3%",
+          "ancora": {
+            "pagina": 3,
+            "offset_inicio": 5231,
+            "offset_fim": 5236
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 5179,
+        "offset_fim": 5237
+      },
+      "literal_fonte": "enquanto o lucro por ação totalizou R$0,34, alta de 33,3%."
+    },
+    {
+      "id": "C37",
+      "texto": "A B3 comunicou a contratação de Christian Egan como novo diretor-presidente (CEO) em junho de 2026.",
+      "numeros": [],
+      "tipo": "decisao",
+      "tags": [
+        "governanca"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 5238,
+        "offset_fim": 5311
+      },
+      "literal_fonte": "Em junho, a Companhia anunciou\na chegada de Christian Egan como novo CEO."
+    },
+    {
+      "id": "C38",
+      "texto": "A administração da B3 definiu que a atuação da companhia seguirá fundamentada nos pilares de centralidade no cliente, tecnologia e pessoas.",
+      "numeros": [],
+      "tipo": "condicionante",
+      "tags": [
+        "governanca"
+      ],
+      "ancora": {
+        "pagina": 3,
+        "offset_inicio": 5330,
+        "offset_fim": 5567
+      },
+      "literal_fonte": "a Companhia continuará orientada\npor três pilares fundamentais:\nclientes no centro de cada decisão, tecnologia como motor de transformação e pessoas como\nprincipal diferencial para promover colaboração, inovação e resultados sustentáveis"
+    },
+    {
+      "id": "C39",
+      "texto": "O volume médio diário de contratos derivativos de taxas de juros em reais aumentou 6,7% no segundo trimestre de 2026 em relação ao segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "6.7",
+          "unidade": "pct",
+          "bruto": "6,7%",
+          "ancora": {
+            "pagina": 4,
+            "offset_inicio": 2675,
+            "offset_fim": 2679
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 4,
+        "offset_inicio": 2634,
+        "offset_fim": 2757
+      },
+      "literal_fonte": "parcialmente compensada pelos avanços de 6,7% e 20,4% no ADV de Taxas de Juros em R$ e de Índice\nde ações, respectivamente."
+    },
+    {
+      "id": "C40",
+      "texto": "O volume médio diário de contratos de derivativos de índices de ações registrou alta de 20,4% no segundo trimestre de 2026 em relação ao segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "20.4",
+          "unidade": "pct",
+          "bruto": "20,4%",
+          "ancora": {
+            "pagina": 4,
+            "offset_inicio": 2682,
+            "offset_fim": 2687
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 4,
+        "offset_inicio": 2634,
+        "offset_fim": 2757
+      },
+      "literal_fonte": "parcialmente compensada pelos avanços de 6,7% e 20,4% no ADV de Taxas de Juros em R$ e de Índice\nde ações, respectivamente."
+    },
+    {
+      "id": "C41",
+      "texto": "A receita média por contrato nos derivativos da B3 teve alta de 4,1% no segundo trimestre de 2026 em relação ao segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "4.1",
+          "unidade": "pct",
+          "bruto": "4,1%",
+          "ancora": {
+            "pagina": 5,
+            "offset_inicio": 38,
+            "offset_fim": 42
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 5,
+        "offset_inicio": 0,
+        "offset_fim": 61
+      },
+      "literal_fonte": "A RPC média apresentou crescimento de 4,1% em relação ao 2T25"
+    },
+    {
+      "id": "C42",
+      "texto": "As novas emissões de derivativos de balcão e operações estruturadas na B3 tiveram crescimento de 7,4% no segundo trimestre de 2026 frente ao segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "7.4",
+          "unidade": "pct",
+          "bruto": "7,4%",
+          "ancora": {
+            "pagina": 5,
+            "offset_inicio": 639,
+            "offset_fim": 643
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 5,
+        "offset_inicio": 571,
+        "offset_fim": 656
+      },
+      "literal_fonte": "Em derivativos de balcão e operações estruturadas, houve aumento de 7,4% nas\nemissões"
+    },
+    {
+      "id": "C43",
+      "texto": "A estrutura de contabilidade de hedge gerou um ganho líquido de R$10,4 milhões na receita de derivativos da B3 no segundo trimestre de 2026.",
+      "numeros": [
+        {
+          "valor": "10.4",
+          "unidade": "BRL_mi",
+          "bruto": "R$10,4 milhões",
+          "ancora": {
+            "pagina": 5,
+            "offset_inicio": 1479,
+            "offset_fim": 1493
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "metodologico"
+      ],
+      "ancora": {
+        "pagina": 5,
+        "offset_inicio": 1394,
+        "offset_fim": 1530
+      },
+      "literal_fonte": "No 2T26, o impacto líquido dessa estrutura na receita\nde derivativos foi positivo em R$10,4 milhões, dada a variação cambial no período."
+    },
+    {
+      "id": "C44",
+      "texto": "O volume negociado em ETFs, BDRs e Fundos Listados representou 14,2% do ADTV total no trimestre, em comparação a 14,9% no 2T25.",
+      "numeros": [
+        {
+          "valor": "14.2",
+          "unidade": "pct",
+          "bruto": "14,2%",
+          "ancora": {
+            "pagina": 5,
+            "offset_inicio": 2709,
+            "offset_fim": 2714
+          }
+        },
+        {
+          "valor": "14.9",
+          "unidade": "pct",
+          "bruto": "14,9%",
+          "ancora": {
+            "pagina": 5,
+            "offset_inicio": 2734,
+            "offset_fim": 2739
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 5,
+        "offset_inicio": 2632,
+        "offset_fim": 2749
+      },
+      "literal_fonte": "No trimestre, o volume\nnegociado em ETFs, BDRs e Fundos Listados representou 14,2% do ADTV total (vs. 14,9% no 2T25)."
+    },
+    {
+      "id": "C45",
+      "texto": "A margem de negociação e pós-negociação do mercado à vista de ações da B3 situou-se em 3,074 bps no segundo trimestre de 2026, com retração de 0,085 bps.",
+      "numeros": [
+        {
+          "valor": "0.03074",
+          "unidade": "pp",
+          "bruto": "3,074 bps",
+          "ancora": {
+            "pagina": 5,
+            "offset_inicio": 3130,
+            "offset_fim": 3139
+          }
+        },
+        {
+          "valor": "0.00085",
+          "unidade": "pp",
+          "bruto": "0,085 bps",
+          "ancora": {
+            "pagina": 5,
+            "offset_inicio": 3150,
+            "offset_fim": 3159
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 5,
+        "offset_inicio": 3055,
+        "offset_fim": 3159
+      },
+      "literal_fonte": "A margem de negociação e pós-negociação no mercado à vista de ações foi de 3,074 bps,\nqueda de 0,085 bps"
+    },
+    {
+      "id": "C46",
+      "texto": "O volume de captação bancária emitido na B3 expandiu 5,2% no segundo trimestre de 2026, impulsionado pela alta de 30,4% nas emissões de RDB.",
+      "numeros": [
+        {
+          "valor": "5.2",
+          "unidade": "pct",
+          "bruto": "5,2%",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 73,
+            "offset_fim": 77
+          }
+        },
+        {
+          "valor": "30.4",
+          "unidade": "pct",
+          "bruto": "30,4%",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 120,
+            "offset_fim": 125
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 6,
+        "offset_inicio": 0,
+        "offset_fim": 146
+      },
+      "literal_fonte": "O volume de novas emissões de instrumentos de captação bancária aumentou 5,2%, impulsionado principalmente pela alta de\n30,4% nas emissões de RDB."
+    },
+    {
+      "id": "C47",
+      "texto": "As emissões de outros títulos de renda fixa recuaram 18,6% no segundo trimestre de 2026, afetadas pela queda de 43,0% nas emissões de LCAs.",
+      "numeros": [
+        {
+          "valor": "18.6",
+          "unidade": "pct",
+          "bruto": "18,6%",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 198,
+            "offset_fim": 203
+          }
+        },
+        {
+          "valor": "43.0",
+          "unidade": "pct",
+          "bruto": "43,0%",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 238,
+            "offset_fim": 243
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 6,
+        "offset_inicio": 147,
+        "offset_fim": 265
+      },
+      "literal_fonte": "Em outros instrumentos de renda fixa, a redução de 18,6% reflete principalmente a queda de 43,0%\nnas emissões de LCAs."
+    },
+    {
+      "id": "C48",
+      "texto": "O estoque de outros instrumentos de renda fixa cresceu 14,1% no segundo trimestre de 2026, impulsionado por altas de 115,1% em CCB, 24,9% em CPR e 16,4% em LCI.",
+      "numeros": [
+        {
+          "valor": "14.1",
+          "unidade": "pct",
+          "bruto": "14,1%",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 554,
+            "offset_fim": 559
+          }
+        },
+        {
+          "valor": "115.1",
+          "unidade": "pct",
+          "bruto": "115,1%",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 623,
+            "offset_fim": 629
+          }
+        },
+        {
+          "valor": "24.9",
+          "unidade": "pct",
+          "bruto": "24,9%",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 631,
+            "offset_fim": 636
+          }
+        },
+        {
+          "valor": "16.4",
+          "unidade": "pct",
+          "bruto": "16,4%",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 639,
+            "offset_fim": 644
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 6,
+        "offset_inicio": 515,
+        "offset_fim": 692
+      },
+      "literal_fonte": "Vale ressaltar também o crescimento de 14,1% no estoque de “Outros” produtos, com destaque para as altas de\n115,1%, 24,9% e 16,4% nos volumes de CCB, CPR e LCI, respectivamente."
+    },
+    {
+      "id": "C49",
+      "texto": "A receita da linha de empréstimo de ativos da B3 totalizou R$75,2 milhões no segundo trimestre de 2026, diminuição de 5,6% causada pelo declínio na taxa média cobrada pelo doador.",
+      "numeros": [
+        {
+          "valor": "75.2",
+          "unidade": "BRL_mi",
+          "bruto": "R$75,2 milhões",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 1248,
+            "offset_fim": 1262
+          }
+        },
+        {
+          "valor": "5.6",
+          "unidade": "pct",
+          "bruto": "5,6%",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 1273,
+            "offset_fim": 1277
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 6,
+        "offset_inicio": 1204,
+        "offset_fim": 1353
+      },
+      "literal_fonte": "A receita de empréstimo de ativos totalizou R$75,2 milhões, queda de 5,6%, explicada principalmente pela\nqueda na taxa média\ndo doador das operações."
+    },
+    {
+      "id": "C50",
+      "texto": "A receita de Dados para Mercado de Capitais da B3 atingiu R$99,0 milhões no segundo trimestre de 2026, representando um incremento de 28,4%.",
+      "numeros": [
+        {
+          "valor": "99.0",
+          "unidade": "BRL_mi",
+          "bruto": "R$99,0 milhões",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 1439,
+            "offset_fim": 1453
+          }
+        },
+        {
+          "valor": "28.4",
+          "unidade": "pct",
+          "bruto": "28,4%",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 1466,
+            "offset_fim": 1471
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 6,
+        "offset_inicio": 1419,
+        "offset_fim": 1471
+      },
+      "literal_fonte": "A receita totalizou R$99,0 milhões, aumento de 28,4%"
+    },
+    {
+      "id": "C51",
+      "texto": "A quantidade média de investidores individuais na central depositária da B3 aumentou 6,2% no segundo trimestre de 2026 na comparação interanual.",
+      "numeros": [
+        {
+          "valor": "6.2",
+          "unidade": "pct",
+          "bruto": "6,2%",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 2564,
+            "offset_fim": 2568
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 6,
+        "offset_inicio": 2525,
+        "offset_fim": 2568
+      },
+      "literal_fonte": "O número médio de investidores cresceu 6,2%"
+    },
+    {
+      "id": "C52",
+      "texto": "A receita de depositária do mercado à vista da B3 somou R$59,0 milhões no segundo trimestre de 2026, valor 21,6% superior ao apurado no segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "59.0",
+          "unidade": "BRL_mi",
+          "bruto": "R$59,0 milhões",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 2737,
+            "offset_fim": 2751
+          }
+        },
+        {
+          "valor": "21.6",
+          "unidade": "pct",
+          "bruto": "21,6%",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 2761,
+            "offset_fim": 2766
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 6,
+        "offset_inicio": 2721,
+        "offset_fim": 2766
+      },
+      "literal_fonte": "A receita somou R$59,0 milhões, alta de 21,6%"
+    },
+    {
+      "id": "C53",
+      "texto": "A receita de Listagem e Soluções para Emissores da B3 totalizou R$43 milhões no segundo trimestre de 2026, com alta anual de 25,8%.",
+      "numeros": [
+        {
+          "valor": "43",
+          "unidade": "BRL_mi",
+          "bruto": "R$43 milhões",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 3158,
+            "offset_fim": 3170
+          }
+        },
+        {
+          "valor": "25.8",
+          "unidade": "pct",
+          "bruto": "25,8%",
+          "ancora": {
+            "pagina": 6,
+            "offset_inicio": 3183,
+            "offset_fim": 3188
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 6,
+        "offset_inicio": 3138,
+        "offset_fim": 3188
+      },
+      "literal_fonte": "A receita totalizou R$43 milhões, aumento de 25,8%"
+    },
+    {
+      "id": "C54",
+      "texto": "As vendas de veículos no Brasil subiram 11,4% e os financiamentos de veículos aumentaram 9,0% durante o segundo trimestre de 2026.",
+      "numeros": [
+        {
+          "valor": "11.4",
+          "unidade": "pct",
+          "bruto": "11,4%",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 58,
+            "offset_fim": 63
+          }
+        },
+        {
+          "valor": "9.0",
+          "unidade": "pct",
+          "bruto": "9,0%",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 114,
+            "offset_fim": 118
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 7,
+        "offset_inicio": 0,
+        "offset_fim": 119
+      },
+      "literal_fonte": "No 2T26, o número de veículos vendidos no Brasil aumentou 11,4%, enquanto o número de financiamentos teve alta de 9,0%."
+    },
+    {
+      "id": "C55",
+      "texto": "O percentual de veículos financiados alcançou 30,6% dos veículos vendidos, apresentando queda de 0,7 p.p. em relação ao 2T25.",
+      "numeros": [
+        {
+          "valor": "30.6",
+          "unidade": "pct",
+          "bruto": "30,6%",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 169,
+            "offset_fim": 174
+          }
+        },
+        {
+          "valor": "0.7",
+          "unidade": "pp",
+          "bruto": "0,7 p.p.",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 207,
+            "offset_fim": 215
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "contexto_macro"
+      ],
+      "ancora": {
+        "pagina": 7,
+        "offset_inicio": 120,
+        "offset_fim": 235
+      },
+      "literal_fonte": "Já\no percentual de veículos financiados alcançou 30,6% dos veículos vendidos, queda de 0,7 p.p. em relação ao 2T25."
+    },
+    {
+      "id": "C56",
+      "texto": "A receita totalizou R$175,9 milhões, registrando aumento de 32,3%, com acréscimo de R$27,5 milhões no 2T26 decorrente da unificação da arrecadação pelo novo modelo de cobrança do SNG.",
+      "numeros": [
+        {
+          "valor": "175.9",
+          "unidade": "BRL_mi",
+          "bruto": "R$175,9 milhões",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 256,
+            "offset_fim": 271
+          }
+        },
+        {
+          "valor": "32.3",
+          "unidade": "pct",
+          "bruto": "32,3%",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 284,
+            "offset_fim": 289
+          }
+        },
+        {
+          "valor": "27.5",
+          "unidade": "BRL_mi",
+          "bruto": "R$27,5 milhões",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 414,
+            "offset_fim": 428
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 7,
+        "offset_inicio": 236,
+        "offset_fim": 436
+      },
+      "literal_fonte": "A receita totalizou R$175,9 milhões, aumento de 32,3%, explicado (i) pela implementação do novo modelo de cobrança do SNG,\nque unificou a arrecadação através da B3 e acrescentou\nR$27,5 milhões no 2T26"
+    },
+    {
+      "id": "C57",
+      "texto": "A receita da linha de Plataformas e Dados Analíticos totalizou R$139,3 milhões no segundo trimestre de 2026, com expansão de 11,1% frente ao segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "139.3",
+          "unidade": "BRL_mi",
+          "bruto": "R$139,3 milhões",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 634,
+            "offset_fim": 649
+          }
+        },
+        {
+          "valor": "11.1",
+          "unidade": "pct",
+          "bruto": "11,1%",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 659,
+            "offset_fim": 664
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 7,
+        "offset_inicio": 617,
+        "offset_fim": 664
+      },
+      "literal_fonte": "A receita foi de R$139,3 milhões, alta de 11,1%"
+    },
+    {
+      "id": "C58",
+      "texto": "O número médio de clientes do serviço mensal dos sistemas de Balcão da B3 aumentou 8,7% no segundo trimestre de 2026 em relação ao mesmo período do ano anterior.",
+      "numeros": [
+        {
+          "valor": "8.7",
+          "unidade": "pct",
+          "bruto": "8,7%",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 1798,
+            "offset_fim": 1802
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 7,
+        "offset_inicio": 1703,
+        "offset_fim": 1802
+      },
+      "literal_fonte": "A quantidade média de clientes do serviço de utilização mensal dos sistemas de Balcão aumentou 8,7%"
+    },
+    {
+      "id": "C59",
+      "texto": "A linha de Tecnologia da B3 apurou receita de R$346,6 milhões no segundo trimestre de 2026, com ampliação de 10,3% na base de comparação anual.",
+      "numeros": [
+        {
+          "valor": "346.6",
+          "unidade": "BRL_mi",
+          "bruto": "R$346,6 milhões",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 1912,
+            "offset_fim": 1927
+          }
+        },
+        {
+          "valor": "10.3",
+          "unidade": "pct",
+          "bruto": "10,3%",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 1937,
+            "offset_fim": 1942
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 7,
+        "offset_inicio": 1878,
+        "offset_fim": 1942
+      },
+      "literal_fonte": "A receita de Tecnologia totalizou R$346,6 milhões, alta de 10,3%"
+    },
+    {
+      "id": "C60",
+      "texto": "A receita proveniente de Serviços de Apoio ao Mercado foi de R$162,7 milhões no segundo trimestre de 2026, o que representa avanço de 31,4% frente ao segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "162.7",
+          "unidade": "BRL_mi",
+          "bruto": "R$162,7 milhões",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 2135,
+            "offset_fim": 2150
+          }
+        },
+        {
+          "valor": "31.4",
+          "unidade": "pct",
+          "bruto": "31,4%",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 2160,
+            "offset_fim": 2165
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 7,
+        "offset_inicio": 2124,
+        "offset_fim": 2165
+      },
+      "literal_fonte": "Receita de R$162,7 milhões, alta de 31,4%"
+    },
+    {
+      "id": "C61",
+      "texto": "Os gastos com pessoal e encargos da B3 totalizaram R$459,8 milhões no segundo trimestre de 2026, correspondendo a um aumento de 22,0% em comparação ao segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "459.8",
+          "unidade": "BRL_mi",
+          "bruto": "R$459,8 milhões",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 2529,
+            "offset_fim": 2544
+          }
+        },
+        {
+          "valor": "22.0",
+          "unidade": "pct",
+          "bruto": "22,0%",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 2554,
+            "offset_fim": 2559
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 7,
+        "offset_inicio": 2509,
+        "offset_fim": 2559
+      },
+      "literal_fonte": "Pessoal e encargos: R$459,8 milhões, alta de 22,0%"
+    },
+    {
+      "id": "C62",
+      "texto": "As despesas da B3 com tecnologia da informação somaram R$186,1 milhões no segundo trimestre de 2026, com avanços de 6,8% sobre o segundo trimestre de 2025 e de 9,2% sobre o primeiro trimestre de 2026.",
+      "numeros": [
+        {
+          "valor": "186.1",
+          "unidade": "BRL_mi",
+          "bruto": "R$186,1 milhões",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 3164,
+            "offset_fim": 3179
+          }
+        },
+        {
+          "valor": "6.8",
+          "unidade": "pct",
+          "bruto": "6,8%",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 3190,
+            "offset_fim": 3194
+          }
+        },
+        {
+          "valor": "9.2",
+          "unidade": "pct",
+          "bruto": "9,2%",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 3197,
+            "offset_fim": 3201
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 7,
+        "offset_inicio": 3136,
+        "offset_fim": 3244
+      },
+      "literal_fonte": "Tecnologia da informação\n6: R$186,1 milhões, altas de 6,8% e 9,2% em relação ao 2T25 e 1T26, respectivamente"
+    },
+    {
+      "id": "C63",
+      "texto": "As despesas com depreciação e amortização da B3 alcançaram R$95,3 milhões no segundo trimestre de 2026, apontando recuo de 1,6%.",
+      "numeros": [
+        {
+          "valor": "95.3",
+          "unidade": "BRL_mi",
+          "bruto": "R$95,3 milhões",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 3512,
+            "offset_fim": 3526
+          }
+        },
+        {
+          "valor": "1.6",
+          "unidade": "pct",
+          "bruto": "1,6%",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 3537,
+            "offset_fim": 3541
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 7,
+        "offset_inicio": 3485,
+        "offset_fim": 3542
+      },
+      "literal_fonte": "Depreciação e amortização: R$95,3 milhões, queda de 1,6%."
+    },
+    {
+      "id": "C64",
+      "texto": "As despesas atreladas ao faturamento atingiram R$143,1 milhões, exibindo alta de 38,6%, refletindo impacto de R$27,5 milhões provenientes da implementação do novo modelo de cobrança do Sistema Nacional de Gravames (SNG).",
+      "numeros": [
+        {
+          "valor": "143.1",
+          "unidade": "BRL_mi",
+          "bruto": "R$143,1 milhões",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 3571,
+            "offset_fim": 3586
+          }
+        },
+        {
+          "valor": "38.6",
+          "unidade": "pct",
+          "bruto": "38,6%",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 3596,
+            "offset_fim": 3601
+          }
+        },
+        {
+          "valor": "27.5",
+          "unidade": "BRL_mi",
+          "bruto": "R$27,5 milhões",
+          "ancora": {
+            "pagina": 7,
+            "offset_inicio": 3646,
+            "offset_fim": 3660
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 7,
+        "offset_inicio": 3545,
+        "offset_fim": 3754
+      },
+      "literal_fonte": "Atreladas ao faturamento: R$143,1 milhões, alta de 38,6%, refletindo principalmente (i) o impacto de R$27,5 milhões\ndecorrentes da\nimplementação do novo modelo de cobrança do Sistema Nacional de Gravames (SNG)"
+    },
+    {
+      "id": "C65",
+      "texto": "Os desembolsos com serviços de terceiros da B3 foram de R$24,5 milhões no segundo trimestre de 2026, registrando altas de 24,0% contra o segundo trimestre de 2025 e de 43,5% ante o primeiro trimestre de 2026.",
+      "numeros": [
+        {
+          "valor": "24.5",
+          "unidade": "BRL_mi",
+          "bruto": "R$24,5 milhões",
+          "ancora": {
+            "pagina": 8,
+            "offset_inicio": 25,
+            "offset_fim": 39
+          }
+        },
+        {
+          "valor": "24.0",
+          "unidade": "pct",
+          "bruto": "24,0%",
+          "ancora": {
+            "pagina": 8,
+            "offset_inicio": 50,
+            "offset_fim": 55
+          }
+        },
+        {
+          "valor": "43.5",
+          "unidade": "pct",
+          "bruto": "43,5%",
+          "ancora": {
+            "pagina": 8,
+            "offset_inicio": 58,
+            "offset_fim": 63
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 8,
+        "offset_inicio": 2,
+        "offset_fim": 106
+      },
+      "literal_fonte": "Serviços de terceiros: R$24,5 milhões,\naltas de 24,0% e 43,5%\nem relação ao 2T25 e 1T26, respectivamente"
+    },
+    {
+      "id": "C66",
+      "texto": "As despesas diversas da B3 diminuíram 17,2% no segundo trimestre de 2026, totalizando R$37,3 milhões.",
+      "numeros": [
+        {
+          "valor": "37.3",
+          "unidade": "BRL_mi",
+          "bruto": "R$37,3 milhões",
+          "ancora": {
+            "pagina": 8,
+            "offset_inicio": 553,
+            "offset_fim": 567
+          }
+        },
+        {
+          "valor": "17.2",
+          "unidade": "pct",
+          "bruto": "17,2%",
+          "ancora": {
+            "pagina": 8,
+            "offset_inicio": 578,
+            "offset_fim": 583
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 8,
+        "offset_inicio": 543,
+        "offset_fim": 583
+      },
+      "literal_fonte": "Diversas: R$37,3 milhões, queda de 17,2%"
+    },
+    {
+      "id": "C67",
+      "texto": "A B3 reconheceu despesas extraordinárias de R$40,5 milhões vinculadas a mudanças ocorridas na Diretoria Executiva durante o segundo trimestre de 2026.",
+      "numeros": [
+        {
+          "valor": "40.5",
+          "unidade": "BRL_mi",
+          "bruto": "40,5",
+          "ancora": {
+            "pagina": 8,
+            "offset_inicio": 1179,
+            "offset_fim": 1183
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "governanca"
+      ],
+      "ancora": {
+        "pagina": 8,
+        "offset_inicio": 1114,
+        "offset_fim": 1183
+      },
+      "literal_fonte": "(+) Despesas extraordinárias\ncom mudanças na diretoria executiva\n40,5"
+    },
+    {
+      "id": "C68",
+      "texto": "O EBITDA recorrente da B3 atingiu R$1.938,6 milhões no segundo trimestre de 2026, alta de 13,0% na comparação anual, com margem EBITDA recorrente de 70,2%, avanço de 47 bps sobre o segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "1938.6",
+          "unidade": "BRL_mi",
+          "bruto": "R$1.938,6 milhões",
+          "ancora": {
+            "pagina": 8,
+            "offset_inicio": 1747,
+            "offset_fim": 1764
+          }
+        },
+        {
+          "valor": "13.0",
+          "unidade": "pct",
+          "bruto": "13,0%",
+          "ancora": {
+            "pagina": 8,
+            "offset_inicio": 1782,
+            "offset_fim": 1787
+          }
+        },
+        {
+          "valor": "70.2",
+          "unidade": "pct",
+          "bruto": "70,2%",
+          "ancora": {
+            "pagina": 8,
+            "offset_inicio": 1833,
+            "offset_fim": 1838
+          }
+        },
+        {
+          "valor": "0.47",
+          "unidade": "pp",
+          "bruto": "47 bps",
+          "ancora": {
+            "pagina": 8,
+            "offset_inicio": 1840,
+            "offset_fim": 1846
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 8,
+        "offset_inicio": 1717,
+        "offset_fim": 1864
+      },
+      "literal_fonte": "O EBITDA recorrente totalizou R$1.938,6 milhões no 2T26, alta de 13,0% versus 2T25, com margem EBITDA recorrente de 70,2%,\n47 bps maior que o 2T25."
+    },
+    {
+      "id": "C69",
+      "texto": "O resultado financeiro da B3 foi positivo em R$139,3 milhões no segundo trimestre de 2026.",
+      "numeros": [
+        {
+          "valor": "139.3",
+          "unidade": "BRL_mi",
+          "bruto": "R$139,3 milhões",
+          "ancora": {
+            "pagina": 8,
+            "offset_inicio": 2366,
+            "offset_fim": 2381
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 8,
+        "offset_inicio": 2327,
+        "offset_fim": 2390
+      },
+      "literal_fonte": "O resultado financeiro foi positivo em R$139,3 milhões no 2T26."
+    },
+    {
+      "id": "C70",
+      "texto": "As receitas financeiras da B3 somaram R$571,5 milhões no segundo trimestre de 2026, com acréscimo de 3,4% ante o segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "571.5",
+          "unidade": "BRL_mi",
+          "bruto": "R$571,5 milhões",
+          "ancora": {
+            "pagina": 8,
+            "offset_inicio": 2427,
+            "offset_fim": 2442
+          }
+        },
+        {
+          "valor": "3.4",
+          "unidade": "pct",
+          "bruto": "3,4%",
+          "ancora": {
+            "pagina": 8,
+            "offset_inicio": 2452,
+            "offset_fim": 2456
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 8,
+        "offset_inicio": 2391,
+        "offset_fim": 2457
+      },
+      "literal_fonte": "As receitas financeiras totalizaram R$571,5 milhões, alta de\n3,4%."
+    },
+    {
+      "id": "C71",
+      "texto": "A B3 reconheceu cerca de R$19,1 milhões em receitas financeiras referentes à atualização monetária de precatório relativo à restituição de tributos pagos indevidamente.",
+      "numeros": [
+        {
+          "valor": "19.1",
+          "unidade": "BRL_mi",
+          "bruto": "R$19,1\nmilhões",
+          "ancora": {
+            "pagina": 8,
+            "offset_inicio": 2566,
+            "offset_fim": 2580
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 8,
+        "offset_inicio": 2532,
+        "offset_fim": 2712
+      },
+      "literal_fonte": "reconhecimento de aproximadamente R$19,1\nmilhões, relacionados à atualização monetária de precatório associado à restituição de tributos pagos indevidamente em\nperíodos anteriores."
+    },
+    {
+      "id": "C72",
+      "texto": "As despesas financeiras da B3 somaram R$442,0 milhões no segundo trimestre de 2026, ficando alinhadas ao valor apurado no segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "442.0",
+          "unidade": "BRL_mi",
+          "bruto": "R$442,0 milhões",
+          "ancora": {
+            "pagina": 8,
+            "offset_inicio": 2749,
+            "offset_fim": 2764
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 8,
+        "offset_inicio": 2713,
+        "offset_fim": 2784
+      },
+      "literal_fonte": "As despesas financeiras totalizaram R$442,0 milhões,\nem linha com 2T25."
+    },
+    {
+      "id": "C73",
+      "texto": "A alíquota efetiva sobre lucro antes de IR e CS ajustado, excluindo efeitos do hedge, ficou em 16,8% no 2T26, contra 26,3% no 2T25, com variação de -951 bps.",
+      "numeros": [
+        {
+          "valor": "16.8",
+          "unidade": "pct",
+          "bruto": "16,8%",
+          "ancora": {
+            "pagina": 9,
+            "offset_inicio": 1167,
+            "offset_fim": 1172
+          }
+        },
+        {
+          "valor": "26.3",
+          "unidade": "pct",
+          "bruto": "26,3%",
+          "ancora": {
+            "pagina": 9,
+            "offset_inicio": 1173,
+            "offset_fim": 1178
+          }
+        },
+        {
+          "valor": "-9.51",
+          "unidade": "pp",
+          "bruto": "-951 bps",
+          "ancora": {
+            "pagina": 9,
+            "offset_inicio": 1179,
+            "offset_fim": 1187
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "metodologico"
+      ],
+      "ancora": {
+        "pagina": 9,
+        "offset_inicio": 1071,
+        "offset_fim": 1187
+      },
+      "literal_fonte": "Alíquota Efetiva sobre Lucro Antes de IR e CS Ajustado (excluindo efeitos do\nhedge) - (B) / (A)\n16,8%\n26,3%\n-951 bps"
+    },
+    {
+      "id": "C74",
+      "texto": "A linha de imposto de renda e contribuição social somou R$352,9 milhões no 2T26, sendo impactada pela distribuição de JCP de R$1.106,0 milhões, com R$750,0 milhões de natureza extraordinária.",
+      "numeros": [
+        {
+          "valor": "352.9",
+          "unidade": "BRL_mi",
+          "bruto": "R$352,9 milhões",
+          "ancora": {
+            "pagina": 9,
+            "offset_inicio": 1303,
+            "offset_fim": 1318
+          }
+        },
+        {
+          "valor": "1106.0",
+          "unidade": "BRL_mi",
+          "bruto": "R$1.106,0 milhões",
+          "ancora": {
+            "pagina": 9,
+            "offset_inicio": 1425,
+            "offset_fim": 1442
+          }
+        },
+        {
+          "valor": "750.0",
+          "unidade": "BRL_mi",
+          "bruto": "R$750,0 milhões",
+          "ancora": {
+            "pagina": 9,
+            "offset_inicio": 1450,
+            "offset_fim": 1465
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "impacto_pratico",
+        "metodologico"
+      ],
+      "ancora": {
+        "pagina": 9,
+        "offset_inicio": 1243,
+        "offset_fim": 1693
+      },
+      "literal_fonte": "A linha de imposto de renda e contribuição social totalizou R$352,9 milhões no 2T26, impactada\nprincipalmente pela distribuição\nde juros sobre o capital próprio (JCP) no montante de R$1.106,0 milhões, sendo R$750,0 milhões extraordinários, resultantes de\nsaldos não utilizados em exercícios anteriores, mais do que compensando a majoração da alíquota da\ncontribuição social, reflexo\nda Lei Complementar 224/2025, que entrou em vigor a partir do 2T26."
+    },
+    {
+      "id": "C75",
+      "texto": "A despesa com imposto corrente da B3 totalizou R$317,2 milhões no segundo trimestre de 2026.",
+      "numeros": [
+        {
+          "valor": "317.2",
+          "unidade": "BRL_mi",
+          "bruto": "R$317,2 milhões",
+          "ancora": {
+            "pagina": 9,
+            "offset_inicio": 1721,
+            "offset_fim": 1736
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 9,
+        "offset_inicio": 1694,
+        "offset_fim": 1736
+      },
+      "literal_fonte": "O imposto corrente atingiu R$317,2 milhões"
+    },
+    {
+      "id": "C76",
+      "texto": "A linha de imposto de renda e contribuição social diferidos da B3 foi negativa em R$35,7 milhões no segundo trimestre de 2026.",
+      "numeros": [
+        {
+          "valor": "35.7",
+          "unidade": "BRL_mi",
+          "bruto": "R$35,7\nmilhões",
+          "ancora": {
+            "pagina": 9,
+            "offset_inicio": 1823,
+            "offset_fim": 1837
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 9,
+        "offset_inicio": 1749,
+        "offset_fim": 1838
+      },
+      "literal_fonte": "linha de imposto de renda e contribuição social diferidos foi negativa em R$35,7\nmilhões."
+    },
+    {
+      "id": "C77",
+      "texto": "O lucro líquido recorrente da B3 somou R$1.376,6 milhões no segundo trimestre de 2026, valor 8,0% maior que o reportado no segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "1376.6",
+          "unidade": "BRL_mi",
+          "bruto": "R$1.376,6 milhões",
+          "ancora": {
+            "pagina": 9,
+            "offset_inicio": 2098,
+            "offset_fim": 2115
+          }
+        },
+        {
+          "valor": "8.0",
+          "unidade": "pct",
+          "bruto": "8,0%",
+          "ancora": {
+            "pagina": 9,
+            "offset_inicio": 2138,
+            "offset_fim": 2142
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 9,
+        "offset_inicio": 2013,
+        "offset_fim": 2162
+      },
+      "literal_fonte": "Excluindo os itens não-recorrentes destacados abaixo, o lucro líquido teria atingido\nR$1.376,6 milhões no trimestre, alta de\n8,0%\nem relação ao 2T25."
+    },
+    {
+      "id": "C78",
+      "texto": "A B3 auferiu R$50,2 milhões em benefício fiscal no segundo trimestre de 2026 decorrente da amortização de ágio das incorporações da Neoway, Neurotech e Datastock.",
+      "numeros": [
+        {
+          "valor": "50.2",
+          "unidade": "BRL_mi",
+          "bruto": "R$50,2 milhões",
+          "ancora": {
+            "pagina": 9,
+            "offset_inicio": 2358,
+            "offset_fim": 2372
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "metodologico"
+      ],
+      "ancora": {
+        "pagina": 9,
+        "offset_inicio": 2238,
+        "offset_fim": 2373
+      },
+      "literal_fonte": "a Companhia passou a\nreconhecer o benefício fiscal da amortização do ágio dessas aquisições, que no trimestre\ntotalizou R$50,2 milhões."
+    },
+    {
+      "id": "C79",
+      "texto": "O lucro líquido atribuído aos acionistas da B3 somou R$1.698,8 milhões no segundo trimestre de 2026, com expansão de 28,2% frente ao segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "1698.8",
+          "unidade": "BRL_mi",
+          "bruto": "R$1.698,8 milhões",
+          "ancora": {
+            "pagina": 9,
+            "offset_inicio": 3569,
+            "offset_fim": 3586
+          }
+        },
+        {
+          "valor": "28.2",
+          "unidade": "pct",
+          "bruto": "28,2%",
+          "ancora": {
+            "pagina": 9,
+            "offset_inicio": 3596,
+            "offset_fim": 3601
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 9,
+        "offset_inicio": 3515,
+        "offset_fim": 3602
+      },
+      "literal_fonte": "O lucro líquido atribuído aos acionistas da B3 foi de R$1.698,8 milhões, alta de 28,2%."
+    },
+    {
+      "id": "C80",
+      "texto": "O lucro por ação recorrente da B3 totalizou R$0,28 no segundo trimestre de 2026, apresentando valorização de 12,0% em relação ao segundo trimestre de 2025.",
+      "numeros": [
+        {
+          "valor": "0.28",
+          "unidade": "BRL",
+          "bruto": "R$0,28",
+          "ancora": {
+            "pagina": 9,
+            "offset_inicio": 3795,
+            "offset_fim": 3801
+          }
+        },
+        {
+          "valor": "12.0",
+          "unidade": "pct",
+          "bruto": "12,0%",
+          "ancora": {
+            "pagina": 9,
+            "offset_inicio": 3811,
+            "offset_fim": 3816
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 9,
+        "offset_inicio": 3754,
+        "offset_fim": 3836
+      },
+      "literal_fonte": "Já o lucro\npor ação recorrente totalizou R$0,28, alta de 12,0% em relação ao 2T25."
+    },
+    {
+      "id": "C81",
+      "texto": "Os ativos totais da B3 atingiram R$49,0 bilhões no fechamento do segundo trimestre de 2026, com avanço de 1,0% em comparação a dezembro de 2025.",
+      "numeros": [
+        {
+          "valor": "49000",
+          "unidade": "BRL_mi",
+          "bruto": "R$49,0 bilhões",
+          "ancora": {
+            "pagina": 10,
+            "offset_inicio": 161,
+            "offset_fim": 175
+          }
+        },
+        {
+          "valor": "1.0",
+          "unidade": "pct",
+          "bruto": "1,0%",
+          "ancora": {
+            "pagina": 10,
+            "offset_inicio": 177,
+            "offset_fim": 181
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 10,
+        "offset_inicio": 112,
+        "offset_fim": 198
+      },
+      "literal_fonte": "A Companhia encerrou o\n2T26 com ativos totais de R$49,0 bilhões, 1,0% acima de dez/25."
+    },
+    {
+      "id": "C82",
+      "texto": "As disponibilidades e aplicações financeiras da B3 somaram R$19,3 bilhões no segundo trimestre de 2026, permanecendo alinhadas ao nível do fim de 2025.",
+      "numeros": [
+        {
+          "valor": "19300",
+          "unidade": "BRL_mi",
+          "bruto": "R$19,3 bilhões",
+          "ancora": {
+            "pagina": 10,
+            "offset_inicio": 296,
+            "offset_fim": 310
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 10,
+        "offset_inicio": 199,
+        "offset_fim": 360
+      },
+      "literal_fonte": "As linhas de Disponibilidades e\nAplicações financeiras (circulante e não-circulante) totalizaram R$19,3 bilhões, em linha com os valores no encerramento de 2025."
+    },
+    {
+      "id": "C83",
+      "texto": "A B3 registrou endividamento bruto de R$14,9 bilhões ao final do 2T26, composto por 83% de longo prazo e 17% de curto prazo, correspondendo a 2,0x o EBITDA recorrente dos últimos 12 meses.",
+      "numeros": [
+        {
+          "valor": "14900",
+          "unidade": "BRL_mi",
+          "bruto": "R$14,9 bilhões",
+          "ancora": {
+            "pagina": 10,
+            "offset_inicio": 415,
+            "offset_fim": 429
+          }
+        },
+        {
+          "valor": "83",
+          "unidade": "pct",
+          "bruto": "83%",
+          "ancora": {
+            "pagina": 10,
+            "offset_inicio": 431,
+            "offset_fim": 434
+          }
+        },
+        {
+          "valor": "17",
+          "unidade": "pct",
+          "bruto": "17%",
+          "ancora": {
+            "pagina": 10,
+            "offset_inicio": 452,
+            "offset_fim": 455
+          }
+        },
+        {
+          "valor": "2.0",
+          "unidade": "x",
+          "bruto": "2,0x",
+          "ancora": {
+            "pagina": 10,
+            "offset_inicio": 490,
+            "offset_fim": 494
+          }
+        },
+        {
+          "valor": "12",
+          "unidade": "contagem",
+          "bruto": "12",
+          "ancora": {
+            "pagina": 10,
+            "offset_inicio": 527,
+            "offset_fim": 529
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 10,
+        "offset_inicio": 361,
+        "offset_fim": 536
+      },
+      "literal_fonte": "Ao final do 2T26, a B3 possuía endividamento bruto de R$14,9 bilhões (83% de longo prazo e 17% de curto prazo), correspondente\na 2,0x o EBITDA recorrente dos últimos 12 meses."
+    },
+    {
+      "id": "C84",
+      "texto": "A B3 realizou investimentos de capital (CAPEX) de R$55,3 milhões no segundo trimestre de 2026 e de R$112,0 milhões no acumulado de 2026.",
+      "numeros": [
+        {
+          "valor": "55.3",
+          "unidade": "BRL_mi",
+          "bruto": "R$55,3 milhões",
+          "ancora": {
+            "pagina": 10,
+            "offset_inicio": 608,
+            "offset_fim": 622
+          }
+        },
+        {
+          "valor": "112.0",
+          "unidade": "BRL_mi",
+          "bruto": "R$112,0 milhões",
+          "ancora": {
+            "pagina": 10,
+            "offset_inicio": 636,
+            "offset_fim": 651
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 10,
+        "offset_inicio": 574,
+        "offset_fim": 672
+      },
+      "literal_fonte": "Foram realizados investimentos de R$55,3 milhões no 2T26 e de R$112,0 milhões no acumulado de 2026"
+    },
+    {
+      "id": "C85",
+      "texto": "Os desembolsos totais da B3 em modernização tecnológica e infraestrutura somando CAPEX e OPEX totalizaram R$229 milhões no segundo trimestre de 2026 e R$451 milhões no acumulado de 2026.",
+      "numeros": [
+        {
+          "valor": "229",
+          "unidade": "BRL_mi",
+          "bruto": "R$229\nmilhões",
+          "ancora": {
+            "pagina": 10,
+            "offset_inicio": 1503,
+            "offset_fim": 1516
+          }
+        },
+        {
+          "valor": "451",
+          "unidade": "BRL_mi",
+          "bruto": "R$451 milhões",
+          "ancora": {
+            "pagina": 10,
+            "offset_inicio": 1527,
+            "offset_fim": 1540
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 10,
+        "offset_inicio": 1492,
+        "offset_fim": 1562
+      },
+      "literal_fonte": "alcançaram R$229\nmilhões no 2T26 e R$451 milhões no acumulado de 2026."
+    },
+    {
+      "id": "C86",
+      "texto": "O Conselho de Administração da B3 deliberou em 18 de junho de 2026 a distribuição de R$1.106,0 milhões em JCP, sendo R$356,0 milhões ordinários e R$750,0 milhões extraordinários.",
+      "numeros": [
+        {
+          "valor": "1106.0",
+          "unidade": "BRL_mi",
+          "bruto": "R$1.106,0 milhões",
+          "ancora": {
+            "pagina": 10,
+            "offset_inicio": 1714,
+            "offset_fim": 1731
+          }
+        },
+        {
+          "valor": "356.0",
+          "unidade": "BRL_mi",
+          "bruto": "R$356,0 milhões",
+          "ancora": {
+            "pagina": 10,
+            "offset_inicio": 1739,
+            "offset_fim": 1754
+          }
+        },
+        {
+          "valor": "750.0",
+          "unidade": "BRL_mi",
+          "bruto": "R$750,0 milhões",
+          "ancora": {
+            "pagina": 10,
+            "offset_inicio": 1768,
+            "offset_fim": 1783
+          }
+        }
+      ],
+      "tipo": "decisao",
+      "tags": [
+        "governanca",
+        "impacto_pratico"
+      ],
+      "ancora": {
+        "pagina": 10,
+        "offset_inicio": 1592,
+        "offset_fim": 1799
+      },
+      "literal_fonte": "Em 18 de junho de 2026, o Conselho de Administração deliberou o pagamento de juros sobre o capital próprio no montante de\nR$1.106,0 milhões, sendo R$356,0 milhões ordinários e R$750,0 milhões extraordinários"
+    },
+    {
+      "id": "C87",
+      "texto": "A B3 passou a integrar as carteiras global e de mercados emergentes do índice Dow Jones Best in Class Index.",
+      "numeros": [],
+      "tipo": "resultado",
+      "tags": [
+        "governanca"
+      ],
+      "ancora": {
+        "pagina": 10,
+        "offset_inicio": 2224,
+        "offset_fim": 2406
+      },
+      "literal_fonte": "ingresso da B3 nas carteiras global e de mercados emergentes do índice, posicionando a\ncompanhia entre as empresas com melhor desempenho em sustentabilidade avaliadas pela S&P Global"
+    },
+    {
+      "id": "C88",
+      "texto": "A nova carteira do Índice de Sustentabilidade Empresarial (ISE B3 2026) divulgada pela B3 é composta por 69 companhias.",
+      "numeros": [
+        {
+          "valor": "69",
+          "unidade": "contagem",
+          "bruto": "69",
+          "ancora": {
+            "pagina": 10,
+            "offset_inicio": 2581,
+            "offset_fim": 2583
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "governanca"
+      ],
+      "ancora": {
+        "pagina": 10,
+        "offset_inicio": 2568,
+        "offset_fim": 2666
+      },
+      "literal_fonte": "composta por 69 companhias\nselecionadas com base em critérios ambientais, sociais e de governança."
+    },
+    {
+      "id": "C89",
+      "texto": "O volume de créditos de carbono registrados na B3 superou 6,4 milhões, expansão de 16,5% frente ao encerramento de 2025.",
+      "numeros": [
+        {
+          "valor": "6400000",
+          "unidade": "contagem",
+          "bruto": "6,4 milhões",
+          "ancora": {
+            "pagina": 10,
+            "offset_inicio": 2776,
+            "offset_fim": 2787
+          }
+        },
+        {
+          "valor": "16.5",
+          "unidade": "pct",
+          "bruto": "16,5%",
+          "ancora": {
+            "pagina": 10,
+            "offset_inicio": 2807,
+            "offset_fim": 2812
+          }
+        }
+      ],
+      "tipo": "resultado",
+      "tags": [
+        "indicador_chave"
+      ],
+      "ancora": {
+        "pagina": 10,
+        "offset_inicio": 2702,
+        "offset_fim": 2845
+      },
+      "literal_fonte": "ampliação do volume de créditos de carbono registrados na B3 para mais\nde 6,4 milhões,\num crescimento de 16,5% em relação ao fechamento de 2025"
+    }
+  ],
+  "assinado": true
+}

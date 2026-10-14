@@ -107,6 +107,18 @@ def test_grafo_vem_do_graph_py(cliente):
     assert {"de": "validate", "para": "extract", "condicional": True} in corpo["arestas"]
 
 
+def test_e4_entra_no_fluxo_do_dashboard(cliente):
+    """O nó adapt aparece no grafo, e o dashboard marca a E4 (nó adapt em app.js) como implementada."""
+    http, _ = cliente
+    corpo = http.get("/api/grafo").json()
+    assert "adapt" in corpo["nos"]
+    arestas = {(a["de"], a["para"]) for a in corpo["arestas"]}
+    assert {("validate", "adapt"), ("quarentena", "adapt")} <= arestas
+    assert any(de == "adapt" and para.endswith("end__") for de, para in arestas)
+    assert corpo["rodadas_plano"] == 3
+    assert 'id: "E4", nos: ["adapt"]' in http.get("/static/app.js").text
+
+
 def test_execucao_transmite_as_linhas_classificadas(cliente, processo_simulado):
     http, gerenciador = cliente
     assert http.post("/api/execucao", json={"fonte": "copom", "dev": True}).status_code == 201
