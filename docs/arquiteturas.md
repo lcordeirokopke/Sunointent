@@ -76,7 +76,7 @@ class Claim(BaseModel):
     literal_fonte: str      # o trecho exato do documento, verbatim
 ```
 
-`tipo` e `tags` não são decorativos: os adapters usam `tags` para priorizar (o nível Iniciante prioriza `impacto_pratico`) e o avaliador usa `tipo` para exigir atribuição explícita em `projecao` (uma projeção do Copom não pode virar afirmação do artigo). As tags vêm de um vocabulário fixo, definido em `docs/fluxos/extracao.md`.
+`tipo` e `tags` não são decorativos: a E4 usa `tags` no pré-filtro e como orientação ao planejador (o nível Iniciante descarta o que é só `metodologico`), e o avaliador usa `tipo` para exigir atribuição explícita em `projecao` (uma projeção do Copom não pode virar afirmação do artigo). As tags vêm de um vocabulário fixo, definido em `docs/fluxos/extracao.md`.
 
 `texto` e `numeros` dizem o mesmo: todo número listado aparece no texto, e todo número do texto, exceto datas, está listado. Cada `Numero` do claim é uma entrada da `tabela_numeros`, na mesma posição, dentro do `literal_fonte`.
 
@@ -125,37 +125,64 @@ class FactSheet(BaseModel):
 
 `tabela_numeros` é o conjunto de referência da verificação numérica, e contém todo número do documento, não só os que entraram em claims. É a mesma lista do `DocumentoProcessado`: uma entrada por posição, porque o mesmo bruto pode aparecer mais de uma vez no documento. A busca por bruto é `FactSheet.numeros_por_bruto`. Um número que aparece na peça e existe no documento mas não em nenhum claim é um caso diferente de um número inventado, e o relatório de falha precisa distinguir os dois.
 
-## Conteúdo adaptado (saída do adapter, antes do formato)
+## Plano editorial (saída da E4, antes do formato)
 
 ```python
+MotivoDescarte = Literal["redundante", "secundario", "exige_base_tecnica", "fora_do_foco", "metodologico"]
+
+class Descarte(BaseModel):
+    claim_id: str
+    motivo: MotivoDescarte
+    relacionado: str | None   # obrigatório em "redundante": o claim usado no nível que já diz o mesmo
+    origem: Literal["prefiltro", "planejador", "padrao"]
+
+class ClaimPlanejado(BaseModel):
+    claim_id: str
+    papel: Literal["principal", "apoio", "contexto"]
+    atribuir_fonte: bool      # preenchido pelo código: "o Copom projeta", nunca "a inflação será"
+
 class Analogia(BaseModel):
-    termo: str              # "Selic"
-    explicacao: str         # "o aluguel do dinheiro no pais"
+    termo: str                # "Selic"
+    explicacao: str           # "o preço do dinheiro emprestado no país"
+    origem: Literal["glossario", "nova"]
+    glossario_ref: str | None # "<id do termo>#<n>": a n-ésima analogia do termo no glossário
+    revisada: bool            # True só para analogia do glossário com status aprovada
 
-class Bloco(BaseModel):
-    texto: str
-    claim_ids: list[str]    # não vazio: todo bloco tem lastro
-    analogias: list[Analogia]
-
-class ConteudoAdaptado(BaseModel):
+class PlanoNivel(BaseModel):
     nivel: Nivel
-    tese: str                                  # uma frase: o que esta versão diz
-    blocos: list[Bloco]
-    claims_usados: list[str]
-    claims_descartados: list[tuple[str, str]]  # (claim_id, motivo)
+    descartes: list[Descarte]
+    claims: list[ClaimPlanejado]   # em ordem de leitura
+    tese: str                      # uma frase: o que esta versão diz
+    tese_claim_ids: list[str]      # os claims que sustentam a tese
+    analogias: list[Analogia]      # uma por termo, a mesma nos 3 formatos do nível
+
+class PlanoEditorial(BaseModel):
+    nucleo: list[str]              # 1 a 3 claim_ids: sobre o que é o documento; presentes nos 3 níveis
+    niveis: list[PlanoNivel]       # exatamente 3, um por nível
+    aviso: str | None              # o que o gate ainda acusava depois da última correção
 ```
 
-`claims_descartados` com motivo existe para auditoria: no nível Iniciante, saber **o que foi cortado e por quê** é a diferença entre adaptação e trivialização. É o campo que o revisor humano olha para julgar se a simplificação perdeu algo que importava.
+O plano não tem prosa que vá para a peça: ele registra decisões (o que entra, em que ordem, com que papel, o que sai e por quê, e quais analogias usar). Quem escreve o texto é a E5, direto dos claims. Assim cada fato passa por uma única redação entre o claim e a peça.
+
+`descartes` com motivo existe para auditoria: no nível Iniciante, saber **o que foi cortado e por quê** é a diferença entre adaptação e trivialização. É o campo que o revisor humano olha para julgar se a simplificação perdeu algo que importava. O motivo é um código de lista fixa, e não texto livre, para que parte dos motivos seja conferida por código (ver E4.3). Cada descarte tem uma de três origens: `prefiltro` (motivo `metodologico`, pela regra das tags), `planejador` (só os motivos específicos: `redundante`, `exige_base_tecnica` e `fora_do_foco`) e `padrao` (motivo `secundario`, dado pelo código a todo candidato que o planejador não usou nem descartou com motivo específico). Assim o modelo não escreve um motivo para cada candidato não usado, que num release da B3 passaria de duzentos.
+
+`atribuir_fonte` não é decisão do modelo: o código o preenche com `true` quando o tipo do claim é `projecao`, `condicionante` ou `risco`, os tipos cujo texto a E2 já escreve com atribuição ("Segundo o Copom, ...").
+
+As analogias do glossário também são atribuídas pelo código, depois da seleção: para cada termo do glossário com `nivel_minimo` acima de iniciante encontrado no texto dos claims usados no Iniciante, o código usa a primeira analogia `aprovada` do termo ou, sem nenhuma aprovada, a primeira `rascunho`, e preenche `glossario_ref`, `explicacao` e `revisada`. O modelo só escreve analogias `nova`, para termos sem analogia no glossário. Na E8, toda analogia com `revisada=False` aparece marcada como não revisada: as `nova` e as do glossário que ainda estão em `rascunho`.
 
 ## Peça final (saída do synthesizer)
 
 Os três payloads são **estruturados, não texto corrido**. Isso é decisão de desenho, não estilo: o contrato de formato só é verificável de verdade se a estrutura for dado. Um roteiro em markdown com `"0:00-0:05"` no meio da prosa transforma a checagem de 60s em regex e esperança; um roteiro como lista de cenas transforma a mesma checagem em aritmética.
 
 ```python
+class Secao(BaseModel):
+    texto: str
+    claim_ids: list[str]    # não vazio: toda seção tem lastro
+
 class ArtigoPayload(BaseModel):
     titulo: str
     linha_fina: str
-    secoes: list[Bloco]
+    secoes: list[Secao]
     # contrato verificável: contagem de palavras por nível
 
 class Slide(BaseModel):
@@ -181,16 +208,26 @@ class RoteiroPayload(BaseModel):
     # sem lacuna nem sobreposição entre cenas, e palavras/segundo
     # dentro da faixa falável (~2.5 a 3.5)
 
+class NumeroUsado(BaseModel):
+    unidade_indice: int     # posição da seção, slide ou cena no payload
+    inicio: int             # offset do número no texto da unidade, depois da troca do marcador
+    fim: int
+    claim_id: str           # o marcador {{C27.1}} é o número 1 do claim C27
+    ordem: int              # 1-indexado, a posição do número na lista do claim
+
 class Peca(BaseModel):
     celula_id: str
     nivel: Nivel
     formato: Formato
     payload: ArtigoPayload | CarrosselPayload | RoteiroPayload
     claim_ids: list[str]    # união dos claim_ids internos
+    numeros_usados: list[NumeroUsado]
     tentativa: int          # 1-indexado
 ```
 
 A checagem de palavras por segundo no roteiro é um exemplo do que só existe porque o payload é estruturado: um roteiro de 60s com 400 palavras é impossível de falar, passa em qualquer métrica de legibilidade, e só a aritmética pega.
+
+O texto do payload é o texto final, com os números já no lugar dos marcadores. `numeros_usados` diz de onde veio cada número: do marcador ao claim e, pelo claim, à âncora no PDF. É o que permite ao dashboard levar cada número da peça à página do documento.
 
 ## Scorecard e violação
 
@@ -272,16 +309,14 @@ flowchart TD
     VAL -->|"numero ou ancora invalida: devolve os claims ruins"| EXT
     VAL -->|"todos os claims validos"| FS[("FactSheet ASSINADO: fonte unica de verdade")]
 
-    FS --> AD1["E4a. Adapter Iniciante (LLM)"]
-    FS --> AD2["E4b. Adapter Intermediario (LLM)"]
-    FS --> AD3["E4c. Adapter Avancado (LLM)"]
+    FS --> PRE["E4.1 Pre-filtro por nivel (deterministico)"]
+    PRE --> PLA["E4.2 Planejador dos 3 niveis (LLM, 1 chamada)"]
+    PLA --> GAT["E4.3 Complemento e gate do plano (deterministico)"]
+    GAT -->|"problema e rodada menor que 3: devolve so os problemas"| PLA
+    GAT -->|"plano ok, ou ultima rodada com aviso"| PE[("PlanoEditorial: nucleo + 1 plano por nivel, sem prosa")]
 
-    AD1 --> CA[("ConteudoAdaptado: 3 objetos, 1 por nivel")]
-    AD2 --> CA
-    AD3 --> CA
-
-    CA --> FAN{{"Fan-out 3 para 9: cada nivel se abre em 3 formatos"}}
-    FAN --> SY["E5. Format Synthesizer (LLM): 9 instancias isoladas"]
+    PE --> FAN{{"Fan-out 3 para 9: cada nivel se abre em 3 formatos"}}
+    FAN --> SY["E5. Format Synthesizer: pacote (codigo), redator (LLM), montagem (codigo); 9 instancias isoladas"]
     SY --> PECA[("Peca: celula_id igual a nivel__formato")]
     PECA --> EV["E6. Hybrid Evaluator: 5 metricas deterministicas + 1 LLM Judge"]
     EV --> SC[("Scorecard com lista de Violacao")]
@@ -300,11 +335,14 @@ flowchart TD
     HUM -->|"celula publicada e formato igual a carrossel"| FIG["E9. Materializacao no Figma: instancia o template e preenche"]
     FIG --> FR[("Frames nativos e editaveis: o humano ajusta e exporta")]
 
-    LS[("LevelSpec YAML: fonte unica")] -.->|"renderiza a instrucao"| AD1
-    LS -.-> AD2
-    LS -.-> AD3
+    LS[("LevelSpec YAML: fonte unica")] -.->|"regras e instrucao"| PRE
+    LS -.-> PLA
+    LS -.-> GAT
+    LS -.->|"contrato do formato"| SY
     LS -.->|"alimenta a assercao"| EV
-    GL[("Glossario financeiro: dict / trie")] -.-> EV
+    GL[("Glossario financeiro: config/glossario.yaml")] -.->|"analogias e jargao"| PLA
+    GL -.-> GAT
+    GL -.-> EV
     VDB[("Indice vetorial efemero: chunks do doc atual")] -.-> EV
 ```
 
@@ -386,70 +424,126 @@ O modelo nunca escreve página, offset nem valor: o que ele cita e não existe n
 
 **Como falha:** se a etapa 1 normalizou o texto de um jeito e a etapa 2 citou o texto de outro, tudo reprova e o loop entre 2 e 3 não converge. Mitigação: o `literal_fonte` é comparado contra o **texto limpo** que a etapa 2 recebeu, nunca contra o PDF original. As duas etapas tem que ver exatamente o mesmo texto.
 
-## E4. Audience Adapter (3 instâncias paralelas)
+## E4. Plano editorial (pré-filtro, planejador e gate)
 
-**Representa:** a adaptação conceitual, separada da adaptação de forma. Aqui se decide **o que dizer e com que profundidade**; ainda não se decide se é artigo, carrossel ou vídeo.
+**Representa:** a adaptação conceitual, separada da adaptação de forma. Aqui se decide **o que dizer, em que ordem e com que profundidade** para cada nível; ainda não se decide se é artigo, carrossel ou vídeo, e nenhum texto da peça é escrito.
 
 Essa separação é o que evita a trivialização por encurtamento: se adaptar o nível e formatar fossem o mesmo nó, "versão iniciante do carrossel" tenderia a virar "o mesmo carrossel com menos palavras". Aqui o Iniciante e o Avançado partem do mesmo FactSheet e **fazem escolhas de conteúdo diferentes**, não só de vocabulário.
 
-**Recebe:** `FactSheet` assinado + o `LevelSpec` do seu nível.
+**Recebe:** `FactSheet` assinado + o `LevelSpec` dos 3 níveis + o glossário.
 
-**O que faz:**
+A etapa tem três passos: o código faz o que uma regra resolve, o LLM faz o que exige julgamento, e o código confere o resultado. Nenhuma regra depende de um documento específico: todas leem só o que qualquer FactSheet tem (`tipo` e `tags` de vocabulário fixo, ids e texto dos claims), o LevelSpec e o glossário.
 
-1. Escolhe quais claims entram, guiado por `tags` e pelo `foco` do LevelSpec. O Iniciante prioriza `impacto_pratico` e descarta `metodologico`; o Avançado faz o inverso e preserva `condicionante`.
-2. Escreve `tese`: uma frase dizendo o que esta versão afirma. É a âncora editorial da peça.
-3. Escreve os blocos, cada um amarrado a `claim_ids`.
-4. Para o nível Iniciante: para cada termo técnico inevitável, registra uma `Analogia` explícita, com termo e explicação separados em campos. Estruturado, não embutido na prosa, para que a etapa 6 possa verificar sem inferir.
-5. Registra `claims_descartados` com motivo.
+### E4.1 Pré-filtro por nível (determinístico)
 
-**Decide:** seleção de conteúdo, profundidade, e quais analogias usar.
+Para cada nível, cada claim vira **candidato** ou **descartado por regra**:
 
-**Gera:** `ConteudoAdaptado`, agnóstico de formato. Grava o `ConteudoAdaptado` em `conteudos_adaptados` e cria as 3 células do nível em `celulas`, no estado `PENDENTE`.
+- descartado por regra quando **todas** as tags do claim estão em `tags_descartaveis` do nível, com o motivo `metodologico` e `origem="prefiltro"`. Um claim com uma tag descartável e outra não descartável continua candidato;
+- candidato nos demais casos.
 
-**Natureza:** LLM.
+O pré-filtro só remove o óbvio. A prioridade entre os candidatos não é decidida por tag, porque as tags atribuídas pela E2 diferenciam pouco os claims (num release da B3, a maioria sai como `indicador_chave`; numa ata do Copom, a maioria sai como `contexto_macro`).
 
-**Como falha:** trivialização (descarta claim essencial e mantém só o trivial), analogia enganosa (a analogia está lá, é estruturada, e explica errado: só o juiz LLM da etapa 6 pega isso), e **duplicação de prompt** entre os 3 adapters, que é problema de manutenção e não de runtime: o prompt deve ser um template único parametrizado pelo LevelSpec, nunca 3 arquivos.
+### E4.2 Planejador dos 3 níveis (LLM, 1 chamada)
+
+**Recebe:** os claims (id, texto, tipo e tags), os candidatos e os descartes do pré-filtro por nível, o LevelSpec dos 3 níveis renderizado em instruções concretas (`foco`, `tags_priorizadas`, `max_claims`) e a lista dos termos do glossário com `nivel_minimo` acima de iniciante encontrados no texto dos candidatos do Iniciante que não têm nenhuma analogia no glossário.
+
+**Devolve,** com os campos nesta ordem no schema, porque em saída estruturada o modelo escreve na ordem do schema e primeiro justifica para depois decidir:
+
+1. `nucleo`: de 1 a 3 claims que respondem "sobre o que é este documento" (numa ata do Copom, a decisão de juros; num fato relevante, o evento principal). O núcleo entra nos 3 níveis.
+2. Para cada nível: os descartes com motivo específico (`redundante`, com o claim usado que já diz o mesmo, `exige_base_tecnica` ou `fora_do_foco`); os claims que entram, em ordem de leitura, com o papel; a tese, com os claims que a sustentam; e, no Iniciante, as analogias `nova` para os termos da lista que estiverem nos claims usados.
+
+O planejador fica só com o que exige julgamento editorial: núcleo, seleção, ordem, papel, tese e analogias para termos sem cadastro. O que é regra fixa (`atribuir_fonte`, o descarte `secundario` dos candidatos restantes e as analogias que o glossário já tem) é feito pelo código no passo seguinte.
+
+Uma chamada para os 3 níveis, e não uma por nível: o modelo enxerga o contraste e diferencia os níveis de propósito, que é o que a matriz de confusão de níveis do Entregável 6 mede. O isolamento por nível não traria ganho aqui, porque a E4 nunca é refeita no retry das células. Se os runs mostrarem seleção ruim (gate reprovando com frequência, ou o revisor da E8 discordando das seleções), a alternativa é 1 chamada para o núcleo e 3 em paralelo, uma por nível, com o núcleo fixo.
+
+### E4.3 Complemento e gate do plano (determinístico)
+
+**Complemento.** Antes de conferir, o código completa o plano:
+
+1. `atribuir_fonte=true` nos claims usados de tipo `projecao`, `condicionante` ou `risco`, e `false` nos demais;
+2. todo candidato que o planejador não usou nem descartou vira descarte `secundario`, com `origem="padrao"`;
+3. no Iniciante, cada termo do glossário com `nivel_minimo` acima de iniciante encontrado no texto dos claims usados recebe a primeira analogia `aprovada` do termo ou, sem nenhuma aprovada, a primeira `rascunho`.
+
+**Gate.** Roda em todo run, nos dois modos, sobre o plano completo. Cada regra é uma comparação:
+
+| Regra | Comparação |
+|---|---|
+| `id_inexistente` | todo `claim_id` do plano (núcleo, claims, descartes, `relacionado`, `tese_claim_ids`) existe no FactSheet |
+| `contraditorio` | nenhum claim está ao mesmo tempo nos claims e nos descartes de um nível |
+| `nucleo_ausente` | todo claim do núcleo está nos claims dos 3 níveis |
+| `acima_do_limite` | claims usados no nível <= `max_claims` do LevelSpec |
+| `jargao_sem_analogia` | no Iniciante, todo termo do glossário com `nivel_minimo` acima de iniciante encontrado no texto de um claim usado tem analogia no plano, do glossário ou `nova` |
+| `motivo_invalido` | `redundante` tem `relacionado`, e o relacionado está nos claims do nível; `exige_base_tecnica` só em claim com termo do glossário de `nivel_minimo` acima do nível |
+
+`fora_do_foco` e `secundario` não têm conferência por código: quem os confere é o revisor humano na E8, que vê a lista de descartes. O gate também não julga se o núcleo escolhido é o mais importante do documento.
+
+Com algum problema, o código devolve ao planejador só a lista de problemas, como o loop E2/E3, com no máximo 3 rodadas (o plano e 2 correções). Se ainda houver problema depois da última rodada, o run segue: o código retira do plano o que a E5 não consegue usar (ids inexistentes), grava os problemas restantes em `aviso`, e as 3 células de cada nível afetado chegam à E8 com esse aviso.
+
+**Decide:** núcleo, seleção de conteúdo por nível, ordem, papel, tese e analogias.
+
+**Gera:** `PlanoEditorial`, agnóstico de formato. Grava cada rodada do gate em `validacoes_plano`, o plano em `planos_editoriais` e `planos_nivel`, e cria as 9 células em `celulas`, no estado `PENDENTE`.
+
+**Natureza:** determinístico, LLM e determinístico.
+
+**Como falha:** trivialização (descarta claim essencial e mantém só o trivial; o gate pega o núcleo ausente, e o revisor da E8 vê os descartes), núcleo mal escolhido (só o humano pega), analogia enganosa (a analogia está lá, é estruturada, e explica errado: só o juiz LLM da etapa 6 pega isso; as analogias aprovadas do glossário reduzem o risco), e **duplicação de prompt**: o planejador tem um template único, `prompts/adapter.j2`, parametrizado pelo LevelSpec.
 
 ### Proposta em avaliação: base de conceitos financeiros (banco vetorial)
 
-**Ideia:** um banco vetorial com o que é cada termo e cada conceito financeiro (definição, mecanismo, analogias aprovadas), consultado pelo adapter como repertório, para que as explicações não sejam inventadas pelo modelo.
+**Ideia:** um banco vetorial com o que é cada termo e cada conceito financeiro (definição, mecanismo, analogias aprovadas), consultado pelo planejador (E4.2) como repertório, para que as explicações não sejam inventadas pelo modelo.
 
 **O que ela ataca:** o erro de **conceito** ("Selic é a taxa do cartão de crédito", analogia que explica errado). Não ataca o erro sobre o **documento** (número ou fato trocado), que já é coberto por FactSheet, M1 e M6.
 
-**Uso previsto:** o adapter (E4) recebe a definição e as analogias aprovadas dos termos presentes nos claims que selecionou. O juiz (M6) pode receber a mesma definição como referência ao julgar se uma analogia está correta. O extractor (E2) **não** consulta a base: ele lê só o documento.
+**Uso previsto:** o planejador (E4.2) recebe a definição e as analogias aprovadas dos termos presentes nos claims candidatos. O juiz (M6) pode receber a mesma definição como referência ao julgar se uma analogia está correta. O extractor (E2) **não** consulta a base: ele lê só o documento.
 
 **Problemas possíveis:**
 
-1. **Segunda fonte de fatos.** Uma definição com número ou data ("a Selic, hoje em 10,5%") pode vazar para a peça, e um bloco passaria a afirmar algo que não vem do documento. Regras necessárias: entradas atemporais, sem números nem datas; conteúdo da base só em explicações e analogias, nunca como afirmação sobre o documento; `Bloco.claim_ids` continua obrigatório e a `Analogia` aponta para um `conceito_id`.
+1. **Segunda fonte de fatos.** Uma definição com número ou data ("a Selic, hoje em 10,5%") pode vazar para a peça, e uma peça passaria a afirmar algo que não vem do documento. Regras necessárias: entradas atemporais, sem números nem datas; conteúdo da base só em explicações e analogias, nunca como afirmação sobre o documento; os `claim_ids` de cada unidade da peça continuam obrigatórios e a `Analogia` aponta para um `conceito_id`.
 2. **Alucinação transferida para a base.** Se as entradas forem escritas por LLM, o erro só muda de lugar e passa a ter aparência de fonte confiável. Exige fontes oficiais (Banco Central, CVM, B3, Tesouro Direto) com link guardado por entrada e revisão humana de cada uma.
 3. **Mecanismo geral confundido com causa específica.** A base diz que juros altos tendem a encarecer o crédito; o modelo pode transformar isso em "o Copom subiu os juros para encarecer o crédito", que é afirmação sobre o documento sem lastro nele. O motivo de cada decisão continua vindo só da FactSheet.
 4. **Busca por similaridade onde a pergunta é exata.** A maior parte das consultas é por nome do termo, que é busca exata pela forma base da palavra. Usar só vetorial devolve sempre os vizinhos mais próximos, mesmo irrelevantes (definição de CDI quando o termo era Selic), e depende de limiar arbitrário. Caminho previsto: busca exata pelo termo primeiro, vetorial só como complemento para conceitos não nomeados e mecanismos.
 5. **Duplicação com o glossário.** Termo, nível mínimo e analogias já pertencem ao `config/glossario.yaml`, lido pela M4 e pela M5. Com a informação em dois lugares, prompt e avaliador podem passar a ler versões diferentes, o mesmo desalinhamento que o LevelSpec de fonte única evita. Exige decidir qual é a fonte original: o YAML copiado para o banco por script, ou o banco como fonte.
 6. **Reprodutibilidade.** Se a base for editada sem versão, o mesmo documento gera peças diferentes conforme o dia. A versão da base usada precisa entrar no `RunManifest`.
-7. **Contexto maior e mais caro.** Cada chamada de adapter (e de juiz, se ele também consultar) recebe mais texto, e o adapter pode passar a explicar conceitos demais, inflando a peça e prejudicando M2 e M3.
-8. **Viés de vocabulário.** Se a base trouxer definições técnicas para o nível Iniciante, o modelo tende a copiar o jargão da definição. A entrada precisa ter versões por nível (definição simples e técnica), e o adapter recebe só a do seu nível.
+7. **Contexto maior e mais caro.** A chamada do planejador (e a do juiz, se ele também consultar) recebe mais texto, e o planejador pode passar a explicar conceitos demais, inflando a peça e prejudicando M2 e M3.
+8. **Viés de vocabulário.** Se a base trouxer definições técnicas para o nível Iniciante, o modelo tende a copiar o jargão da definição. A entrada precisa ter versões por nível (definição simples e técnica), e o planejador recebe só a do nível.
 9. **Custo de manutenção.** A base precisa ser montada, revisada e atualizada antes de ter valor, e cobre só os conceitos cadastrados: termo ausente volta ao comportamento de hoje, sem aviso.
 
 ## E5. Format Synthesizer (9 instâncias isoladas)
 
 **Representa:** a mesma tese e os mesmos claims reencenados em três gramáticas de mídia diferentes. Um artigo argumenta, um carrossel escaneia, um roteiro é falado em voz alta.
 
-**Recebe:** 1 dos 3 `ConteudoAdaptado` + o contrato do formato. Aqui acontece o fan-out de 3 para 9: cada `ConteudoAdaptado` é consumido por 3 synthesizers diferentes.
+**Recebe:** 1 dos 3 `PlanoNivel` + os claims do plano + o contrato do formato no LevelSpec do nível. Aqui acontece o fan-out de 3 para 9: cada `PlanoNivel` é consumido por 3 synthesizers diferentes.
 
-**O que faz:**
+A etapa tem três passos, e só o do meio chama o modelo.
 
-1. Estrutura o conteúdo na forma do payload: seções, slides ou cenas.
-2. Escreve os elementos que são próprios do formato e não existem no `ConteudoAdaptado`: título e linha fina no artigo, gancho no primeiro slide, gancho visual e marcação de tempo por cena.
-3. Propaga `claim_ids` para cada unidade estrutural (cada slide, cada cena), não só para a peça como um todo. Isso é o que permite a rastreabilidade granular no dashboard.
-4. No retry: recebe também as `Violacao` da tentativa anterior e reescreve.
+### E5.1 Pacote da célula (determinístico)
 
-**Decide:** estrutura, ordem, gancho, corte de tempo, quantos slides.
+1. **Claims com marcadores.** Para cada claim do plano, o código troca cada número do texto do claim pelo seu marcador, `{{<claim_id>.<ordem>}}`: em "O Copom decidiu reduzir a taxa básica de juros para 13,75% a.a.", o `13,75%` vira `{{C27.1}}`. A E3 já garante que o texto e a lista de números do claim dizem o mesmo, então a troca é exata. O redator recebe o texto com marcadores e a tabela de cada marcador com o seu valor, como está no documento.
+2. **Contrato do formato com a conta feita.** O código lê o contrato do formato no LevelSpec e calcula o espaço disponível: no carrossel, quantos slides de corpo cabem entre o gancho e a conclusão e o limite de caracteres; no roteiro, o total de palavras (duração × palavras por segundo) e a sua divisão pelas cenas; no artigo, a faixa de palavras dividida entre as seções pelo papel de cada claim. O modelo recebe o orçamento pronto, sem precisar fazer a conta.
+3. **O plano do nível:** tese, ordem, papel e `atribuir_fonte` de cada claim, e as analogias, com a explicação fixa.
 
-**Gera:** `Peca`. Grava cada tentativa em `pecas` e `peca_unidade_claims` e atualiza a célula em `celulas`: `tentativa` e estado `GERANDO` ao iniciar, `AVALIANDO` quando a `Peca` passa no schema.
+### E5.2 Redator (LLM)
 
-**Natureza:** LLM.
+Um único template, `prompts/synthesizer.j2`, com três partes: as regras comuns (não criar fatos, escrever todo número que não seja data só por marcador, seguir a ordem e as analogias do plano), a parte do nível, renderizada do LevelSpec que a E6 também lê, e a parte do formato, com o orçamento calculado na E5.1. As 9 células usam o mesmo template com parâmetros diferentes.
 
-**Como falha:** estourar o contrato de formato (9 slides quando o máximo é 8, roteiro de 75s), o que a etapa 6 pega por aritmética; e **introduzir número novo ao escrever o gancho**, que é o caso mais comum de falha de fidelidade numérica, porque gancho pede impacto e impacto pede número redondo.
+O modelo devolve o payload do formato com marcadores no texto. O schema impõe a estrutura que dá para impor na decodificação (quantidade de slides, um `gancho` no início e uma `conclusao` no fim); a resposta fora do schema volta ao modelo pelo `llm.py` e não consome o orçamento `K`.
+
+No retry, recebe também o relatório corretivo da tentativa anterior e reescreve. O plano não muda.
+
+### E5.3 Montagem (determinística)
+
+1. Troca cada marcador pelo número como está no documento e registra em `numeros_usados` a posição do número no texto final e o claim de onde veio.
+2. Marcador inexistente, ou de um claim que não está no plano do nível, é resposta fora do schema: volta ao modelo pelo `llm.py`, sem consumir o `K`.
+3. Confere que os `claim_ids` de cada unidade pertencem ao plano do nível.
+
+Números escritos pelo modelo fora de marcador não são corrigidos aqui: ficam no texto e a M1 os aponta na E6.
+
+**Decide:** estrutura, ordem dentro do formato, gancho, corte de tempo, quantos slides e a redação.
+
+**Gera:** `Peca`. Grava cada tentativa em `pecas`, `peca_unidade_claims` e `peca_unidade_numeros` e atualiza a célula em `celulas`: `tentativa` e estado `GERANDO` ao iniciar, `AVALIANDO` quando a `Peca` passa no schema e na montagem.
+
+**Natureza:** determinístico, LLM e determinístico.
+
+**Como falha:** estourar o contrato de formato (roteiro de 75s, slide acima do limite de caracteres), o que a etapa 6 pega por aritmética; **escrever um número à mão em vez do marcador**, típico do gancho, porque gancho pede impacto e impacto pede número redondo, o que a M1 pega; e criar relação de causa ou consequência que os claims não dizem ("com o dinheiro caro, o financiamento pesa no bolso"), que os marcadores não impedem e só o juiz da M6 pega.
 
 ## E6. Hybrid Evaluator
 
@@ -492,18 +586,20 @@ As duas razões, em ordem de importância:
 - presente na `tabela_numeros` mas sem claim que o suporte: violação de lastro, instrução "cite o claim ou remova";
 - ausente da `tabela_numeros`: alucinação, instrução "este número não existe no documento, remova".
 
+Todo número da peça que não seja data precisa coincidir com uma posição de `Peca.numeros_usados`, ou seja, ter vindo de um marcador. Número escrito à mão pelo modelo é violação mesmo quando o valor existe na `tabela_numeros`, com a instrução "use o marcador do claim no lugar deste número".
+
 **M2. Format Contract Check (determinístico).** Aritmética sobre o payload estruturado. Artigo: palavras na faixa do nível. Carrossel: 5 a 8 slides, um `gancho` no início, uma `conclusao` no fim, limite de caracteres por slide. Roteiro: soma das cenas <= 60s, sem lacuna nem sobreposição, palavras por segundo na faixa falável.
 
 **M3. Legibilidade (determinístico).** Índice de facilidade de leitura adaptado ao português. A implementação (`textstat` com configuração pt, ou a adaptação brasileira do Flesch) e as constantes precisam ser escolhidas e fixadas: a fórmula original é calibrada para inglês e os limiares em português **não** são os mesmos números da escala inglesa. Emite o índice, a distribuição de tamanho de sentença e as sentenças que puxam o índice para baixo, porque é isso que a instrução corretiva precisa apontar.
 
 **M4. Domain Term Density Score (determinístico).** Lematiza via spaCy e casa contra o glossário financeiro. Densidade = termos técnicos únicos / total de tokens de conteúdo. Emite a densidade, a lista de termos encontrados e a posição de cada um. Tem piso e teto: no nível Avançado, densidade **baixa demais** também reprova, porque o objetivo é calibração, não simplificação.
 
-**M5. Regra de analogia (determinístico).** Para o nível Iniciante: todo termo do glossário encontrado no texto precisa ter uma `Analogia` registrada **e** um marcador de analogia no texto dentro de uma janela de N tokens antes da primeira ocorrência do termo (padrões como "é como", "funciona parecido com", "imagine que", "na prática significa"). Termo do glossário sem analogia é violação, com o trecho exato.
+**M5. Regra de analogia (determinístico).** Para o nível Iniciante: todo termo do glossário com `nivel_minimo` acima de iniciante encontrado no texto precisa ter uma `Analogia` no plano do nível **e** um marcador de analogia no texto dentro de uma janela de N tokens antes da primeira ocorrência do termo (padrões como "é como", "funciona parecido com", "imagine que", "na prática significa"). Termo do glossário sem analogia é violação, com o trecho exato.
 
 **M6. LLM Judge (a única parte não determinística).** Só roda se todas as anteriores passaram, e responde **duas** perguntas, com saída estruturada e booleano mais justificativa:
 
 1. Cada `Analogia` detectada explica o conceito **corretamente**, ou é decorativa ou enganosa? O regex da M5 confirma que a analogia existe; só o juiz sabe se "Selic é como o aluguel do dinheiro" está certo e "Selic é como o preço do dólar" está errado.
-2. Cada bloco da peça é implicado (*entailment*) pelos claims que ele cita? Aqui o índice vetorial entra: recupera os 3 chunks mais similares além do chunk da âncora, para pegar contradição com outra parte do documento.
+2. Cada unidade da peça (seção, slide ou cena) é implicada (*entailment*) pelos claims que ela cita? Aqui o índice vetorial entra: recupera os 3 chunks mais similares além do chunk da âncora, para pegar contradição com outra parte do documento.
 
 **Decide:** nada nas métricas determinísticas, que só calculam. Só a M6 exerce julgamento, e ela **só pode reprovar**: não existe caminho em que o juiz aprove uma peça que a M1 rejeitou.
 
@@ -539,15 +635,28 @@ As duas razões, em ordem de importância:
 
 **Representa:** a decisão editorial, que é o único ponto do sistema onde alguém decide publicar. Não é aprovação de qualidade técnica: isso o pipeline já fez.
 
-**Recebe:** a matriz 3x3 completa, com cada célula em um de três estados finais (`APROVADA`, `REPROVADA` ou `ERRO_INFRA`), e o scorecard de cada uma, com as justificativas do juiz quando a M6 rodou.
+**Recebe:** a matriz 3x3 completa, com cada célula em um de três estados finais (`APROVADA`, `REPROVADA` ou `ERRO_INFRA`), e o scorecard de cada uma, com as justificativas do juiz quando a M6 rodou; e o plano de cada nível, com os descartes e os seus motivos, as analogias com `revisada=False` marcadas como não revisadas e o `aviso` do gate quando houver.
 
-**O que faz:** o humano vê as 9 peças lado a lado, com a rastreabilidade (cada bloco linkado ao claim, cada claim linkado à página do PDF) e o painel de métricas, e marca publica ou descarta por célula. O dashboard lê tudo do Supabase: as tabelas do run e o PDF do bucket privado `documentos`, aberto por URL assinada de curta duração gerada no servidor do dashboard. A chave de serviço nunca chega ao navegador.
+**O que faz:** o humano vê as 9 peças lado a lado, com a rastreabilidade (cada seção, slide ou cena linkado aos seus claims, cada número linkado ao claim de onde veio, cada claim linkado à página do PDF) e o painel de métricas, e marca publica ou descarta por célula. O dashboard lê tudo do Supabase: as tabelas do run e o PDF do bucket privado `documentos`, aberto por URL assinada de curta duração gerada no servidor do dashboard. A chave de serviço nunca chega ao navegador.
 
 O dashboard fica em `app/` (FastAPI, com HTML, CSS e JS sem build) e escuta só em `127.0.0.1`. Hoje ele inicia o pipeline, mostra as etapas ao vivo e lê os runs do Supabase pela `ConsultaSupabase` de `sunontent/persistencia.py`, em conexão só de leitura; a revisão por célula entra quando existirem as células. Detalhado em `docs/fluxos/dashboard.md`.
 
 **Decide:** publicar ou não. A decisão é registrada, não descartada: é o dado que permite medir depois se o avaliador concorda com o julgamento editorial humano.
 
 **Gera:** uma linha em `decisoes_humanas` por célula, gravada no Supabase e na cópia local. A decisão é final.
+
+### Revisão das analogias novas e entrada no glossário
+
+As analogias `nova`, criadas pelo planejador para termos sem analogia no glossário, são revisadas numa seção separada do dashboard, e não junto da decisão de publicar a célula: publicar uma peça não é aprovar a analogia que ela usa. Na seção, o humano vê cada analogia nova do run com o termo, o nível e as peças em que aparece, e marca aprovar ou rejeitar. A decisão é gravada em `decisoes_analogia`, no Supabase e na cópia local, e é final.
+
+A analogia aprovada não entra sozinha no glossário: o glossário fica no git, e o dashboard grava só no Supabase. Um comando, executado à mão, lê as analogias aprovadas pela `ConsultaSupabase` e gera a alteração em `config/glossario.yaml`, para revisão e commit humanos:
+
+- termo já cadastrado (pelo `termo` ou por uma `variante`): a analogia entra no fim da lista do termo, com `status: aprovada`, para não mudar as referências das analogias existentes;
+- termo sem cadastro: o comando cria a entrada com `id`, `termo` e a analogia aprovada, e deixa em branco `nivel_minimo`, `definicao_simples`, `definicao_tecnica`, `categoria` e `fonte`. Aprovar a analogia não basta: alguém completa esses campos antes do commit. O carregamento do glossário recusa entrada com campo obrigatório em branco, então o arquivo incompleto não chega a um run;
+- analogia que já está no glossário com o mesmo texto não é repetida, e rodar o comando de novo não muda nada;
+- a `versao` do glossário sobe.
+
+Com o tempo, o complemento da E4.3 passa a encontrar no glossário as analogias dos termos que aparecem nos documentos reais, e o planejador cria cada vez menos analogias novas.
 
 **Natureza:** humano.
 
@@ -565,7 +674,7 @@ O dashboard fica em `app/` (FastAPI, com HTML, CSS e JS sem build) e escuta só 
 2. **Repetição real pode passar despercebida.** A mesma informação dita com outra estrutura (carrossel contra artigo, iniciante contra avançado) fica mais distante no espaço vetorial e pode não ser sinalizada.
 3. **Limiar arbitrário.** O valor de corte (0,85? 0,90?) não tem base até ser medido contra decisões reais de descarte, e muda se o modelo de embedding mudar. Exige calibração com o histórico da E8.
 4. **Aviso ignorado.** Se o aviso aparecer em excesso (problema 1), o revisor aprende a ignorá-lo e ele perde o valor justamente quando a repetição for real.
-5. **Comparação dentro da mesma matriz.** As 3 peças de um mesmo nível compartilham o `ConteudoAdaptado` e são parecidas por construção. A comparação precisa se restringir a peças de outros documentos já publicadas, e de preferência do mesmo nível e formato.
+5. **Comparação dentro da mesma matriz.** As 3 peças de um mesmo nível compartilham o `PlanoNivel` e são parecidas por construção. A comparação precisa se restringir a peças de outros documentos já publicadas, e de preferência do mesmo nível e formato.
 6. **Troca do modelo de embedding.** Embeddings de modelos diferentes não são comparáveis. Trocar o modelo exige recalcular todo o histórico, e o modelo usado precisa ficar registrado junto de cada embedding.
 7. **Depende de histórico.** Nas primeiras execuções não há peças publicadas, e a funcionalidade não tem o que mostrar na demonstração sem uma base inicial de publicações.
 8. **Informação insuficiente para decidir.** O número de similaridade sozinho não ajuda o revisor. O aviso precisa mostrar a peça publicada e a data, para que a pessoa compare e decida.
@@ -621,7 +730,7 @@ O relatório corretivo tem três partes, nesta ordem:
 - `K` é pequeno e rígido. `K=2` é o ponto de partida: uma tentativa de correção. `K` alto mascara prompt ruim e queima orçamento.
 - O contador é **por célula**. 9 células, 9 contadores independentes.
 - Aborto antecipado por não-convergência: mesma violação com o mesmo valor duas vezes, para.
-- Retry é da etapa 5 para a 6, **nunca** volta para a 4 ou a 2. Regerar o `ConteudoAdaptado` no retry mudaria a seleção de claims e faria a célula divergir das outras duas do mesmo nível, que compartilham aquele conteúdo.
+- Retry é da etapa 5 para a 6, **nunca** volta para a 4 ou a 2. Regerar o plano no retry mudaria a seleção de claims e faria a célula divergir das outras duas do mesmo nível, que compartilham aquele plano.
 - Célula que esgota `K` não é escondida: vai para o humano como `REPROVADA` com o relatório. Uma reprovação visível e explicada vale mais que uma aprovação forçada.
 
 Custo de um retry: 1 chamada de synthesizer + 1 avaliação. O juiz LLM só é pago de novo se as determinísticas passarem, então um retry que falha na M1 custa uma chamada, não duas.
@@ -656,7 +765,9 @@ class PipelineState(BaseModel):
     propostas: dict[str, ClaimProposto] = {}
     pendencias: dict[str, str] = {}
     correcoes: dict[str, str] = {}
-    adaptados: dict[Nivel, ConteudoAdaptado] = {}  # E4
+    # E4: rodada do gate e plano; o plano só entra aqui depois do gate.
+    rodada_plano: int = 0
+    plano: PlanoEditorial | None = None
     celulas: dict[str, CelulaState] = {}           # 9 entradas depois da E4, chaveadas por celula_id
 ```
 
@@ -761,9 +872,11 @@ data/runs/<run_id>/
 ├── documento.json                  # E1
 ├── validacoes/<rodada>.json        # E3, uma por rodada
 ├── factsheet.json                  # E3: claims e números do FactSheet assinado
-├── adaptados/<nivel>.json          # E4
+├── validacoes_plano/<rodada>.json  # E4: problemas do gate, uma por rodada
+├── plano.json                      # E4: núcleo, aviso e os 3 planos de nível
 ├── spans/<span_id>.json            # spans das etapas sem célula
 ├── revisao/<celula_id>.json        # E8: decisão humana
+├── analogias/<nivel>__<termo>.json # E8: decisão sobre analogia nova
 ├── figma/<celula_id>.json          # E9: materialização
 ├── publicadas/<celula_id>.json     # peça publicada
 └── celulas/<celula_id>/
@@ -830,15 +943,10 @@ legibilidade:
 densidade_termos: {min: 0.00, max: 0.02}   # A CALIBRAR
 analogia_obrigatoria: true
 janela_analogia_tokens: 40                  # A CALIBRAR
-jargao_proibido_sem_analogia:
-  - forward guidance
-  - hiato do produto
-  - taxa terminal
-  - covenant
-  - EBITDA ajustado
 tags_priorizadas: [impacto_pratico]
 tags_descartaveis: [metodologico]
 foco: "impacto pratico no bolso do leitor"
+max_claims: 7                               # A CALIBRAR: claims usados no plano do nível (E4.3)
 formatos:
   artigo:    {palavras: {min: 400, max: 700}}
   carrossel: {slides: {min: 5, max: 7}, chars_por_slide: {max: 220}}
@@ -847,15 +955,53 @@ formatos:
 
 O nível Avançado tem a estrutura idêntica com faixas invertidas e, importante, **piso** de densidade de termos: texto institucional com jargão de menos também está fora de calibração.
 
+Quais termos pedem analogia não fica no LevelSpec: vem do `nivel_minimo` de cada termo do glossário, a mesma fonte lida pelo planejador, pelo gate, pela M4 e pela M5.
+
+---
+
+# O glossário
+
+Os termos técnicos, o nível a partir do qual cada um dispensa explicação, as definições e as analogias. Uma fonte, `config/glossario.yaml`, lida pelo planejador (E4.2), pelo complemento e pelo gate (E4.3), pela M4 e pela M5. A chave `versao` entra no `RunManifest`.
+
+```yaml
+versao: 2
+termos:
+  - id: selic                      # minúsculas, sem acento, com _
+    termo: Selic                   # forma canônica
+    variantes:                     # outras formas que casam no texto (plural, sigla, nome por extenso)
+      - taxa Selic
+      - taxa básica de juros
+    categoria: juros               # juros | inflacao | atividade | cambio | fiscal | mercado | contabil | societario | regulatorio
+    nivel_minimo: intermediario    # menor nível em que o termo aparece sem explicação
+    definicao_simples: "..."       # para o Iniciante, sem outros termos do glossário acima de iniciante
+    definicao_tecnica: "..."       # para Intermediário e Avançado
+    analogias:                     # referência no plano: selic#1, selic#2...
+      - texto: "..."
+        limite: "..."              # onde a analogia deixa de valer
+        status: rascunho           # rascunho | aprovada; só um humano aprova
+    ambiguo: false                 # true se a palavra também tem sentido comum
+    fonte:
+      nome: "..."
+      url: "https://..."
+```
+
+`nivel_minimo`: `iniciante` para palavra do dia a dia (inflação, juros), que dispensa analogia; `intermediario` para o vocabulário padrão de mercado (Selic, CDI, IPCA, dividendos, JCP), que pede analogia no Iniciante; `avancado` para o jargão pleno (forward guidance, hiato do produto, EBITDA ajustado, covenants), que pede analogia no Iniciante e contexto no Intermediário.
+
+Definições e analogias são atemporais: sem números, sem datas e sem citar decisões ou eventos específicos, para que o glossário explique conceitos e nunca vire uma segunda fonte de fatos. Toda entrada tem fonte oficial ou institucional com URL. Palavras ambíguas (ação, papel, meta, margem) ficam com `ambiguo: true` e casam pelas variantes de mais de uma palavra, para a M4 não contar o sentido comum como jargão.
+
+Campos, regras de montagem, leitores e manutenção estão detalhados em `docs/glossario.md`.
+
+A referência de uma analogia é a sua posição na lista do termo (`selic#1`). Reordenar ou remover analogias muda as referências, e por isso sobe a `versao`.
+
 ---
 
 # Trade-offs assumidos
 
 Escolher esta arquitetura não faz os problemas dela desaparecerem. Estes são os que ficam:
 
-- **Custo por documento:** 1 extração + 3 adaptações + 9 sínteses + até 9 juízes = **22 chamadas** no caminho feliz. Retry custa 1 síntese mais, no máximo, 1 juiz. Com `K=2` e cerca de 30% de falha na primeira passada, esperar **26 a 34 chamadas**, condicionado a checkpoint por célula.
-- **Latência:** caminho crítico de 4 chamadas sequenciais (extração, adaptação, síntese, juiz), porque as 3 adaptações e as 9 sínteses são paralelas. Estimativa de 30 a 60s por documento, mais retries.
-- **Duplicação de prompt** entre os 3 adapters e os 3 synthesizers é o risco de manutenção mais concreto. Mitigação: um template por etapa, parametrizado por LevelSpec e por contrato de formato. Se aparecerem 3 arquivos de prompt de adapter, a arquitetura já degradou.
+- **Custo por documento:** 1 extração + 1 plano + 9 sínteses + até 9 juízes = **20 chamadas** no caminho feliz, mais até 2 correções do plano quando o gate acusa problema. Retry custa 1 síntese mais, no máximo, 1 juiz. Com `K=2` e cerca de 30% de falha na primeira passada, esperar **24 a 32 chamadas**, condicionado a checkpoint por célula.
+- **Latência:** caminho crítico de 4 chamadas sequenciais (extração, plano, síntese, juiz), porque as 9 sínteses são paralelas. Estimativa de 30 a 60s por documento, mais retries.
+- **Duplicação de prompt** entre os níveis e entre as 9 células do synthesizer é o risco de manutenção mais concreto. Mitigação: um template por etapa, parametrizado por LevelSpec e por contrato de formato. Se aparecerem arquivos de prompt por nível ou por célula, a arquitetura já degradou.
 - **Nove sínteses parecidas** são gasto real. A alternativa (um synthesizer que gera os 3 formatos numa chamada) economiza chamadas e destrói o isolamento de retry por célula: uma violação no roteiro obrigaria a reescrever o artigo. O isolamento vale o gasto.
 - **Interpretação causal errada** é o que escapa das métricas. "O Copom subiu a Selic **porque** o câmbio depreciou" quando os dois fatos estão no documento mas o nexo não. O juiz de entailment pega parte disso, não tudo. É a principal razão pela qual a revisão humana da E8 não é opcional.
 - **Oscilação de retry** entre legibilidade e densidade é intrínseca ao fato de as métricas se opôrem. Mitigada por três mecanismos já descritos: medir todas as métricas de nível antes de decidir, declarar no relatório o que não deve mudar, e abortar por não-convergência.

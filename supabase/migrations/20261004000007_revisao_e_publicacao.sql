@@ -27,6 +27,30 @@ create trigger decisoes_humanas_sem_truncate
   before truncate on decisoes_humanas
   for each statement execute function bloquear_alteracao();
 
+-- Decisão sobre analogia nova (docs/arquiteturas.md, Revisão das analogias novas e entrada no glossário):
+-- seção separada do dashboard, uma decisão por analogia nova de um nível do run, final. As aprovadas são
+-- lidas pelo comando que gera a alteração em config/glossario.yaml.
+create table decisoes_analogia (
+  id          bigint generated always as identity primary key,
+  run_id      text not null,
+  nivel       nivel not null,
+  termo       text not null,
+  explicacao  text not null,  -- o texto da analogia como estava no plano
+  decisao     decisao_analogia not null,
+  autor       text not null,  -- nome digitado no dashboard
+  decidido_em timestamptz not null default now(),
+  unique (run_id, nivel, termo),
+  foreign key (run_id, nivel) references planos_nivel (run_id, nivel)
+);
+
+create trigger decisoes_analogia_imutavel
+  before update or delete on decisoes_analogia
+  for each row execute function bloquear_alteracao();
+
+create trigger decisoes_analogia_sem_truncate
+  before truncate on decisoes_analogia
+  for each statement execute function bloquear_alteracao();
+
 -- Materialização de carrossel publicado no Figma (docs/arquiteturas.md, E9. Materialização no Figma;
 -- docs/figma-integracao.md).
 -- PENDENTE: a documentação não define schema; colunas inferidas dos dados citados.

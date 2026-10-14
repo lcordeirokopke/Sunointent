@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+import yaml
 from langgraph.checkpoint.memory import InMemorySaver
 
 from conftest import RepositorioMemoria, cliente_falso
@@ -70,7 +71,8 @@ def test_manifest_le_versoes_e_hashes_da_config(raiz):
     m = manifesto.montar(raiz, run_id="copom_20261006T150000Z_aaaaaa", timestamp=MOMENTO,
                          modo="normal", fonte="copom", k=2)
     assert m.level_specs == {"iniciante": 1, "intermediario": 1, "avancado": 1}
-    assert m.glossario_versao == 1
+    glossario = yaml.safe_load((raiz / "config" / "glossario.yaml").read_text(encoding="utf-8"))
+    assert m.glossario_versao == glossario["versao"]
     assert m.prompts == {"extractor": 7}  # templates vazios ficam de fora
     assert set(m.arquivos_sha256) == {
         "config/models.yaml", "config/glossario.yaml", "prompts/extractor.j2",
@@ -82,8 +84,9 @@ def test_hash_ignora_fim_de_linha(raiz):
     def montar():
         return manifesto.montar(raiz, run_id="x", timestamp=MOMENTO, modo="normal", fonte="copom", k=2)
 
+    arquivo = raiz / "config" / "glossario.yaml"
     antes = montar().arquivos_sha256["config/glossario.yaml"]
-    (raiz / "config" / "glossario.yaml").write_bytes(b"versao: 1\r\n")
+    arquivo.write_bytes(arquivo.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
     assert montar().arquivos_sha256["config/glossario.yaml"] == antes
 
 

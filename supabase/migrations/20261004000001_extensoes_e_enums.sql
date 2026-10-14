@@ -30,6 +30,11 @@ create type origem_dado as enum ('pipeline', 'humano');
 -- Decisão humana sobre um claim em quarentena (docs/fluxos/extracao.md, Quarentena).
 create type decisao_quarentena as enum ('aceitar', 'descartar');
 
+-- Regras do gate do plano (docs/arquiteturas.md, E4.3 Complemento e gate do plano)
+create type regra_plano as enum (
+  'id_inexistente', 'contraditorio', 'nucleo_ausente', 'acima_do_limite', 'jargao_sem_analogia', 'motivo_invalido'
+);
+
 -- Slide.papel (docs/arquiteturas.md, Peça final)
 create type papel_slide as enum ('gancho', 'corpo', 'conclusao');
 
@@ -51,6 +56,9 @@ create type classe_falha as enum ('retriavel', 'terminal');
 
 -- Decisão humana por célula na E8 (docs/arquiteturas.md, E8. Revisão humana: "publica ou descarta")
 create type decisao_humana as enum ('publicar', 'descartar');
+
+-- Decisão humana sobre analogia nova na E8 (docs/arquiteturas.md, Revisão das analogias novas e entrada no glossário)
+create type decisao_analogia as enum ('aprovar', 'rejeitar');
 
 -- Imutabilidade: bloqueia update, delete e truncate em tabelas append-only.
 create or replace function bloquear_alteracao()
