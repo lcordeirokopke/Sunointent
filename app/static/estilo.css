@@ -438,3 +438,17 @@ select {
   .linha { grid-template-columns: 1fr; }
   .linha .hora { display: none; }
 }
+
+/* Plano editorial (E4) */
+.claim-mini.nucleo { background: var(--acento-fundo); color: var(--acento); font-weight: 700; }
+.cartao h4 { margin: 14px 0 8px; font-size: 13px; color: var(--texto-suave); font-weight: 600; }
+.tese { margin: 0 0 12px; line-height: 1.5; }
+.tese .rotulo { margin-right: 6px; }
+.tese .claims-mini { display: inline-flex; margin-left: 6px; vertical-align: middle; }
+.aviso-plano { margin: 10px 0 0; }
+.nucleo-textos { margin: 10px 0 0; padding-left: 18px; color: var(--texto-suave); }
+.nucleo-textos li { margin: 2px 0; }
+.motivo-neutro { color: var(--texto-suave); font-size: 12px; margin-top: 4px; }
+details.descartes { margin-top: 14px; }
+details.descartes summary { cursor: pointer; color: var(--texto-suave); font-size: 13px; font-weight: 600; }
+details.descartes .tabela-rolagem { margin-top: 8px; }

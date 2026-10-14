@@ -1000,13 +1000,14 @@ class RepositorioSupabase:
                 if cabecalho is None:
                     return None
                 niveis = cursor.execute(
-                    "select nivel::text as nivel, tese, tese_claim_ids, claims, descartes, analogias"
-                    " from planos_nivel where run_id = %s order by nivel",
+                    "select p.nivel::text as nivel, p.tese, p.tese_claim_ids, p.claims, p.descartes, p.analogias"
+                    " from planos_nivel p where p.run_id = %s order by p.nivel",
                     (run_id,),
                 ).fetchall()
                 celulas = cursor.execute(
-                    "select celula_id, nivel::text as nivel, formato::text as formato, estado::text as estado,"
-                    " tentativa from celulas where run_id = %s order by nivel, formato",
+                    "select c.celula_id, c.nivel::text as nivel, c.formato::text as formato,"
+                    " c.estado::text as estado, c.tentativa from celulas c where c.run_id = %s"
+                    " order by c.nivel, c.formato",
                     (run_id,),
                 ).fetchall()
             plano = PlanoEditorial(
@@ -1118,7 +1119,8 @@ class ConsultaSupabase:
         return self._executar(consulta)
 
     def detalhar_run(self, run_id: str) -> dict | None:
-        """Run, documento processado (resumido), FactSheet, validações por rodada, quarentena e spans.
+        """Run, documento processado (resumido), FactSheet, validações por rodada, quarentena, spans, plano
+        editorial e rodadas do gate do plano.
 
         None se o run não existe.
         """
@@ -1144,6 +1146,8 @@ class ConsultaSupabase:
                     " from llm_spans where run_id = %s order by criado_em, span_id",
                     (run_id,),
                 ).fetchall(),
+                "plano": self._plano(conexao, run_id),
+                "validacoes_plano": self._validacoes_plano(conexao, run_id),
             }
 
         return self._executar(consulta)
@@ -1209,6 +1213,36 @@ class ConsultaSupabase:
                 {"claim_id": v["claim_id"], "passou": v["passou"], "motivo": v["motivo"]}
             )
         return [{"rodada": rodada, "claims": claims} for rodada, claims in rodadas.items()]
+
+    @staticmethod
+    def _plano(conexao, run_id: str) -> dict | None:
+        """Plano editorial da E4 com os 3 planos de nível, na ordem iniciante, intermediario e avancado.
+        None se a E4 não gravou o plano do run."""
+        plano = conexao.execute(
+            "select nucleo, rodadas, aviso from planos_editoriais where run_id = %s", (run_id,)
+        ).fetchone()
+        if plano is None:
+            return None
+        niveis = conexao.execute(
+            "select p.nivel::text as nivel, p.tese, p.tese_claim_ids, p.claims, p.descartes, p.analogias"
+            " from planos_nivel p where p.run_id = %s order by p.nivel",
+            (run_id,),
+        ).fetchall()
+        return {**plano, "niveis": niveis}
+
+    @staticmethod
+    def _validacoes_plano(conexao, run_id: str) -> list[dict]:
+        """Problemas do gate da E4 por rodada. A rodada que passou não tem linha."""
+        rodadas: dict[int, list[dict]] = {}
+        for v in conexao.execute(
+            "select rodada, ordem, nivel::text as nivel, regra::text as regra, detalhe from validacoes_plano"
+            " where run_id = %s order by rodada, ordem",
+            (run_id,),
+        ):
+            rodadas.setdefault(v["rodada"], []).append(
+                {"nivel": v["nivel"], "regra": v["regra"], "detalhe": v["detalhe"]}
+            )
+        return [{"rodada": rodada, "problemas": problemas} for rodada, problemas in rodadas.items()]
 
     @staticmethod
     def _quarentena(conexao, run_id: str) -> list[dict]:

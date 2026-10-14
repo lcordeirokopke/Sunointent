@@ -263,6 +263,18 @@ def test_plano_editorial_rodadas_e_celulas(repositorio, ambiente, tmp_path):
     assert lido == plano
     assert sorted(c.celula_id for c in celulas_lidas) == sorted(c.celula_id for c in celulas)
 
+    # Leitura do dashboard: o plano por nível e os problemas do gate por rodada.
+    detalhe = persistencia.ConsultaSupabase(ambiente["SUPABASE_DB_URL"]).detalhar_run(run_id)
+    assert detalhe["plano"]["nucleo"] == ["C01"] and detalhe["plano"]["rodadas"] == 2
+    assert [n["nivel"] for n in detalhe["plano"]["niveis"]] == list(NIVEIS)
+    iniciante = detalhe["plano"]["niveis"][0]
+    assert iniciante["claims"] == [{"claim_id": "C01", "papel": "principal", "atribuir_fonte": False}]
+    assert iniciante["analogias"][0]["termo"] == "CVM" and iniciante["tese_claim_ids"] == ["C01"]
+    assert detalhe["validacoes_plano"] == [{"rodada": 1, "problemas": [
+        {"nivel": "avancado", "regra": "nucleo_ausente", "detalhe": "C01 fora do avançado"},
+        {"nivel": None, "regra": "id_inexistente", "detalhe": "C99"},
+    ]}]
+
 
 def test_span_do_adapter_aceita_nivel_nulo(repositorio, ambiente, tmp_path):
     """O planejador da E4 faz 1 chamada para os 3 níveis: o span do adapter não tem nível. O extractor nunca tem."""

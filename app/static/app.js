@@ -397,10 +397,9 @@ function painelEtapa(etapa, run) {
     metricas.push(metrica("Rodadas", `${run.rodadas || 0} de ${estado.grafo.rodadas_extracao}`));
   }
   if (etapa.id === "E4") {
-    // Rodadas e aviso do plano vêm da linha final do terminal: "plano em N rodadas (com aviso)".
-    const plano = /plano em (\d+) rodadas?( \(com aviso\))?/.exec(run.resumo ?? "");
-    metricas.push(metrica("Rodadas do plano", plano ? `${plano[1]} de ${estado.grafo.rodadas_plano}` : ""));
-    if (plano) metricas.push(metrica("Aviso", plano[2] ? selo("erro", "com aviso") : selo("ok", "sem aviso")));
+    const plano = estado.detalhes[run.run_id]?.plano;
+    metricas.push(metrica("Rodadas do plano", plano ? `${plano.rodadas} de ${estado.grafo.rodadas_plano}` : ""));
+    if (plano) metricas.push(metrica("Aviso", plano.aviso ? selo("erro", "com aviso") : selo("ok", "sem aviso")));
   }
   const execucao = `<div class="cartao"><h3>Execução</h3><div class="metricas">${metricas.join("")}</div></div>`;
   const dados = dadosEtapa(etapa, run);
@@ -434,7 +433,8 @@ function dadosEtapa(etapa, run) {
     case "E3":
       return cartaoValidacoes(d.validacoes, d.factsheet) + cartaoQuarentena(d.quarentena);
     case "E4":
-      return cartaoSpans(spansDoNo(d.spans, "adapter"), m);
+      return cartaoPlano(d.plano, d.factsheet) + cartaoValidacoesPlano(d.validacoes_plano, d.plano)
+        + cartaoSpans(spansDoNo(d.spans, "adapter"), m);
     default:
       return "";
   }
@@ -517,6 +517,85 @@ function cartaoClaims(factsheet) {
     <tbody>${linhas}</tbody></table></div></div>`;
 }
 
+// Plano editorial da E4 (sunontent/adaptacao/): núcleo, aviso e, por nível, a tese, os claims usados em ordem
+// de leitura, as analogias e os descartes. O texto de cada claim vem do FactSheet do run.
+const ROTULO_NIVEL = { iniciante: "Iniciante", intermediario: "Intermediário", avancado: "Avançado" };
+const ROTULO_MOTIVO = {
+  metodologico: "metodológico", secundario: "secundário", redundante: "redundante",
+  exige_base_tecnica: "exige base técnica", fora_do_foco: "fora do foco",
+};
+
+function cartaoPlano(plano, factsheet) {
+  if (!plano) return `<div class="vazio">O run não chegou a gravar o plano editorial.</div>`;
+  const texto = Object.fromEntries((factsheet?.claims ?? []).map((c) => [c.id, c.texto]));
+  const nucleo = new Set(plano.nucleo);
+  const chip = (id) => `<span class="claim-mini${nucleo.has(id) ? " nucleo" : ""}" title="${esc(texto[id] ?? "")}">${esc(id)}</span>`;
+  const resumo = `<div class="cartao"><div class="cabecalho-etapa"><h3>Plano editorial</h3>
+      ${plano.aviso ? selo("erro", "com aviso") : selo("ok", "sem aviso")}</div>
+    <div class="metricas">
+      ${metrica("Núcleo", `<span class="claims-mini">${plano.nucleo.map(chip).join("")}</span>`)}
+      ${metrica("Rodadas do gate", fmtInt(plano.rodadas))}
+    </div>
+    ${plano.aviso ? `<p class="motivo aviso-plano">${esc(plano.aviso)}</p>` : ""}
+    <ul class="nucleo-textos">${plano.nucleo.map((id) => `<li><code>${esc(id)}</code> ${esc(texto[id] ?? "")}</li>`).join("")}</ul>
+  </div>`;
+  const niveis = plano.niveis.map((p) => {
+    const usados = p.claims.map((c, i) => `<tr>
+      <td class="num">${i + 1}</td>
+      <td class="num">${esc(c.claim_id)}${nucleo.has(c.claim_id) ? `<div style="margin-top:4px">${selo("normal", "núcleo")}</div>` : ""}</td>
+      <td>${selo("", c.papel)}</td>
+      <td>${esc(texto[c.claim_id] ?? "")}</td>
+      <td>${c.atribuir_fonte ? selo("normal", "atribui a fonte") : ""}</td>
+    </tr>`).join("");
+    const analogias = p.analogias.length ? `<h4>Analogias</h4><div class="tabela-rolagem"><table>
+      <thead><tr><th>Termo</th><th>Explicação</th><th>Origem</th><th>Revisão</th></tr></thead>
+      <tbody>${p.analogias.map((a) => `<tr>
+        <td>${esc(a.termo)}</td>
+        <td>${esc(a.explicacao)}</td>
+        <td>${selo(a.origem === "nova" ? "dev" : "normal", a.origem)}${a.glossario_ref ? `<div class="motivo-neutro"><code>${esc(a.glossario_ref)}</code></div>` : ""}</td>
+        <td>${a.revisada ? selo("ok", "revisada") : selo("", "não revisada")}</td>
+      </tr>`).join("")}</tbody></table></div>` : "";
+    const descartes = p.descartes.length ? `<details class="descartes"><summary>Descartes (${p.descartes.length})</summary>
+      <div class="tabela-rolagem"><table>
+      <thead><tr><th>ID</th><th>Motivo</th><th>Origem</th><th>Claim</th></tr></thead>
+      <tbody>${p.descartes.map((d) => `<tr>
+        <td class="num">${esc(d.claim_id)}</td>
+        <td>${selo(d.origem === "planejador" ? "normal" : "", ROTULO_MOTIVO[d.motivo] ?? d.motivo)}${d.relacionado ? `<div class="motivo-neutro">igual a <code>${esc(d.relacionado)}</code></div>` : ""}</td>
+        <td>${esc(d.origem)}</td>
+        <td>${esc(texto[d.claim_id] ?? "")}</td>
+      </tr>`).join("")}</tbody></table></div></details>` : "";
+    return `<div class="cartao"><div class="cabecalho-etapa"><h3>${esc(ROTULO_NIVEL[p.nivel] ?? p.nivel)}</h3>
+        <span class="rotulo">${p.claims.length} claims · ${p.analogias.length} analogias · ${p.descartes.length} descartes</span></div>
+      <p class="tese"><span class="rotulo">Tese</span> ${esc(p.tese)}
+        <span class="claims-mini">${p.tese_claim_ids.map(chip).join("")}</span></p>
+      <div class="tabela-rolagem"><table>
+        <thead><tr><th>#</th><th>ID</th><th>Papel</th><th>Claim</th><th>Fonte</th></tr></thead>
+        <tbody>${usados}</tbody></table></div>
+      ${analogias}
+      ${descartes}
+    </div>`;
+  }).join("");
+  return resumo + niveis;
+}
+
+// Rodadas do gate da E4: os problemas devolvidos ao planejador. A rodada que passou não tem linha no banco.
+function cartaoValidacoesPlano(validacoes, plano) {
+  const porRodada = Object.fromEntries((validacoes ?? []).map((v) => [v.rodada, v.problemas]));
+  const total = Math.max(plano?.rodadas ?? 0, ...Object.keys(porRodada).map(Number));
+  if (!total) return "";
+  const rodadas = Array.from({ length: total }, (_, i) => {
+    const problemas = porRodada[i + 1] ?? [];
+    const lista = problemas.map((p) => `<li>${selo("erro", p.regra)} ${esc(p.nivel ?? "plano")}:
+      <span class="motivo">${esc(p.detalhe)}</span></li>`).join("");
+    return `<div>
+      <div class="rodada"><span class="rotulo">Rodada ${i + 1}</span>
+        ${selo(problemas.length ? "erro" : "ok", problemas.length ? `${problemas.length} problema(s)` : "passou no gate")}</div>
+      ${lista ? `<ul>${lista}</ul>` : ""}
+    </div>`;
+  }).join("");
+  return `<div class="cartao"><h3>Gate do plano por rodada</h3><div class="rodadas">${rodadas}</div></div>`;
+}
+
 // Claims reprovados depois da última rodada do loop E2/E3. Só leitura: a revisão é feita pelas funções
 // de sunontent/extracao/quarentena.py.
 function cartaoQuarentena(itens) {
@@ -578,6 +657,7 @@ function renderResultado() {
         ${metrica("Claims", d.factsheet ? fmtInt(d.factsheet.claims.length) : "")}
         ${d.quarentena?.length ? metrica("Em quarentena", fmtInt(d.quarentena.filter((q) => !q.decisao).length)) : ""}
         ${metrica("Rodadas E2/E3", fmtInt(d.validacoes.length || ""))}
+        ${d.plano ? metrica("Rodadas do plano", fmtInt(d.plano.rodadas)) : ""}
         ${metrica("Tokens", fmtInt(m.custo_total_tokens))}
         ${metrica("Custo", fmtBRL(m.custo_total_brl))}
       </div>
@@ -587,6 +667,8 @@ function renderResultado() {
     ${cartaoClaims(d.factsheet)}
     ${d.validacoes.length ? cartaoValidacoes(d.validacoes, d.factsheet) : ""}
     ${cartaoQuarentena(d.quarentena)}
+    ${d.plano ? cartaoPlano(d.plano, d.factsheet) : ""}
+    ${d.plano || d.validacoes_plano?.length ? cartaoValidacoesPlano(d.validacoes_plano, d.plano) : ""}
     ${d.spans.length ? cartaoSpans(d.spans, m) : ""}
     <div class="cartao"><h3>Manifest: versões usadas no run</h3>
       <div class="metricas" style="margin-bottom:12px">
