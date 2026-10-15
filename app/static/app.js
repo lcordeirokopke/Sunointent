@@ -19,8 +19,6 @@ const ETAPAS = [
     descricao: "Mede legibilidade, densidade de jargão e fidelidade factual (M1 a M6)." },
   { id: "E7", nos: ["router"], nome: "Router",
     descricao: "Aprova a célula, devolve para nova tentativa ou descarta conforme as métricas." },
-  { id: "E8", nos: ["revisao"], nome: "Revisão humana",
-    descricao: "O humano vê as 9 peças com rastreabilidade e métricas e decide publicar ou descartar." },
 ];
 const REFERENCIA = { nome: "Referência",
   descricao: "Modo --dev: lê o documento congelado de tests/fixtures/referencia/, confere o doc_sha256 e o registra no Supabase." };
@@ -517,8 +515,8 @@ function cartaoClaims(factsheet) {
     <tbody>${linhas}</tbody></table></div></div>`;
 }
 
-// Plano editorial da E4 (sunontent/adaptacao/): núcleo, aviso e, por nível, a tese, os claims usados em ordem
-// de leitura, as analogias e os descartes. O texto de cada claim vem do FactSheet do run.
+// Plano editorial da E4 (sunontent/adaptacao/): núcleo, aviso (o que a limpeza do código mudou) e, por nível, a
+// tese, os claims usados em ordem de leitura com a prioridade, as analogias e os descartes. O texto de cada claim vem do FactSheet do run.
 const ROTULO_NIVEL = { iniciante: "Iniciante", intermediario: "Intermediário", avancado: "Avançado" };
 const ROTULO_MOTIVO = {
   metodologico: "metodológico", secundario: "secundário", redundante: "redundante",
@@ -544,6 +542,7 @@ function cartaoPlano(plano, factsheet) {
       <td class="num">${i + 1}</td>
       <td class="num">${esc(c.claim_id)}${nucleo.has(c.claim_id) ? `<div style="margin-top:4px">${selo("normal", "núcleo")}</div>` : ""}</td>
       <td>${selo("", c.papel)}</td>
+      <td class="num">${esc(c.prioridade ?? "")}</td>
       <td>${esc(texto[c.claim_id] ?? "")}</td>
       <td>${c.atribuir_fonte ? selo("normal", "atribui a fonte") : ""}</td>
     </tr>`).join("");
@@ -566,10 +565,10 @@ function cartaoPlano(plano, factsheet) {
       </tr>`).join("")}</tbody></table></div></details>` : "";
     return `<div class="cartao"><div class="cabecalho-etapa"><h3>${esc(ROTULO_NIVEL[p.nivel] ?? p.nivel)}</h3>
         <span class="rotulo">${p.claims.length} claims · ${p.analogias.length} analogias · ${p.descartes.length} descartes</span></div>
-      <p class="tese"><span class="rotulo">Tese</span> ${esc(p.tese)}
+      <p class="tese"><span class="rotulo">Tese</span> ${p.tese ? esc(p.tese) : `<span class="motivo-neutro">sem tese (retirada pela limpeza do plano)</span>`}
         <span class="claims-mini">${p.tese_claim_ids.map(chip).join("")}</span></p>
       <div class="tabela-rolagem"><table>
-        <thead><tr><th>#</th><th>ID</th><th>Papel</th><th>Claim</th><th>Fonte</th></tr></thead>
+        <thead><tr><th>#</th><th>ID</th><th>Papel</th><th title="1 é o mais importante; o carrossel e o roteiro usam os de maior prioridade">Prioridade</th><th>Claim</th><th>Fonte</th></tr></thead>
         <tbody>${usados}</tbody></table></div>
       ${analogias}
       ${descartes}
@@ -642,7 +641,8 @@ function renderResultado() {
     return;
   }
   const m = d.manifest;
-  const erro = m.erro_mensagem ? `<div class="cartao"><div class="cabecalho-etapa"><h3>Erro</h3>${selo("erro", m.erro_classe)}</div>
+  const erro = m.erro_mensagem ? `<div class="cartao"><div class="cabecalho-etapa"><h3>Erro</h3>${selo("erro", m.erro_classe)}
+    ${m.etapa_erro ? `<span class="motivo">na etapa <code>${esc(m.etapa_erro)}</code></span>` : ""}</div>
     <p class="descricao">${esc(m.erro_mensagem)}</p></div>` : "";
   const versoes = Object.entries(m.arquivos_sha256 ?? {}).map(([arq, hash]) => `
     <tr><td><code>${esc(arq)}</code></td><td class="num" title="${esc(hash)}">${esc(hash.slice(0, 16))}…</td></tr>`).join("");

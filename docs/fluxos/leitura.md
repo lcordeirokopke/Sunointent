@@ -55,7 +55,7 @@ Por seção lógica, cobrindo o texto inteiro sem sobreposição. O texto antes 
 | Release da B3 | Linha em maiúsculas, sem dígitos, com 8 caracteres ou mais | O título. Títulos seguidos formam um só. |
 | Fato relevante da CVM | Nenhuma | Vazia. O documento todo é um chunk. |
 
-Subseções da B3 em caixa mista ficam dentro do chunk da seção maior. O `Chunk.texto` é o texto limpo do intervalo: página inicial a partir de `offset_inicio`, páginas do meio inteiras e página final até `offset_fim`, unidas por `\n`. O embedding fica nulo na E1.
+Subseções da B3 em caixa mista ficam dentro do chunk da seção maior. O `Chunk.texto` é o texto limpo do intervalo: página inicial a partir de `offset_inicio`, páginas do meio inteiras e página final até `offset_fim`, unidas por `\n`.
 
 ## Metadados
 

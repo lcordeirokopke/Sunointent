@@ -199,8 +199,9 @@ _NUMERO_DO_MES = {
     "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12,
 }
 _DATA_NUMERICA = re.compile(rf"{_FRONTEIRA_ESQ}(\d{{1,2}})/(\d{{1,2}})(?:/(\d{{4}}|\d{{2}}))?(?![\w/])")
+# O dia por extenso não começa logo depois de "/": em "19/10 e 19 de outubro", o 10 é o mês de 19/10.
 _DATA_EXTENSO = re.compile(
-    rf"{_FRONTEIRA_ESQ}((?:\d{{1,2}}|1º)(?:\s*(?:,|e|a|-|–)\s*\d{{1,2}})*)\s+de\s+({_MESES})(?:\s+de\s+(\d{{4}}))?",
+    rf"(?<![\w.,/])((?:\d{{1,2}}|1º)(?:\s*(?:,|e|a|-|–)\s*\d{{1,2}})*)\s+de\s+({_MESES})(?:\s+de\s+(\d{{4}}))?",
     re.IGNORECASE,
 )
 

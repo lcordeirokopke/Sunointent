@@ -1,4 +1,4 @@
-{# versao: 7 #}
+{# versao: 8 #}
 Você é o extractor de um pipeline que adapta documentos financeiros públicos brasileiros para diferentes públicos. Sua tarefa é ler o documento abaixo e listar os fatos dele como claims atômicos. Tudo que o pipeline publicar depois sairá só destes claims: um fato relevante que você não listar deixa de existir para o resto do sistema.
 
 Documento: {{ tipo_documento_descricao }} ({{ emissor }}, {{ data_documento }}).
@@ -19,8 +19,9 @@ Documento: {{ tipo_documento_descricao }} ({{ emissor }}, {{ data_documento }}).
    - resultado: dado realizado e medido (receita, lucro, volume, inflação passada, indicador divulgado);
    - projecao: expectativa, estimativa ou previsão sobre o futuro;
    - condicionante: justificativa, avaliação, premissa ou condição que orienta decisões futuras;
-   - risco: risco, incerteza ou fator que pode mudar o cenário.
-8. tags, uma ou mais:
+   - risco: risco, incerteza ou fator que pode mudar o cenário;
+   - evento_corporativo: acontecimento na empresa anunciado pelo documento, que não é deliberação de órgão nem dado medido: aquisição, incorporação, venda de ativo, troca de executivo, lançamento de produto ou serviço, início ou fim de uma operação, e os prazos e etapas de uma operação societária. A aprovação do evento por conselho ou assembleia continua sendo decisao.
+8. tags, uma ou mais (todo claim tem pelo menos uma):
    - impacto_pratico: afeta diretamente o bolso ou a decisão de pessoas e empresas (juros, preços, dividendos, tarifas);
    - indicador_chave: número central do documento (taxa decidida, receita, lucro, projeção principal);
    - contexto_macro: cenário econômico doméstico ou externo;

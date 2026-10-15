@@ -180,6 +180,10 @@ def test_datas_com_dia_em_cada_formato():
     ]
 
 
+def test_data_por_extenso_nao_pega_o_mes_de_uma_data_numerica():
+    assert datas("19/10 e 19 de outubro") == [Data(19, 10, None, "19/10"), Data(19, 10, None, "19 de outubro")]
+
+
 def test_sem_dia_trimestre_lei_e_data_invalida_nao_sao_datas():
     assert datas("dez/25, junho de 2026, 2T26/2T25, Lei 224/2025, 6.404 e 32/13") == []
 

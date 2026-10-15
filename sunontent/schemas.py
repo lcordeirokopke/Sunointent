@@ -18,13 +18,14 @@ MotivoPlanejador = Literal["redundante", "exige_base_tecnica", "fora_do_foco"]
 OrigemDescarte = Literal["prefiltro", "planejador", "padrao"]
 Papel = Literal["principal", "apoio", "contexto"]
 RegraPlano = Literal[
-    "id_inexistente", "contraditorio", "nucleo_ausente", "acima_do_limite", "jargao_sem_analogia", "motivo_invalido"
+    "id_inexistente", "contraditorio", "nucleo_ausente", "acima_do_limite", "jargao_sem_analogia", "motivo_invalido",
+    "tese_invalida", "analogia_invalida", "prioridade_invalida",
 ]
 Fonte = Literal["copom", "cvm", "b3"]
 Modo = Literal["normal", "dev"]
 TipoDocumento = Literal["copom_ata", "cvm_fato_relevante", "b3_release"]
 Unidade = Literal["pct", "pp", "BRL", "BRL_mi", "x", "contagem", "data"]
-TipoClaim = Literal["decisao", "projecao", "condicionante", "resultado", "risco"]
+TipoClaim = Literal["decisao", "projecao", "condicionante", "resultado", "risco", "evento_corporativo"]
 # Vocabulário fixo de tags do claim; a E4 prioriza por elas (docs/fluxos/extracao.md, Tags).
 Tag = Literal["impacto_pratico", "metodologico", "contexto_macro", "indicador_chave", "governanca"]
 NoLLM = Literal["extractor", "adapter", "synthesizer", "judge"]
@@ -175,7 +176,7 @@ class Claim(BaseModel):
     texto: str = Field(min_length=1)
     numeros: list[Numero]
     tipo: TipoClaim
-    tags: list[Tag]
+    tags: list[Tag] = Field(min_length=1)
     ancora: Ancora
     literal_fonte: str = Field(min_length=1)
 
@@ -209,7 +210,7 @@ class ClaimProposto(BaseModel):
         description="Cada número do fato, escrito exatamente como aparece dentro de literal_fonte, ex: 13,75%"
     )
     tipo: TipoClaim
-    tags: list[Tag]
+    tags: list[Tag] = Field(min_length=1, description="Uma ou mais tags do fato")
 
 
 class SaidaExtractor(BaseModel):
@@ -236,6 +237,7 @@ class Span(BaseModel):
     nivel: Nivel | None = None
     celula_id: str | None = None
     tentativa: int | None = None
+    rodada: int | None = Field(default=None, ge=1)  # rodada do gate do plano; só no adapter
     modelo: str
     tokens_entrada: int = Field(ge=0)
     tokens_saida: int = Field(ge=0)
@@ -291,6 +293,7 @@ class Descarte(BaseModel):
 class ClaimPlanejado(BaseModel):
     claim_id: str
     papel: Papel
+    prioridade: int = Field(ge=1)  # 1 a n no nível, sem repetir; 1 é o mais importante (corte por formato na E5.1)
     atribuir_fonte: bool  # preenchido pelo código: true em projecao, condicionante e risco
 
 
@@ -306,7 +309,7 @@ class PlanoNivel(BaseModel):
     nivel: Nivel
     descartes: list[Descarte]
     claims: list[ClaimPlanejado]  # em ordem de leitura
-    tese: str
+    tese: str  # vazia só quando a limpeza do plano tirou uma tese inválida (registrado no aviso)
     tese_claim_ids: list[str]
     analogias: list[Analogia]  # uma por termo, a mesma nos 3 formatos do nível
 
@@ -317,7 +320,7 @@ class PlanoEditorial(BaseModel):
     nucleo: list[str] = Field(min_length=1, max_length=3)
     niveis: list[PlanoNivel]  # exatamente 3, na ordem iniciante, intermediario e avancado
     rodadas: int = Field(ge=1, le=3)
-    aviso: str | None = None
+    aviso: str | None = None  # o que a limpeza do código mudou depois da última rodada do gate
 
     @model_validator(mode="after")
     def _tres_niveis(self) -> "PlanoEditorial":
@@ -362,18 +365,23 @@ class DescarteDoPlanejador(BaseModel):
         "de um termo técnico acima do nível; fora_do_foco: não serve ao foco do nível"
     )
     relacionado: str | None = Field(
-        default=None, description="só em redundante: o id do claim usado neste nível que já diz o mesmo"
+        default=None,
+        description="só em redundante: o id do claim usado neste nível que já diz o mesmo, com todos os números e "
+        "datas do descartado",
     )
 
 
 class ClaimDoPlanejador(BaseModel):
     claim_id: str = Field(description="id do claim usado neste nível")
     papel: Papel = Field(description="principal, apoio ou contexto")
+    prioridade: int = Field(ge=1, description="1 a n no nível, sem repetir; 1 é o mais importante")
 
 
 class AnalogiaDoPlanejador(BaseModel):
-    termo: str = Field(description="o termo exatamente como aparece na lista de termos sem analogia")
-    explicacao: str = Field(description="a analogia cotidiana que explica o termo, sem números")
+    termo: str = Field(min_length=1, description="o termo exatamente como aparece na lista de termos sem analogia")
+    explicacao: str = Field(
+        min_length=1, description="a analogia cotidiana que explica o termo, começando com 'É como', sem números"
+    )
 
 
 class NivelDoPlanejador(BaseModel):
@@ -382,8 +390,8 @@ class NivelDoPlanejador(BaseModel):
         description="candidatos que não entram neste nível por um motivo específico"
     )
     claims: list[ClaimDoPlanejador] = Field(description="claims usados neste nível, em ordem de leitura")
-    tese: str = Field(description="uma frase: o que esta versão diz")
-    tese_claim_ids: list[str] = Field(description="os claims usados que sustentam a tese")
+    tese: str = Field(description="uma frase que parafraseia os claims de tese_claim_ids, sem números além de datas")
+    tese_claim_ids: list[str] = Field(description="os claims usados neste nível que a tese parafraseia")
     analogias: list[AnalogiaDoPlanejador] = Field(
         description="só no iniciante: analogias novas para os termos da lista que estão nos claims usados; "
         "vazia nos outros níveis"

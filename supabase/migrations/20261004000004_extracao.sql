@@ -27,9 +27,6 @@ create table documento_paginas (
 );
 
 -- Chunks por seção lógica (docs/arquiteturas.md, E1. Leitura), usados pela M6 para recuperar contexto.
--- A E1 grava os chunks com embedding nulo. A documentação descreve o índice vetorial como
--- efêmero (docs/arquiteturas.md, Diagrama do fluxo); persistir o embedding aqui é decisão em aberto.
--- PENDENTE: dimensão do embedding depende do modelo de embedding, ainda não escolhido.
 create table chunks (
   run_id           text not null,
   chunk_id         text not null,
@@ -39,13 +36,10 @@ create table chunks (
   offset_fim       int not null,
   secao            text,
   texto            text not null,
-  embedding        extensions.vector,
-  embedding_modelo text,  -- snapshot do modelo de embedding (docs/arquiteturas.md, E8. Revisão humana)
   primary key (run_id, chunk_id),
   foreign key (run_id, pagina_inicio) references documento_paginas (run_id, pagina),
   foreign key (run_id, pagina_fim) references documento_paginas (run_id, pagina),
-  check (pagina_fim > pagina_inicio or (pagina_fim = pagina_inicio and offset_fim >= offset_inicio)),
-  check ((embedding is null) = (embedding_modelo is null))
+  check (pagina_fim > pagina_inicio or (pagina_fim = pagina_inicio and offset_fim >= offset_inicio))
 );
 
 -- FactSheet (docs/arquiteturas.md, FactSheet). Um por run, gravado já assinado pela E3 ou, quando

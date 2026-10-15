@@ -1,7 +1,23 @@
 nivel: intermediario
-versao: 2
+versao: 3
 # Campos da E4 (docs/fluxos/plano-editorial.md, LevelSpec da E4). Valores de partida.
 foco: "alocação e tendências"
 tags_priorizadas: [indicador_chave, contexto_macro]
 tags_descartaveis: []
-max_claims: 7
+# Contrato de formato (docs/arquiteturas.md, O LevelSpec): lido pela E4 (o plano usa o max_claims do artigo),
+# pela E5.1 (orçamento de cada formato e corte pela prioridade, sempre com o núcleo) e pela M2.
+peso_papel: {principal: 3, apoio: 2, contexto: 1}
+formatos:
+  artigo:
+    max_claims: 7
+    palavras: {min: 450, max: 750}
+  carrossel:
+    max_claims: 5
+    slides: {min: 5, max: 7}
+    caracteres: {gancho: 120, corpo: 220, conclusao: 160}
+  roteiro:
+    max_claims: 5
+    duracao_s: 60
+    palavras_por_segundo: 2.5
+    abertura_s: 6
+    fechamento_s: 6

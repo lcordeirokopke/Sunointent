@@ -209,7 +209,7 @@ def test_plano_editorial_rodadas_e_celulas(repositorio, ambiente, tmp_path):
     from sunontent.extracao import extractor
     from sunontent.schemas import (
         FORMATOS, NIVEIS, Analogia, CelulaState, ClaimPlanejado, ClaimProposto, Descarte, FactSheet,
-        PlanoEditorial, PlanoNivel, ProblemaPlano, celula_id,
+        PlanoEditorial, PlanoNivel, ProblemaPlano, SaidaPlanejador, celula_id,
     )
 
     run_id, documento = run_com_referencia(repositorio, ambiente["SUPABASE_DB_URL"])
@@ -217,7 +217,10 @@ def test_plano_editorial_rodadas_e_celulas(repositorio, ambiente, tmp_path):
     proposto = ClaimProposto(
         id="C01", chunk_id="K01", texto="O fato relevante atende à Resolução CVM nº 44.",
         literal_fonte="CVM nº 44, de 23 de agosto de 2021", numeros=["44"], tipo="resultado", tags=["governanca"])
-    claims, _ = extractor.ancorar(documento, {"C01": proposto})
+    # C99 e C100 com o mesmo trecho: a leitura do FactSheet devolve C100 depois de C99.
+    propostos = {i: proposto.model_copy(update={"id": i}) for i in ("C01", "C100", "C99")}
+    claims, _ = extractor.ancorar(documento, propostos)
+    claims = sorted(claims, key=lambda c: (len(c.id), c.id))
     factsheet = FactSheet(
         doc_id=documento.doc_id, tipo_documento=documento.tipo_documento, emissor=documento.emissor,
         data_documento=documento.data_documento, claims=claims, tabela_numeros=documento.tabela_numeros,
@@ -225,7 +228,7 @@ def test_plano_editorial_rodadas_e_celulas(repositorio, ambiente, tmp_path):
 
     plano = PlanoEditorial(nucleo=["C01"], rodadas=2, aviso=None, niveis=[
         PlanoNivel(nivel=n, descartes=[Descarte(claim_id="C02", motivo="secundario", origem="padrao")],
-                   claims=[ClaimPlanejado(claim_id="C01", papel="principal", atribuir_fonte=False)],
+                   claims=[ClaimPlanejado(claim_id="C01", papel="principal", prioridade=1, atribuir_fonte=False)],
                    tese="Tese.", tese_claim_ids=["C01"],
                    analogias=[Analogia(termo="CVM", explicacao="Como um árbitro.", origem="nova", revisada=False)]
                    if n == "iniciante" else [])
@@ -237,42 +240,70 @@ def test_plano_editorial_rodadas_e_celulas(repositorio, ambiente, tmp_path):
         persistencia.gravar_plano(repositorio, tmp_path, run_id, plano, celulas)
     persistencia.gravar_factsheet(repositorio, tmp_path, run_id, factsheet)
 
+    saida = SaidaPlanejador.model_validate({"nucleo": ["C01"], "niveis": [
+        {"nivel": n, "descartes": [], "claims": [{"claim_id": "C01", "papel": "principal", "prioridade": 1}],
+         "tese": "Tese.",
+         "tese_claim_ids": ["C01"], "analogias": []} for n in NIVEIS]})
     rodada_antiga = [ProblemaPlano(regra="contraditorio", nivel="avancado", detalhe="antiga")]
-    persistencia.gravar_validacao_plano(repositorio, tmp_path, run_id, 1, rodada_antiga)
+    persistencia.gravar_validacao_plano(repositorio, tmp_path, run_id, 1, rodada_antiga, saida)
     persistencia.reiniciar_validacoes_plano(repositorio, tmp_path, run_id)
     problemas = [ProblemaPlano(regra="nucleo_ausente", nivel="avancado", detalhe="C01 fora do avançado"),
-                 ProblemaPlano(regra="id_inexistente", detalhe="C99")]
+                 ProblemaPlano(regra="tese_invalida", detalhe="C99")]
     assert persistencia.carregar_plano(repositorio, tmp_path, run_id) is None
-    for _ in range(2):  # a repetição não duplica linhas
-        persistencia.gravar_validacao_plano(repositorio, tmp_path, run_id, 1, problemas)
-        persistencia.gravar_validacao_plano(repositorio, tmp_path, run_id, 2, [])
+    for _ in range(2):  # a repetição não duplica linhas e o mesmo plano não é erro
+        persistencia.gravar_validacao_plano(repositorio, tmp_path, run_id, 1, problemas, saida)
+        persistencia.gravar_validacao_plano(repositorio, tmp_path, run_id, 2, [], saida)
         persistencia.gravar_plano(repositorio, tmp_path, run_id, plano, celulas)
+    with pytest.raises(FalhaTerminal, match="já tem outro plano"):
+        persistencia.gravar_plano(repositorio, tmp_path, run_id, plano.model_copy(update={"rodadas": 3}), celulas)
 
     with psycopg.connect(ambiente["SUPABASE_DB_URL"]) as conexao:
         rodadas = conexao.execute(
             "select rodada, ordem, nivel::text, regra::text, detalhe from validacoes_plano where run_id = %s"
             " order by rodada, ordem", (run_id,)).fetchall()
+        saidas = conexao.execute(
+            "select rodada, saida from rodadas_plano where run_id = %s order by rodada", (run_id,)).fetchall()
         estados = conexao.execute(
             "select estado::text, tentativa, count(*) from celulas where run_id = %s group by 1, 2",
             (run_id,)).fetchall()
     assert rodadas == [(1, 1, "avancado", "nucleo_ausente", "C01 fora do avançado"),
-                       (1, 2, None, "id_inexistente", "C99")]
+                       (1, 2, None, "tese_invalida", "C99")]
+    assert saidas == [(1, saida.model_dump(mode="json")), (2, saida.model_dump(mode="json"))]
     assert estados == [("PENDENTE", 0, 9)]
 
     lido, celulas_lidas = persistencia.carregar_plano(repositorio, tmp_path, run_id)
     assert lido == plano
     assert sorted(c.celula_id for c in celulas_lidas) == sorted(c.celula_id for c in celulas)
 
+    # A célula muda de estado com atualizado_em escrito pelo código.
+    with psycopg.connect(ambiente["SUPABASE_DB_URL"]) as conexao:
+        antes = conexao.execute(
+            "select atualizado_em from celulas where run_id = %s and celula_id = 'avancado__roteiro'", (run_id,)
+        ).fetchone()[0]
+    gerando = CelulaState(celula_id="avancado__roteiro", nivel="avancado", formato="roteiro", tentativa=1,
+                          estado="GERANDO")
+    persistencia.atualizar_celula(repositorio, tmp_path, run_id, gerando)
+    with psycopg.connect(ambiente["SUPABASE_DB_URL"]) as conexao:
+        depois = conexao.execute(
+            "select estado::text, tentativa, atualizado_em from celulas where run_id = %s"
+            " and celula_id = 'avancado__roteiro'", (run_id,)).fetchone()
+    assert depois[:2] == ("GERANDO", 1) and depois[2] > antes
+    with pytest.raises(FalhaTerminal, match="não existe em celulas"):
+        persistencia.atualizar_celula(repositorio, tmp_path, "cvm_20261004T142205Z_000000", gerando)
+
+    # O FactSheet volta pelo Postgres igual ao gravado, com os números na ordem de claim_numeros.
+    assert persistencia.carregar_factsheet(repositorio, run_id) == factsheet
+
     # Leitura do dashboard: o plano por nível e os problemas do gate por rodada.
     detalhe = persistencia.ConsultaSupabase(ambiente["SUPABASE_DB_URL"]).detalhar_run(run_id)
     assert detalhe["plano"]["nucleo"] == ["C01"] and detalhe["plano"]["rodadas"] == 2
     assert [n["nivel"] for n in detalhe["plano"]["niveis"]] == list(NIVEIS)
     iniciante = detalhe["plano"]["niveis"][0]
-    assert iniciante["claims"] == [{"claim_id": "C01", "papel": "principal", "atribuir_fonte": False}]
+    assert iniciante["claims"] == [{"claim_id": "C01", "papel": "principal", "prioridade": 1, "atribuir_fonte": False}]
     assert iniciante["analogias"][0]["termo"] == "CVM" and iniciante["tese_claim_ids"] == ["C01"]
     assert detalhe["validacoes_plano"] == [{"rodada": 1, "problemas": [
         {"nivel": "avancado", "regra": "nucleo_ausente", "detalhe": "C01 fora do avançado"},
-        {"nivel": None, "regra": "id_inexistente", "detalhe": "C99"},
+        {"nivel": None, "regra": "tese_invalida", "detalhe": "C99"},
     ]}]
 
 
@@ -291,8 +322,28 @@ def test_span_do_adapter_aceita_nivel_nulo(repositorio, ambiente, tmp_path):
 
     persistencia.gravar_span(repositorio, tmp_path, span("adapter"))
     persistencia.gravar_span(repositorio, tmp_path, span("adapter", "iniciante"))
+    persistencia.gravar_span(repositorio, tmp_path, span("adapter").model_copy(update={"rodada": 2}))
     with pytest.raises(FalhaTerminal):
         persistencia.gravar_span(repositorio, tmp_path, span("extractor", "iniciante"))
+    with pytest.raises(FalhaTerminal):  # a rodada do gate é só do adapter
+        persistencia.gravar_span(repositorio, tmp_path, span("extractor").model_copy(update={"rodada": 1}))
+    detalhe = persistencia.ConsultaSupabase(ambiente["SUPABASE_DB_URL"]).detalhar_run(run_id)
+    assert sorted(s["rodada"] or 0 for s in detalhe["spans"]) == [0, 0, 2]
+
+
+def test_run_abortado_com_a_etapa_do_erro(repositorio, ambiente):
+    import psycopg
+
+    run_id = novo_run(ambiente["SUPABASE_DB_URL"])
+    repositorio.abortar_run(run_id, "retriavel", "conexão fechada", "adapt")
+    with psycopg.connect(ambiente["SUPABASE_DB_URL"]) as conexao:
+        linha = conexao.execute(
+            "select status::text, erro_classe::text, etapa_erro from runs where run_id = %s", (run_id,)).fetchone()
+        assert linha == ("abortado", "retriavel", "adapt")
+        with pytest.raises(psycopg.errors.CheckViolation):  # etapa do erro só em run abortado
+            conexao.execute("update runs set etapa_erro = 'adapt' where run_id = %s", (novo_run(ambiente["SUPABASE_DB_URL"]),))
+    resumo = persistencia.ConsultaSupabase(ambiente["SUPABASE_DB_URL"]).detalhar_run(run_id)["manifest"]
+    assert resumo["etapa_erro"] == "adapt"
 
 
 # Leitura do dashboard (ConsultaSupabase)

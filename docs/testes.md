@@ -24,7 +24,6 @@ Quase tudo é simulado. O código do projeto roda de verdade; o mundo externo (i
 | Storage do Supabase | `_StorageFalso`: só devolve o erro que o teste pede | `test_ingestao.py` |
 | Espera do backoff | `monkeypatch` troca `retentativa._dormir` por uma lista; o teste confere o tamanho da lista e que as esperas crescem, sem esperar de verdade | `conftest.py` |
 | Disco | `tmp_path` do pytest no lugar de `data/` | todos |
-| Checkpointer do LangGraph | `InMemorySaver` | `test_main_graph.py` |
 | Gemini API | `ProviderFalso`: devolve respostas prontas em ordem (JSON, `RespostaBruta` ou exceção) e guarda os prompts recebidos; `cliente_falso` monta o `ClienteLLM` com ele, para o extractor e o adapter; `resposta_plano` monta a resposta do planejador | `conftest.py` |
 
 Rodam de verdade: `copom.py`, `cvm.py`, `b3.py`, `comum.py`, `retentativa.py`, `manifesto.py`, `graph.py` e `__main__.py` (parsing, validação de `%PDF-`, hash, limite de tamanho, classificação dos erros, ordem das gravações), o grafo LangGraph, o servidor do dashboard (`app/servidor.py` e `app/execucao.py`, com um processo filho de verdade), a leitura e o hash dos arquivos de `config/` e `prompts/` (copiados para o `tmp_path`) e a escrita de arquivos no disco dentro do `tmp_path`.
@@ -67,7 +66,7 @@ tests/
 
 ## E1: leitura
 
-`test_numeros.py` fixa o parser com igualdade exata em `Decimal`: cada formato aceito (`12,5%`, `R$ 1,2 bi`, `0,50 p.p.`, `47 bps`, `1.938,6`) e cada formato recusado (`1,234.56`, `12.5%`, `1.93`, `3.1`, `0.500`), que precisa levantar `NumeroNaoPrevisto` em vez de ser interpretado. Também fixa o ordinal de período (`1º tri` é `data`, `3º lugar` é `contagem`) e o leitor de datas (`numeros.datas`): cada formato com dia vira dia, mês e ano, e mês sem dia, trimestre, lei e data inválida ficam de fora.
+`test_numeros.py` fixa o parser com igualdade exata em `Decimal`: cada formato aceito (`12,5%`, `R$ 1,2 bi`, `0,50 p.p.`, `47 bps`, `1.938,6`) e cada formato recusado (`1,234.56`, `12.5%`, `1.93`, `3.1`, `0.500`), que precisa levantar `NumeroNaoPrevisto` em vez de ser interpretado. Também fixa o ordinal de período (`1º tri` é `data`, `3º lugar` é `contagem`) e o leitor de datas (`numeros.datas`): cada formato com dia vira dia, mês e ano; mês sem dia, trimestre, lei e data inválida ficam de fora; e em "19/10 e 19 de outubro" a data por extenso não pega o mês de `19/10`.
 
 `test_extracao.py` roda a E1 de verdade sobre os três PDFs de `tests/fixtures/referencia/`:
 
@@ -125,6 +124,8 @@ tests/
 
 - custo em BRL pelo preço e pela cotação;
 - resposta fora do schema reinjeta o erro de validação e conta os tokens; 3 respostas inválidas viram terminal;
+- claim sem tag é resposta fora do schema: o extractor responde de novo, e o `Claim` também recusa `tags` vazia;
+- a regra 7 do prompt descreve todos os tipos do `TipoClaim`, inclusive `evento_corporativo`;
 - falha de infraestrutura repete com espera crescente, sem gastar o contador de parse; 4 falhas viram terminal;
 - bloqueio de conteúdo e erro 4xx são terminais, sem repetir;
 - nó sem modelo, modelo sem preço e nível de raciocínio inválido são terminais; o `config/models.yaml` do repositório tem preço para cada modelo e o raciocínio da correção;
@@ -143,7 +144,7 @@ tests/
 
 ### Gemini de verdade
 
-`test_gemini_cobre_os_fatos_anotados` (marker `gemini`) roda o `__main__` em modo `--dev` para cada fonte, com a Gemini API de verdade e o repositório em memória, e exige o FactSheet assinado e todos os fatos anotados cobertos. Imprime claims, tokens, custo e rodadas, e os tokens, o custo e a duração de cada chamada (com `-s`). O run vai até a E4, com o planejador de verdade. Custa da ordem de R$ 0,15 a R$ 0,60 por documento na extração, mais cerca de R$ 0,16 por rodada do plano, e leva alguns minutos. Como a resposta do modelo varia, uma falha aqui pede para ler os claims gerados (`data/runs/<run_id>/factsheet.json` no `tmp_path` do teste) antes de mexer no prompt ou na anotação.
+`test_gemini_cobre_os_fatos_anotados` (marker `gemini`) roda o `__main__` em modo `--dev` para cada fonte, com a Gemini API de verdade e o repositório em memória, e exige o FactSheet assinado e todos os fatos anotados cobertos. Imprime claims, tokens, custo e rodadas, e os tokens, o custo e a duração de cada chamada (com `-s`). O run vai até a E4, com o planejador de verdade. Custa da ordem de R$ 0,15 a R$ 0,76 por documento na extração, mais R$ 0,07 a R$ 0,46 pelo plano, e leva de 15 a 20 minutos nas 3 fontes. Como a resposta do modelo varia, uma falha aqui pede para ler os claims gerados (`data/runs/<run_id>/factsheet.json` no `tmp_path` do teste) antes de mexer no prompt ou na anotação.
 
 ### No grafo
 
@@ -168,7 +169,7 @@ tests/
 
 ### LevelSpec
 
-`test_levelspec.py` lê os 3 arquivos de `config/levels/` e confere os valores de `docs/fluxos/plano-editorial.md`. Cada regra de validação aborta com o caminho do arquivo: `nivel` diferente do nome do arquivo, tag fora do vocabulário, tag nas duas listas, tag descartável que não é `metodologico`, `max_claims` abaixo de 3 ou não inteiro (`"5"`, `5.0`, `true`), campo desconhecido, campo ausente e arquivo vazio ou ausente.
+`test_levelspec.py` lê os 3 arquivos de `config/levels/` e confere os valores de `docs/fluxos/plano-editorial.md`, inclusive o contrato de formato (`max_claims` por formato, palavras do artigo, slides e caracteres do carrossel, duração, palavras por segundo, abertura e fechamento do roteiro, peso do papel e versão). Cada regra de validação aborta com o caminho do arquivo: `nivel` diferente do nome do arquivo, tag fora do vocabulário, tag nas duas listas, tag descartável que não é `metodologico`, `max_claims` de cada formato abaixo de 3 ou não inteiro (`"5"`, `5.0`, `true`), `max_claims` no topo do arquivo, formato menor com mais claims que um maior, faixa invertida, carrossel com menos de 3 slides, caractere de um papel ausente, abertura e fechamento que ocupam o roteiro todo, palavras por segundo zero, peso de papel zero, campo desconhecido (no topo e num formato), campo ausente e arquivo vazio ou ausente.
 
 ### Glossário
 
@@ -186,22 +187,24 @@ tests/
 `test_adaptacao.py`, com claims, LevelSpec e glossário montados no teste:
 
 - pré-filtro: sai só o claim com todas as tags descartáveis; com uma tag descartável e outra não, continua candidato; candidatos nos 3 níveis;
-- complemento: `atribuir_fonte` pelo tipo; descartes do pré-filtro, do planejador e `secundario` para os candidatos restantes; analogia do glossário e `nova`, casada pelo nome sem caixa e sem acento; `nova` fora da lista, de termo com analogia no glossário ou fora dos claims usados fica de fora; lista de termos sem analogia; retirada dos ids inexistentes, que pode esvaziar o núcleo;
-- gate: o plano correto passa, e cada regra reprova: `id_inexistente` (núcleo, claims, descartes, relacionado e tese), `contraditorio` (usado e descartado, descartado pelo pré-filtro e pelo planejador, usado depois do pré-filtro, repetido nos claims), `nucleo_ausente` (fora de um nível e não candidato nos 3), `acima_do_limite`, `jargao_sem_analogia` (só no Iniciante e só para termo acima de iniciante) e `motivo_invalido` (`redundante` sem relacionado ou com relacionado fora dos claims; `exige_base_tecnica` sem termo acima do nível, e sempre no Avançado);
-- schema do planejador: núcleo de 1 a 3, exatamente 3 níveis em ordem, analogia só no Iniciante e motivo `secundario` recusado;
-- planejador, com o `ProviderFalso`: o prompt traz o LevelSpec dos 3 níveis, os claims com onde cada um é candidato e os termos sem analogia, sem a linha de versão e sem a seção de correção; a rodada 1 usa o raciocínio padrão; a correção traz só os problemas e o plano enviado e pede `adapter_correcao`; resposta fora do schema é repetida com o erro, e 3 viram terminal;
-- gravação, com o repositório em memória: rodadas do gate sem duplicar e com a cópia local (lista vazia na rodada que passou), limpeza das rodadas, plano e 9 células em `PENDENTE` com a cópia local, plano recusado sem FactSheet e leitura do plano que regrava a cópia local que falta.
+- complemento: `atribuir_fonte` pelo tipo; a prioridade e a tese como o planejador mandou; descartes do pré-filtro, do planejador e `secundario` para os candidatos restantes; analogia do glossário e `nova`, casada pelo nome sem caixa e sem acento; `nova` fora da lista, de termo com analogia no glossário ou fora dos claims usados fica de fora; lista de termos sem analogia; sigla em minúscula não casa e termo `ambiguo` só casa pela forma de mais de uma palavra, no complemento e no gate;
+- gate: o plano correto passa, e cada regra reprova: `id_inexistente` (núcleo, claims, descartes, relacionado e tese), `contraditorio` (usado e descartado, descartado pelo pré-filtro e pelo planejador, usado depois do pré-filtro, repetido nos claims, com as mensagens que citam só o que o planejador vê), `nucleo_ausente` (fora de um nível e não candidato nos 3), `acima_do_limite`, `prioridade_invalida` (repetida ou com buraco), `jargao_sem_analogia` (só no Iniciante e só para termo acima de iniciante), `analogia_invalida` (`nova` com dígito, com marcador ou que só repete o termo, inclusive por forma composta e variante; a que cita o termo com mais conteúdo passa), `motivo_invalido` (`redundante` sem relacionado, com relacionado fora dos claims ou sem todos os números e datas do descartado, comparados por valor e unidade e por dia, mês e ano, com número repetido contando duas vezes; `exige_base_tecnica` sem termo acima do nível, e sempre no Avançado) e `tese_invalida` (id não usado, tese vazia ou sem ids, número que não é data, termo técnico no Iniciante; data, termo de iniciante e o 15 de IPCA-15 passam; a tese vazia sem ids da limpeza só é aceita com `aceitar_tese_vazia`);
+- limpeza depois da última rodada: plano sem problema não muda; ids inexistentes (o `redundante` sem relacionado existente vira `secundario`, e o `aviso` cita o id que saiu da tese), contraditório, núcleo ausente incluído no fim como `apoio` e núcleo não candidato retirado, núcleo vazio aborta, analogia inválida retirada com o claim saindo do Iniciante como `exige_base_tecnica`, claim do núcleo com jargão sem analogia aborta, corte pela prioridade mantendo o núcleo, analogia do termo que saiu pelo corte retirada, redundante com relacionado cortado vira `secundario`, motivo inválido vira `secundario`, tese com número ou termo técnico fica vazia, prioridades renumeradas, e o `aviso` lista o que mudou;
+- schema do planejador: núcleo de 1 a 3, exatamente 3 níveis em ordem, analogia só no Iniciante, motivo `secundario` recusado, analogia sem termo ou sem explicação recusada e prioridade menor que 1 recusada;
+- planejador, com o `ProviderFalso`: o prompt traz o LevelSpec dos 3 níveis, os claims com onde cada um é candidato e os termos técnicos de cada um com o nível, os termos sem analogia, o que vem primeiro no tipo de documento (uma linha por tipo, `test_prompt_diz_o_que_vem_primeiro_no_tipo_de_documento`) e as regras da prioridade, do `redundante`, do `exige_base_tecnica` (com a preferência do Iniciante pelo claim com analogia), da tese e da analogia `nova`, sem a linha de versão e sem a seção de correção; a rodada 1 usa o raciocínio padrão e o span traz a rodada; a correção traz só os problemas e o plano enviado, pede `adapter_correcao` e o span traz a rodada da correção; resposta fora do schema é repetida com o erro, e 3 viram terminal;
+- gravação, com o repositório em memória: rodadas do gate sem duplicar e com a cópia local (lista vazia na rodada que passou, com a saída do planejador em toda rodada), limpeza das rodadas e das saídas, plano e 9 células em `PENDENTE` com a cópia local, o mesmo plano gravado de novo sem erro e outro plano recusado, o plano lido como uma cópia reconstruída, `atualizar_celula` com a cópia local e recusada para célula que não existe, `carregar_factsheet` com os claims da quarentena em ordem de id (C100 depois de C99), plano recusado sem FactSheet e leitura do plano que regrava a cópia local que falta.
 
 ### No grafo
 
 `test_main_graph.py`, com o `ProviderFalso`:
 
-- o run conclui com o plano, as 9 células em `PENDENTE`, as analogias do glossário no Iniciante, o span do `adapter` sem nível e a linha `plano em 1 rodada`;
-- o problema do gate volta ao planejador só com a lista de problemas, e o plano fica pronto na rodada 2;
-- problema que continua depois da 3ª rodada: o plano segue com `aviso`, sem os ids inexistentes, e a linha final diz `(com aviso)`;
-- núcleo vazio depois da retirada: aborta, com as 3 rodadas gravadas e sem plano;
+- o run conclui com o plano, as 9 células em `PENDENTE`, as analogias do glossário no Iniciante, o span do `adapter` sem nível e com a rodada 1, a saída do planejador em `rodadas_plano` e na cópia local, e a linha `plano em 1 rodada`;
+- o problema do gate volta ao planejador só com a lista de problemas, e o plano fica pronto na rodada 2, com as 2 saídas e os 2 spans com a rodada;
+- problema que continua depois da 3ª rodada: a limpeza corrige o plano, o `aviso` lista o que mudou, e a linha final diz `(com aviso)`;
+- núcleo vazio depois da limpeza: aborta com a etapa `adapt`, com as 3 rodadas gravadas e sem plano;
+- nenhum claim candidato nos 3 níveis: aborta antes de chamar o planejador;
 - LevelSpec ou glossário inválido abortam antes de chamar o planejador; 3 respostas fora do schema abortam o run;
-- retomada: com o plano gravado, o nó o reaproveita sem chamar o modelo e regrava a cópia local; sem plano, apaga as rodadas antigas antes de recomeçar.
+- as rodadas antigas do run são apagadas antes da rodada 1.
 
 `test_app.py::test_e4_entra_no_fluxo_do_dashboard` confere o nó `adapt` e as arestas `validate -> adapt`, `quarentena -> adapt` e `adapt -> END` em `/api/grafo`, `RODADAS_PLANO` em `rodadas_plano`, e a etapa E4 com o nó `adapt` no `app.js`. `test_persistencia_supabase.py::test_plano_editorial_rodadas_e_celulas` faz a gravação no Supabase local.
 
@@ -216,8 +219,8 @@ Não contém testes, só infraestrutura compartilhada:
 - `repositorio` e `run_id`: fixtures com um run `copom_...` já registrado.
 - `referencia(fonte)`: devolve bytes e metadados do documento congelado, ou `None` se ainda não existir.
 - `RepositorioMemoria` também guarda spans (sem somar duas vezes o mesmo), validações e FactSheets, e recusa número de claim que não está em `numeros`, como o Supabase. Guarda ainda a quarentena e as decisões da revisão, com as mesmas regras: uma decisão por claim, e aceitar só com FactSheet assinado.
-- `RepositorioMemoria` guarda também as rodadas do gate, o plano e as células, e recusa o plano sem FactSheet do run.
-- `ProviderFalso` e `cliente_falso`: o LLM simulado. `resposta_plano(*claim_ids)`: resposta do planejador que usa os claims dados nos 3 níveis.
+- `RepositorioMemoria` guarda também as rodadas do gate com a saída do planejador, o plano e as células, recusa o plano sem FactSheet do run, recusa outro plano para o run que já tem plano e recusa `rodada` em span que não é do `adapter`. O FactSheet e o plano ficam como JSON (`model_dump(mode="json")`) e voltam por `model_validate`, como pelo Postgres; `factsheet_gravado` e `plano_gravado` são os atalhos dos testes para ler o que foi gravado.
+- `ProviderFalso` e `cliente_falso`: o LLM simulado. `resposta_plano(*claim_ids)`: resposta do planejador que usa os claims dados nos 3 níveis, com as prioridades em ordem.
 
 ## test_ingestao.py
 
@@ -277,11 +280,11 @@ Testes de unidade da E0. Os parametrizados rodam uma vez por fonte (copom, cvm, 
 
 ## test_main_graph.py
 
-Cobre o manifest, o grafo e o `__main__`, com repositório e checkpointer em memória. A fixture `raiz` copia `config/` e `prompts/` e cria uma referência de Copom dentro do `tmp_path`.
+Cobre o manifest, o grafo e o `__main__`, com repositório em memória. A fixture `raiz` copia `config/` e `prompts/` e cria uma referência de Copom dentro do `tmp_path`.
 
 ### Manifest
 
-- `test_manifest_le_versoes_e_hashes_da_config`: o manifest lê as versões dos LevelSpec e do glossário e o hash de cada arquivo de config.
+- `test_manifest_le_versoes_e_hashes_da_config`: o manifest lê as versões dos LevelSpec, do glossário e dos prompts, iguais às dos próprios arquivos, e o hash de cada arquivo de config.
 - `test_hash_ignora_fim_de_linha`: trocar `\n` por `\r\n` não muda o hash.
 - `test_template_com_conteudo_exige_cabecalho_de_versao`: template com conteúdo e sem `{# versao: N #}` gera erro apontando o arquivo.
 - `test_template_com_cabecalho_entra_no_manifest`: template com cabeçalho entra com sua versão e seu hash.
@@ -309,7 +312,7 @@ Cobre o manifest, o grafo e o `__main__`, com repositório e checkpointer em mem
 - `test_config_invalida_nao_cria_linha_em_runs`: config inválida (`models.yaml` vazio) para antes de criar o run e de criar `data/`.
 - `test_supabase_fora_no_aborto_deixa_o_erro_so_no_manifest_local`: se o Supabase estiver fora ao registrar o aborto, o erro fica só no manifest local, sem esconder a exceção original.
 - `test_run_concluido_nao_e_sobrescrito_pelo_aborto`: um run já concluído não vira abortado.
-- `test_run_abortado_mantem_a_primeira_mensagem`: um segundo aborto não troca a mensagem do primeiro.
+- `test_run_abortado_mantem_a_primeira_mensagem`: um segundo aborto não troca a mensagem nem a etapa do primeiro; a etapa do erro (`referencia`) fica no banco e no manifest local.
 - `test_credenciais_ausentes_param_antes_de_tudo`: sem `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_DB_URL`, a execução para com erro listando as três.
 - `test_cli_recusa_fonte_desconhecida`: fonte inválida na linha de comando encerra; `cvm --dev` é lido corretamente.
 
@@ -336,8 +339,9 @@ Integração com o Supabase local do CLI (`supabase start`, que roda o Postgres,
 
 - `test_coleta_completa_e_reaproveitamento`: em dois runs seguidos, envia o documento, registra a coleta e confere que o documento é reaproveitado; um envio direto de objeto existente é aceito sem sobrescrever; um run já vinculado tem a transação recusada; e `update` em `documentos` e `delete` em `coletas` são barrados pelo trigger de imutabilidade.
 - `test_documento_processado_grava_paginas_chunks_e_numeros` e `test_span_validacao_e_factsheet`: gravação da E1 e da E3, descritas nas seções da E1 e da E2 e E3.
-- `test_plano_editorial_rodadas_e_celulas`: o plano é recusado sem o FactSheet do run; as rodadas do gate (uma linha por problema, nível nulo para o plano inteiro), a limpeza das rodadas, o plano e as 9 células em `PENDENTE` gravados sem duplicar, a leitura do plano para a retomada e o plano e as rodadas do gate na `ConsultaSupabase` do dashboard.
-- `test_span_do_adapter_aceita_nivel_nulo`: o span do `adapter` grava sem nível (a chamada única do planejador da E4) e com nível; o span do `extractor` com nível é recusado pelo banco.
+- `test_plano_editorial_rodadas_e_celulas`: o plano é recusado sem o FactSheet do run; as rodadas do gate (uma linha por problema, nível nulo para o plano inteiro, e a saída do planejador em `rodadas_plano`, inclusive na rodada que passou), a limpeza das rodadas, o plano e as 9 células em `PENDENTE` gravados sem duplicar, o mesmo plano gravado de novo sem erro e outro plano recusado, a leitura do plano, `atualizar_celula` com `atualizado_em` e recusada para célula que não existe, o FactSheet lido de volta igual ao gravado (C01, C99 e C100 nessa ordem) e o plano e as rodadas do gate na `ConsultaSupabase` do dashboard.
+- `test_span_do_adapter_aceita_nivel_nulo`: o span do `adapter` grava sem nível (a chamada única do planejador da E4), com nível e com a rodada do gate; o span do `extractor` com nível ou com rodada é recusado pelo banco; a `ConsultaSupabase` devolve a rodada do span.
+- `test_run_abortado_com_a_etapa_do_erro`: o aborto grava `etapa_erro`, o banco recusa `etapa_erro` em run que não está abortado, e a `ConsultaSupabase` devolve a etapa.
 - `test_documento_que_nao_e_o_do_run_e_recusado`: a FK composta de `documentos_processados` recusa a saída da E1 de um documento que não é o vinculado ao run.
 - `test_consulta_le_o_run_completo_do_dashboard`: grava um run `--dev` completo (documento de referência, saída da E1, dois spans, duas rodadas de validação, FactSheet assinado) e confere o que a `ConsultaSupabase` devolve ao dashboard: o resumo com claims e tokens, o documento resumido, o claim com números e âncora, as rodadas em ordem e os spans em ordem de gravação. Roda as consultas contra o schema das migrations: uma coluna renomeada ou removida quebra aqui.
 - `test_consulta_nao_grava`: a conexão da consulta recusa um `delete` (transação só de leitura).

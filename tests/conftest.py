@@ -22,7 +22,7 @@ from sunontent import retentativa
 from sunontent.llm import ClienteLLM, Preco, RespostaBruta
 from sunontent.persistencia import Coleta, ItemQuarentena
 from sunontent.retentativa import FalhaRetriavel, FalhaTerminal
-from sunontent.schemas import Chunk, DocumentoProcessado, Numero, Pagina
+from sunontent.schemas import Chunk, DocumentoProcessado, FactSheet, Numero, Pagina, PlanoEditorial
 
 HOSTS_LOCAIS = {"localhost", "127.0.0.1", "::1"}
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -70,7 +70,8 @@ class RepositorioMemoria:
 
     `falhas` injeta exceções por método, consumidas uma a cada chamada.
     `perder_resposta_da_transacao` grava a transação e depois levanta FalhaRetriavel.
-    Da E1 em diante, guarda o que o pipeline grava, com as mesmas recusas do banco.
+    Da E1 em diante, guarda o que o pipeline grava, com as mesmas recusas do banco. O FactSheet, o plano e a saída
+    do planejador ficam como JSON (model_dump(mode="json")) e voltam por model_validate, como pelo Postgres.
     """
 
     runs: dict[str, dict] = field(default_factory=dict)
@@ -91,7 +92,8 @@ class RepositorioMemoria:
     decisoes_quarentena: dict[tuple, dict] = field(default_factory=dict)
     claims_humanos: dict[tuple, object] = field(default_factory=dict)
     validacoes_plano: dict[tuple, object] = field(default_factory=dict)
-    planos: dict[str, object] = field(default_factory=dict)
+    rodadas_plano: dict[tuple, dict] = field(default_factory=dict)
+    planos: dict[str, dict] = field(default_factory=dict)
     celulas: dict[tuple, object] = field(default_factory=dict)
 
     def registrar_run(self, run_id: str) -> None:
@@ -182,6 +184,8 @@ class RepositorioMemoria:
         run = self.runs.get(span.run_id)
         if run is None:
             raise FalhaTerminal(f"run {span.run_id} não existe em runs")
+        if span.rodada is not None and span.no != "adapter":
+            raise FalhaTerminal("llm_spans: rodada só no adapter")
         if span.span_id in self.spans:
             return
         self.spans[span.span_id] = span
@@ -204,7 +208,30 @@ class RepositorioMemoria:
             for n in claim.numeros:
                 if (run_id, n.ancora.pagina, n.ancora.offset_inicio, n.ancora.offset_fim) not in self.numeros:
                     raise FalhaTerminal(f"claim_numeros.numero_id nulo: {claim.id} {n.bruto!r}")
-        self.factsheets.setdefault(run_id, factsheet)
+        self.factsheets.setdefault(run_id, factsheet.model_dump(mode="json", exclude={"tabela_numeros"}))
+
+    def factsheet_gravado(self, run_id) -> FactSheet:
+        """O FactSheet como foi gravado, sem os claims aceitos na quarentena (atalho dos testes)."""
+        return FactSheet.model_validate({**self.factsheets[run_id], "tabela_numeros": []})
+
+    def plano_gravado(self, run_id) -> PlanoEditorial:
+        """Atalho dos testes."""
+        return PlanoEditorial.model_validate(self.planos[run_id])
+
+    def carregar_factsheet(self, run_id):
+        """Mesma leitura do Supabase: claims em ordem de id, com os aceitos na quarentena, e a tabela de números
+        do run (de origem pipeline e humano)."""
+        self._entrar("carregar_factsheet")
+        if run_id not in self.factsheets:
+            raise FalhaTerminal(f"run {run_id} não tem FactSheet assinado")
+        dados = self.factsheets[run_id]
+        humanos = [c.model_dump(mode="json") for (r, _), c in self.claims_humanos.items() if r == run_id]
+        claims = sorted([*dados["claims"], *humanos], key=lambda c: (len(c["id"]), c["id"]))
+        tabela = [
+            Numero(**{c: v for c, v in valor.items() if c != "origem"}).model_dump(mode="json")
+            for k, valor in sorted(self.numeros.items()) if k[0] == run_id
+        ]
+        return FactSheet.model_validate({**dados, "claims": claims, "tabela_numeros": tabela})
 
     def gravar_quarentena(self, run_id, itens) -> None:
         self._entrar("gravar_quarentena")
@@ -263,36 +290,52 @@ class RepositorioMemoria:
             self.claims_humanos[chave] = claim
         self.decisoes_quarentena[chave] = {"decisao": decisao, "autor": autor}
 
-    def gravar_validacao_plano(self, run_id, rodada, problemas) -> None:
+    def gravar_validacao_plano(self, run_id, rodada, problemas, saida) -> None:
         self._entrar("gravar_validacao_plano")
         if run_id not in self.runs:
             raise FalhaTerminal(f"run {run_id} não existe em runs")
         if not 1 <= rodada <= 3:
             raise FalhaTerminal(f"validacoes_plano.rodada fora de 1 a 3: {rodada}")
+        self.rodadas_plano.setdefault((run_id, rodada), saida.model_dump(mode="json"))
         for ordem, problema in enumerate(problemas, start=1):
             self.validacoes_plano.setdefault((run_id, rodada, ordem), problema)
 
     def apagar_validacoes_plano(self, run_id) -> None:
         self._entrar("apagar_validacoes_plano")
-        for chave in [c for c in self.validacoes_plano if c[0] == run_id]:
-            del self.validacoes_plano[chave]
+        for tabela in (self.validacoes_plano, self.rodadas_plano):
+            for chave in [c for c in tabela if c[0] == run_id]:
+                del tabela[chave]
 
     def gravar_plano(self, run_id, plano, celulas) -> None:
-        """Mesmas regras do Supabase: o plano exige o FactSheet do run; tudo numa transação."""
+        """Mesmas regras do Supabase: o plano exige o FactSheet do run; tudo numa transação; outro plano já
+        gravado é FalhaTerminal, o mesmo plano não grava nada."""
         self._entrar("gravar_plano")
         if run_id not in self.factsheets:
             raise FalhaTerminal(f"run {run_id} não tem FactSheet em factsheets; o plano não pode ser gravado")
         if not 1 <= len(plano.nucleo) <= 3:
             raise FalhaTerminal("planos_editoriais.nucleo precisa ter de 1 a 3 claims")
-        self.planos.setdefault(run_id, plano)
+        novo = plano.model_dump(mode="json")
+        if run_id in self.planos:
+            if self.planos[run_id] != novo:
+                raise FalhaTerminal(f"run {run_id} já tem outro plano editorial gravado")
+            return
+        self.planos[run_id] = novo
         for celula in celulas:
-            self.celulas.setdefault((run_id, celula.celula_id), celula)
+            self.celulas[(run_id, celula.celula_id)] = celula.model_copy()
 
     def carregar_plano(self, run_id):
         self._entrar("carregar_plano")
         if run_id not in self.planos:
             return None
-        return self.planos[run_id], [c for (r, _), c in self.celulas.items() if r == run_id]
+        celulas = [c.model_copy() for (r, _), c in self.celulas.items() if r == run_id]
+        return PlanoEditorial.model_validate(self.planos[run_id]), celulas
+
+    def atualizar_celula(self, run_id, celula) -> None:
+        self._entrar("atualizar_celula")
+        chave = (run_id, celula.celula_id)
+        if chave not in self.celulas:
+            raise FalhaTerminal(f"célula {celula.celula_id} do run {run_id} não existe em celulas")
+        self.celulas[chave] = celula.model_copy()
 
     def criar_run(self, manifest) -> None:
         self._entrar("criar_run")
@@ -306,11 +349,11 @@ class RepositorioMemoria:
             raise FalhaTerminal(f"run {run_id} não existe em runs ou não está em_andamento")
         run["status"] = "concluido"
 
-    def abortar_run(self, run_id, erro_classe, erro_mensagem) -> None:
+    def abortar_run(self, run_id, erro_classe, erro_mensagem, etapa_erro) -> None:
         self._entrar("abortar_run")
         run = self.runs.get(run_id)
         if run is not None and run["status"] == "em_andamento":
-            run.update(status="abortado", erro_classe=erro_classe, erro_mensagem=erro_mensagem)
+            run.update(status="abortado", erro_classe=erro_classe, erro_mensagem=erro_mensagem, etapa_erro=etapa_erro)
 
 
 @pytest.fixture
@@ -361,7 +404,8 @@ def resposta_plano(*claim_ids: str, nucleo=None) -> str:
     """Resposta do planejador (E4) que usa os claims dados nos 3 níveis, com o primeiro no núcleo."""
     ids = list(claim_ids or ("C01",))
     nivel = lambda n: {  # noqa: E731
-        "nivel": n, "descartes": [], "claims": [{"claim_id": c, "papel": "principal"} for c in ids],
+        "nivel": n, "descartes": [],
+        "claims": [{"claim_id": c, "papel": "principal", "prioridade": i} for i, c in enumerate(ids, start=1)],
         "tese": f"Tese do {n}.", "tese_claim_ids": ids[:1], "analogias": [],
     }
     return json.dumps({"nucleo": nucleo or ids[:1], "niveis": [nivel(n) for n in ("iniciante", "intermediario", "avancado")]})

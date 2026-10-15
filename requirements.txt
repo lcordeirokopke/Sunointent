@@ -3,7 +3,6 @@ pydantic>=2
 pyyaml
 jinja2
 pytest
-langgraph-checkpoint-postgres
 psycopg[binary]
 supabase
 python-dotenv

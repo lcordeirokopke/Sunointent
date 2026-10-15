@@ -6,8 +6,7 @@ project_id = "sunontent"
 [api]
 enabled = true
 port = 54321
-# public e storage são sempre expostos; o schema langgraph (checkpoint do LangGraph) fica fora desta
-# lista e dos schemas expostos do projeto do site.
+# public e storage são sempre expostos.
 schemas = ["public", "storage"]
 max_rows = 1000
 
@@ -27,5 +26,5 @@ enabled = true
 file_size_limit = "50MiB"
 
 [auth]
-# O dashboard (E8) não usa o Supabase Auth: roda no servidor e acessa o banco com o service role.
+# O dashboard não usa o Supabase Auth: roda no servidor e acessa o banco com o service role.
 enabled = true

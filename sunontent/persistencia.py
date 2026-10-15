@@ -13,11 +13,12 @@ Funções da E0 e do run (docs/fluxos/ingestao.md, docs/arquiteturas.md):
 - quarentena do loop E2/E3 (claims_quarentena e data/runs/<run_id>/quarentena.json), a leitura do
   documento e da quarentena para a revisão, e a decisão humana (decisoes_quarentena e, ao aceitar, o
   claim e os números novos com origem humano, numa transação; data/runs/<run_id>/revisoes/);
-- E4: problemas de cada rodada do gate em validacoes_plano, e o plano (planos_editoriais e planos_nivel)
-  com as 9 células em PENDENTE numa transação; data/runs/<run_id>/validacoes_plano/, plano.json e
-  celulas/<celula_id>/estado.json; a leitura do plano para a retomada;
+- E4: problemas e saída do planejador de cada rodada do gate (validacoes_plano e rodadas_plano), e o plano
+  (planos_editoriais e planos_nivel) com as 9 células em PENDENTE numa transação; data/runs/<run_id>/
+  validacoes_plano/, plano.json e celulas/<celula_id>/estado.json;
+- leitura do FactSheet assinado do run, com os números de cada claim na ordem de claim_numeros;
+- atualização do estado e da tentativa de uma célula, com atualizado_em;
 - cópia local em data/sources/<fonte>/ e data/runs/<run_id>/;
-- conexão do checkpointer do LangGraph;
 - leitura dos runs para o dashboard (app/), em conexão só de leitura (ConsultaSupabase).
 
 As funções recebem o repositório (Supabase ou, nos testes, em memória) e a pasta raiz de dados
@@ -27,7 +28,6 @@ por parâmetro.
 import json
 import os
 import uuid
-from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -49,6 +49,7 @@ from sunontent.schemas import (
     PlanoEditorial,
     ProblemaPlano,
     RunManifest,
+    SaidaPlanejador,
     Span,
 )
 
@@ -165,21 +166,35 @@ class Repositorio(Protocol):
         decisão diferente da gravada é FalhaTerminal. Aceitar exige o FactSheet assinado do run."""
         ...
 
-    def gravar_validacao_plano(self, run_id: str, rodada: int, problemas: list[ProblemaPlano]) -> None:
-        """Linhas de `validacoes_plano` da rodada, uma por problema, com `ordem` a partir de 1. Repetição não duplica."""
+    def carregar_factsheet(self, run_id: str) -> FactSheet:
+        """O FactSheet assinado do run: claims em ordem de id (com os de origem humano), os números de cada claim
+        na ordem de `claim_numeros` e a tabela de números do documento. FalhaTerminal se não existe."""
+        ...
+
+    def gravar_validacao_plano(
+        self, run_id: str, rodada: int, problemas: list[ProblemaPlano], saida: SaidaPlanejador
+    ) -> None:
+        """Numa transação: a linha de `rodadas_plano` com a saída do planejador e as linhas de `validacoes_plano`
+        da rodada, uma por problema, com `ordem` a partir de 1. Repetição não duplica."""
         ...
 
     def apagar_validacoes_plano(self, run_id: str) -> None:
-        """Apaga as linhas de `validacoes_plano` do run: a E4 recomeça sem plano gravado."""
+        """Apaga as linhas de `validacoes_plano` e `rodadas_plano` do run: a E4 recomeça sem plano gravado."""
         ...
 
     def gravar_plano(self, run_id: str, plano: PlanoEditorial, celulas: list[CelulaState]) -> None:
-        """Numa transação: `planos_editoriais`, `planos_nivel` e as linhas de `celulas`. Linhas que já existem
-        ficam como estão. Exige o FactSheet assinado do run."""
+        """Numa transação: `planos_editoriais`, `planos_nivel` e as linhas de `celulas`. Exige o FactSheet
+        assinado do run. Se o run já tem plano, não grava nada: o mesmo plano não é erro (repetição depois de
+        resposta perdida), outro plano é FalhaTerminal."""
         ...
 
     def carregar_plano(self, run_id: str) -> tuple[PlanoEditorial, list[CelulaState]] | None:
         """O plano gravado do run e as suas células, ou None se `planos_editoriais` não tem o run."""
+        ...
+
+    def atualizar_celula(self, run_id: str, celula: CelulaState) -> None:
+        """Grava o estado e a tentativa da célula em `celulas`, com `atualizado_em = now()`. FalhaTerminal se a
+        célula não existe."""
         ...
 
     def criar_run(self, manifest: RunManifest) -> None:
@@ -190,8 +205,8 @@ class Repositorio(Protocol):
         """status = concluido, só se o run está em_andamento."""
         ...
 
-    def abortar_run(self, run_id: str, erro_classe: str, erro_mensagem: str) -> None:
-        """status = abortado com a classe e a mensagem do erro, só se o run está em_andamento.
+    def abortar_run(self, run_id: str, erro_classe: str, erro_mensagem: str, etapa_erro: str | None) -> None:
+        """status = abortado com a classe, a mensagem e a etapa do erro, só se o run está em_andamento.
 
         Não toca nos campos de documento. Run já concluído ou abortado fica como está.
         """
@@ -353,6 +368,10 @@ def carregar_documento_processado(repositorio: Repositorio, run_id: str) -> Docu
     )
 
 
+def carregar_factsheet(repositorio: Repositorio, run_id: str) -> FactSheet:
+    return com_retentativa(lambda: repositorio.carregar_factsheet(run_id), f"leitura do FactSheet do run {run_id}")
+
+
 def carregar_quarentena(repositorio: Repositorio, run_id: str) -> list[ItemQuarentena]:
     return com_retentativa(lambda: repositorio.carregar_quarentena(run_id), f"leitura da quarentena do run {run_id}")
 
@@ -393,21 +412,32 @@ def gravar_decisao_quarentena(
 
 
 def gravar_validacao_plano(
-    repositorio: Repositorio, raiz_dados: Path, run_id: str, rodada: int, problemas: list[ProblemaPlano]
+    repositorio: Repositorio,
+    raiz_dados: Path,
+    run_id: str,
+    rodada: int,
+    problemas: list[ProblemaPlano],
+    saida: SaidaPlanejador,
 ) -> Path:
-    """Grava os problemas da rodada do gate no Supabase (a rodada sem problema não tem linha) e, depois, em
-    data/runs/<run_id>/validacoes_plano/<rodada>.json, com a lista vazia na rodada que passou."""
+    """Grava a saída do planejador e os problemas da rodada do gate no Supabase (a rodada sem problema não tem
+    linha em validacoes_plano) e, depois, em data/runs/<run_id>/validacoes_plano/<rodada>.json, com a lista
+    vazia na rodada que passou."""
     com_retentativa(
-        lambda: repositorio.gravar_validacao_plano(run_id, rodada, problemas),
+        lambda: repositorio.gravar_validacao_plano(run_id, rodada, problemas, saida),
         f"gravação da rodada {rodada} do gate do plano do run {run_id}",
     )
     destino = Path(raiz_dados) / "runs" / run_id / "validacoes_plano" / f"{rodada}.json"
-    return _gravar_json(destino, {"rodada": rodada, "problemas": [p.model_dump(mode="json") for p in problemas]})
+    conteudo = {
+        "rodada": rodada,
+        "problemas": [p.model_dump(mode="json") for p in problemas],
+        "saida": saida.model_dump(mode="json"),
+    }
+    return _gravar_json(destino, conteudo)
 
 
 def reiniciar_validacoes_plano(repositorio: Repositorio, raiz_dados: Path, run_id: str) -> None:
-    """Apaga as rodadas do gate de uma execução da E4 que não chegou a gravar o plano, no Supabase e na
-    cópia local, para que a nova execução não misture as suas linhas com as antigas."""
+    """Apaga as rodadas do gate (problemas e saída do planejador) de uma execução da E4 que não chegou a gravar
+    o plano, no Supabase e na cópia local, para que a nova execução não misture as suas linhas com as antigas."""
     com_retentativa(
         lambda: repositorio.apagar_validacoes_plano(run_id), f"limpeza das rodadas do gate do plano do run {run_id}"
     )
@@ -417,11 +447,15 @@ def reiniciar_validacoes_plano(repositorio: Repositorio, raiz_dados: Path, run_i
             arquivo.unlink()
 
 
+def _gravar_celula_local(raiz_dados: Path, run_id: str, celula: CelulaState) -> Path:
+    destino = Path(raiz_dados) / "runs" / run_id / "celulas" / celula.celula_id / "estado.json"
+    return _gravar_json(destino, celula.model_dump(mode="json"))
+
+
 def _gravar_plano_local(raiz_dados: Path, run_id: str, plano: PlanoEditorial, celulas: list[CelulaState]) -> Path:
-    pasta = Path(raiz_dados) / "runs" / run_id
     for celula in celulas:
-        _gravar_json(pasta / "celulas" / celula.celula_id / "estado.json", celula.model_dump(mode="json"))
-    return _gravar_json(pasta / "plano.json", plano.model_dump(mode="json"))
+        _gravar_celula_local(raiz_dados, run_id, celula)
+    return _gravar_json(Path(raiz_dados) / "runs" / run_id / "plano.json", plano.model_dump(mode="json"))
 
 
 def gravar_plano(
@@ -438,7 +472,7 @@ def gravar_plano(
 def carregar_plano(
     repositorio: Repositorio, raiz_dados: Path, run_id: str
 ) -> tuple[PlanoEditorial, list[CelulaState]] | None:
-    """O plano já gravado do run (retomada), com a cópia local que faltar gravada; None se não existe."""
+    """O plano já gravado do run, com a cópia local que faltar gravada; None se não existe."""
     gravado = com_retentativa(lambda: repositorio.carregar_plano(run_id), f"leitura do plano editorial do run {run_id}")
     if gravado is not None:
         plano, celulas = gravado
@@ -449,6 +483,16 @@ def carregar_plano(
         if faltando:
             _gravar_plano_local(raiz_dados, run_id, plano, celulas)
     return gravado
+
+
+def atualizar_celula(repositorio: Repositorio, raiz_dados: Path, run_id: str, celula: CelulaState) -> Path:
+    """Grava o estado e a tentativa da célula no Supabase e, depois, em
+    data/runs/<run_id>/celulas/<celula_id>/estado.json."""
+    com_retentativa(
+        lambda: repositorio.atualizar_celula(run_id, celula),
+        f"atualização da célula {celula.celula_id} do run {run_id}",
+    )
+    return _gravar_celula_local(raiz_dados, run_id, celula)
 
 
 def criar_run(repositorio: Repositorio, manifest: RunManifest) -> None:
@@ -462,9 +506,15 @@ def concluir_run(repositorio: Repositorio, raiz_dados: Path, manifest: RunManife
 
 
 def abortar_run(
-    repositorio: Repositorio, raiz_dados: Path, manifest: RunManifest, classe: str, mensagem: str
+    repositorio: Repositorio,
+    raiz_dados: Path,
+    manifest: RunManifest,
+    classe: str,
+    mensagem: str,
+    etapa: str | None = None,
 ) -> None:
-    """Registra o run como abortado no Supabase e no manifest.json local.
+    """Registra o run como abortado no Supabase e no manifest.json local, com a etapa do erro (o nó do grafo
+    em execução ou, se a falha veio depois do fim do nó, o último concluído; None fora do grafo).
 
     Se o Supabase não aceitar o update (retentativas esgotadas), o erro fica só no manifest.json e
     a linha do run segue em_andamento (docs/fluxos/ingestao.md, Classificação de erros). Essa falha
@@ -474,13 +524,13 @@ def abortar_run(
     status, texto = "abortado", mensagem
     try:
         com_retentativa(
-            lambda: repositorio.abortar_run(manifest.run_id, classe, mensagem),
+            lambda: repositorio.abortar_run(manifest.run_id, classe, mensagem, etapa),
             f"registro do aborto do run {manifest.run_id}",
         )
     except Falha as falha:
         status = "em_andamento"
         texto = f"{mensagem} (status não gravado no Supabase: {falha.mensagem})"
-    gravar_manifest_local(raiz_dados, manifest, status, classe, texto)
+    gravar_manifest_local(raiz_dados, manifest, status, classe, texto, etapa)
 
 
 def gravar_manifest_local(
@@ -489,10 +539,11 @@ def gravar_manifest_local(
     status: str,
     erro_classe: str | None = None,
     erro_mensagem: str | None = None,
+    etapa_erro: str | None = None,
 ) -> Path:
-    """Grava data/runs/<run_id>/manifest.json: o RunManifest, o status e o erro do run."""
+    """Grava data/runs/<run_id>/manifest.json: o RunManifest, o status e o erro do run, com a etapa do erro."""
     conteudo = manifest.model_dump(mode="json")
-    conteudo.update(status=status, erro_classe=erro_classe, erro_mensagem=erro_mensagem)
+    conteudo.update(status=status, erro_classe=erro_classe, erro_mensagem=erro_mensagem, etapa_erro=etapa_erro)
     destino = Path(raiz_dados) / "runs" / manifest.run_id / "manifest.json"
     texto = json.dumps(conteudo, ensure_ascii=False, indent=2) + "\n"
     _gravar_atomico(destino, texto.encode("utf-8"))
@@ -737,9 +788,9 @@ class RepositorioSupabase:
     def gravar_span(self, span: Span) -> None:
         def instrucao(conexao):
             conexao.execute(
-                "with s as (insert into llm_spans (span_id, run_id, no, nivel, celula_id, tentativa, modelo,"
+                "with s as (insert into llm_spans (span_id, run_id, no, nivel, celula_id, tentativa, rodada, modelo,"
                 " tokens_entrada, tokens_saida, custo_brl, duracao_ms, falha_classe, falha_mensagem)"
-                " values (%s, %s, %s, %s::nivel, %s, %s, %s, %s, %s, %s, %s, %s::classe_falha, %s)"
+                " values (%s, %s, %s, %s::nivel, %s, %s, %s, %s, %s, %s, %s, %s, %s::classe_falha, %s)"
                 " on conflict (span_id) do nothing"
                 " returning run_id, tokens_entrada + tokens_saida as tokens, custo_brl)"
                 " update runs set custo_total_tokens = runs.custo_total_tokens + s.tokens,"
@@ -751,6 +802,7 @@ class RepositorioSupabase:
                     span.nivel,
                     span.celula_id,
                     span.tentativa,
+                    span.rodada,
                     span.modelo,
                     span.tokens_entrada,
                     span.tokens_saida,
@@ -877,6 +929,59 @@ class RepositorioSupabase:
             ],
         )
 
+    def carregar_factsheet(self, run_id: str) -> FactSheet:
+        def consulta(conexao):
+            from psycopg import IsolationLevel
+            from psycopg.rows import dict_row
+
+            # As quatro leituras no mesmo snapshot: uma aceitação da quarentena no meio não separa o claim dos
+            # seus números.
+            conexao.isolation_level = IsolationLevel.REPEATABLE_READ
+            with conexao.transaction(), conexao.cursor(row_factory=dict_row) as cursor:
+                cabecalho = cursor.execute(
+                    "select doc_id, tipo_documento::text as tipo_documento, emissor, data_documento, assinado"
+                    " from factsheets where run_id = %s",
+                    (run_id,),
+                ).fetchone()
+                if cabecalho is None:
+                    raise FalhaTerminal(f"run {run_id} não tem FactSheet assinado")
+                claims = cursor.execute(
+                    "select claim_id, texto, tipo::text as tipo, tags::text[] as tags, literal_fonte, pagina,"
+                    " offset_inicio, offset_fim from claims where run_id = %s order by length(claim_id), claim_id",
+                    (run_id,),
+                ).fetchall()
+                numeros_claim = cursor.execute(
+                    "select claim_id, valor, unidade::text as unidade, bruto, pagina, offset_inicio, offset_fim"
+                    " from claim_numeros where run_id = %s order by claim_id, ordem",
+                    (run_id,),
+                ).fetchall()
+                tabela = cursor.execute(
+                    "select valor, unidade::text as unidade, bruto, pagina, offset_inicio, offset_fim from numeros"
+                    " where run_id = %s order by pagina, offset_inicio, offset_fim",
+                    (run_id,),
+                ).fetchall()
+            return cabecalho, claims, numeros_claim, tabela
+
+        cabecalho, claims, numeros_claim, tabela = self._executar(consulta)
+
+        def numero(linha: dict) -> Numero:
+            return Numero(valor=linha["valor"], unidade=linha["unidade"], bruto=linha["bruto"], ancora=_ancora(linha))
+
+        por_claim: dict[str, list[Numero]] = {}
+        for linha in numeros_claim:
+            por_claim.setdefault(linha["claim_id"], []).append(numero(linha))
+        return FactSheet(
+            **cabecalho,
+            claims=[
+                Claim(
+                    id=c["claim_id"], texto=c["texto"], numeros=por_claim.get(c["claim_id"], []), tipo=c["tipo"],
+                    tags=list(c["tags"]), ancora=_ancora(c), literal_fonte=c["literal_fonte"],
+                )
+                for c in claims
+            ],
+            tabela_numeros=[numero(linha) for linha in tabela],
+        )
+
     def carregar_quarentena(self, run_id: str) -> list[ItemQuarentena]:
         def consulta(conexao):
             return conexao.execute(
@@ -937,13 +1042,20 @@ class RepositorioSupabase:
 
         self._executar(transacao)
 
-    def gravar_validacao_plano(self, run_id: str, rodada: int, problemas: list[ProblemaPlano]) -> None:
+    def gravar_validacao_plano(
+        self, run_id: str, rodada: int, problemas: list[ProblemaPlano], saida: SaidaPlanejador
+    ) -> None:
+        from psycopg.types.json import Jsonb
+
         linhas = [(run_id, rodada, ordem, p.nivel, p.regra, p.detalhe) for ordem, p in enumerate(problemas, start=1)]
-        if not linhas:
-            return
 
         def transacao(conexao):
             with conexao.transaction(), conexao.cursor() as cursor:
+                cursor.execute(
+                    "insert into rodadas_plano (run_id, rodada, saida) values (%s, %s, %s)"
+                    " on conflict (run_id, rodada) do nothing",
+                    (run_id, rodada, Jsonb(saida.model_dump(mode="json"))),
+                )
                 cursor.executemany(
                     "insert into validacoes_plano (run_id, rodada, ordem, nivel, regra, detalhe)"
                     " values (%s, %s, %s, %s::nivel, %s::regra_plano, %s)"
@@ -954,7 +1066,12 @@ class RepositorioSupabase:
         self._executar(transacao)
 
     def apagar_validacoes_plano(self, run_id: str) -> None:
-        self._executar(lambda conexao: conexao.execute("delete from validacoes_plano where run_id = %s", (run_id,)))
+        def transacao(conexao):
+            with conexao.transaction():
+                conexao.execute("delete from validacoes_plano where run_id = %s", (run_id,))
+                conexao.execute("delete from rodadas_plano where run_id = %s", (run_id,))
+
+        self._executar(transacao)
 
     def gravar_plano(self, run_id: str, plano: PlanoEditorial, celulas: list[CelulaState]) -> None:
         from psycopg.types.json import Jsonb
@@ -970,53 +1087,78 @@ class RepositorioSupabase:
 
         def transacao(conexao):
             with conexao.transaction(), conexao.cursor() as cursor:
-                cursor.execute(
+                inserido = cursor.execute(
                     "insert into planos_editoriais (run_id, nucleo, rodadas, aviso) values (%s, %s, %s, %s)"
-                    " on conflict (run_id) do nothing",
+                    " on conflict (run_id) do nothing returning run_id",
                     (run_id, plano.nucleo, plano.rodadas, plano.aviso),
-                )
+                ).fetchone()
+                if inserido is None:
+                    gravado, _ = self._ler_plano(conexao, run_id)
+                    if gravado.model_dump(mode="json") != plano.model_dump(mode="json"):
+                        raise FalhaTerminal(f"run {run_id} já tem outro plano editorial gravado")
+                    return
+                # Sem plano gravado não há nível nem célula do run: as inserções não têm conflito.
                 cursor.executemany(
                     "insert into planos_nivel (run_id, nivel, tese, tese_claim_ids, claims, descartes, analogias)"
-                    " values (%s, %s::nivel, %s, %s, %s, %s, %s) on conflict (run_id, nivel) do nothing",
+                    " values (%s, %s::nivel, %s, %s, %s, %s, %s)",
                     niveis,
                 )
                 cursor.executemany(
                     "insert into celulas (run_id, celula_id, nivel, formato, estado, tentativa)"
-                    " values (%s, %s, %s::nivel, %s::formato, %s::estado_celula, %s)"
-                    " on conflict (run_id, celula_id) do nothing",
+                    " values (%s, %s, %s::nivel, %s::formato, %s::estado_celula, %s)",
                     linhas_celulas,
                 )
 
         self._executar(transacao)
 
+    @staticmethod
+    def _ler_plano(conexao, run_id: str) -> tuple[PlanoEditorial, list[CelulaState]] | tuple[None, None]:
+        from psycopg.rows import dict_row
+
+        with conexao.cursor(row_factory=dict_row) as cursor:
+            cabecalho = cursor.execute(
+                "select nucleo, rodadas, aviso from planos_editoriais where run_id = %s", (run_id,)
+            ).fetchone()
+            if cabecalho is None:
+                return None, None
+            niveis = cursor.execute(
+                "select p.nivel::text as nivel, p.tese, p.tese_claim_ids, p.claims, p.descartes, p.analogias"
+                " from planos_nivel p where p.run_id = %s order by p.nivel",
+                (run_id,),
+            ).fetchall()
+            celulas = cursor.execute(
+                "select c.celula_id, c.nivel::text as nivel, c.formato::text as formato,"
+                " c.estado::text as estado, c.tentativa from celulas c where c.run_id = %s"
+                " order by c.nivel, c.formato",
+                (run_id,),
+            ).fetchall()
+        plano = PlanoEditorial(
+            nucleo=list(cabecalho["nucleo"]), rodadas=cabecalho["rodadas"], aviso=cabecalho["aviso"],
+            niveis=[{**n, "tese_claim_ids": list(n["tese_claim_ids"])} for n in niveis],
+        )
+        return plano, [CelulaState(**c) for c in celulas]
+
     def carregar_plano(self, run_id: str) -> tuple[PlanoEditorial, list[CelulaState]] | None:
-        def consulta(conexao):
-            from psycopg.rows import dict_row
+        plano, celulas = self._executar(lambda conexao: self._ler_plano(conexao, run_id))
+        return None if plano is None else (plano, celulas)
 
-            with conexao.cursor(row_factory=dict_row) as cursor:
-                cabecalho = cursor.execute(
-                    "select nucleo, rodadas, aviso from planos_editoriais where run_id = %s", (run_id,)
-                ).fetchone()
-                if cabecalho is None:
-                    return None
-                niveis = cursor.execute(
-                    "select p.nivel::text as nivel, p.tese, p.tese_claim_ids, p.claims, p.descartes, p.analogias"
-                    " from planos_nivel p where p.run_id = %s order by p.nivel",
-                    (run_id,),
-                ).fetchall()
-                celulas = cursor.execute(
-                    "select c.celula_id, c.nivel::text as nivel, c.formato::text as formato,"
-                    " c.estado::text as estado, c.tentativa from celulas c where c.run_id = %s"
-                    " order by c.nivel, c.formato",
-                    (run_id,),
-                ).fetchall()
-            plano = PlanoEditorial(
-                nucleo=list(cabecalho["nucleo"]), rodadas=cabecalho["rodadas"], aviso=cabecalho["aviso"],
-                niveis=[{**n, "tese_claim_ids": list(n["tese_claim_ids"])} for n in niveis],
-            )
-            return plano, [CelulaState(**c) for c in celulas]
+    @staticmethod
+    def _atualizar_celula(cursor, run_id: str, celula: CelulaState) -> None:
+        """Update da célula num cursor aberto, para a gravação da peça usar a mesma transação."""
+        alterada = cursor.execute(
+            "update celulas set estado = %s::estado_celula, tentativa = %s, atualizado_em = now()"
+            " where run_id = %s and celula_id = %s",
+            (celula.estado, celula.tentativa, run_id, celula.celula_id),
+        )
+        if alterada.rowcount != 1:
+            raise FalhaTerminal(f"célula {celula.celula_id} do run {run_id} não existe em celulas")
 
-        return self._executar(consulta)
+    def atualizar_celula(self, run_id: str, celula: CelulaState) -> None:
+        def transacao(conexao):
+            with conexao.transaction(), conexao.cursor() as cursor:
+                self._atualizar_celula(cursor, run_id, celula)
+
+        self._executar(transacao)
 
     def criar_run(self, manifest: RunManifest) -> None:
         from psycopg.types.json import Jsonb
@@ -1053,12 +1195,12 @@ class RepositorioSupabase:
 
         self._executar(atualizacao)
 
-    def abortar_run(self, run_id: str, erro_classe: str, erro_mensagem: str) -> None:
+    def abortar_run(self, run_id: str, erro_classe: str, erro_mensagem: str, etapa_erro: str | None) -> None:
         def atualizacao(conexao):
             conexao.execute(
-                "update runs set status = 'abortado', erro_classe = %s, erro_mensagem = %s"
+                "update runs set status = 'abortado', erro_classe = %s, erro_mensagem = %s, etapa_erro = %s"
                 " where run_id = %s and status = 'em_andamento'",
-                (erro_classe, erro_mensagem, run_id),
+                (erro_classe, erro_mensagem, etapa_erro, run_id),
             )
 
         self._executar(atualizacao)
@@ -1107,7 +1249,7 @@ class ConsultaSupabase:
         def consulta(conexao):
             return conexao.execute(
                 'select r.run_id, r."timestamp", r.modo, r.fonte, r.status, r.doc_id, r.custo_total_tokens,'
-                " r.custo_total_brl, r.erro_classe, r.erro_mensagem,"
+                " r.custo_total_brl, r.erro_classe, r.erro_mensagem, r.etapa_erro,"
                 " nullif((select count(*) from claims c where c.run_id = r.run_id), 0) as claims,"
                 " nullif((select count(*) from claims_quarentena q where q.run_id = r.run_id and not exists"
                 " (select 1 from decisoes_quarentena d where d.run_id = q.run_id and d.claim_id = q.claim_id)), 0)"
@@ -1129,7 +1271,8 @@ class ConsultaSupabase:
             manifest = conexao.execute(
                 'select run_id, "timestamp", modo, fonte, status, doc_id, doc_sha256, coleta_id, url_origem,'
                 ' coletado_em, modelos, prompts, level_specs, glossario_versao, arquivos_sha256, "K",'
-                " custo_total_tokens, custo_total_brl, erro_classe, erro_mensagem from runs where run_id = %s",
+                " custo_total_tokens, custo_total_brl, erro_classe, erro_mensagem, etapa_erro"
+                " from runs where run_id = %s",
                 (run_id,),
             ).fetchone()
             if manifest is None:
@@ -1141,7 +1284,7 @@ class ConsultaSupabase:
                 "validacoes": self._validacoes(conexao, run_id),
                 "quarentena": self._quarentena(conexao, run_id),
                 "spans": conexao.execute(
-                    "select span_id, no, nivel, celula_id, tentativa, modelo, tokens_entrada, tokens_saida,"
+                    "select span_id, no, nivel, celula_id, tentativa, rodada, modelo, tokens_entrada, tokens_saida,"
                     " custo_brl, duracao_ms, falha_classe, falha_mensagem, criado_em"
                     " from llm_spans where run_id = %s order by criado_em, span_id",
                     (run_id,),
@@ -1288,28 +1431,6 @@ def criar_consulta_supabase(ambiente: Mapping[str, str]) -> ConsultaSupabase:
     consulta = ConsultaSupabase(ambiente["SUPABASE_DB_URL"])
     consulta.verificar_conexao()
     return consulta
-
-
-@contextmanager
-def checkpointer_postgres(db_url: str):
-    """PostgresSaver no schema `langgraph`, em conexão própria (docs/arquiteturas.md, Granularidade do checkpoint)."""
-    import psycopg
-    from langgraph.checkpoint.postgres import PostgresSaver
-    from psycopg.rows import dict_row
-
-    try:
-        with psycopg.connect(
-            db_url,
-            autocommit=True,
-            row_factory=dict_row,
-            options="-c search_path=langgraph",
-            connect_timeout=10,
-        ) as conexao:
-            saver = PostgresSaver(conexao)
-            saver.setup()
-            yield saver
-    except psycopg.Error as erro:
-        raise FalhaTerminal(f"checkpointer: banco recusou a conexão ou o setup: {erro}") from erro
 
 
 def _status_storage(erro: Exception) -> tuple[int | None, str]:

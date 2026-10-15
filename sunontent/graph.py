@@ -39,7 +39,7 @@ def depois_da_validacao(state: PipelineState) -> str:
     return "quarentena"
 
 
-def construir_grafo(checkpointer=None):
+def construir_grafo():
     grafo = StateGraph(PipelineState)
     grafo.add_node("coleta", coleta)
     grafo.add_node("referencia", referencia)
@@ -56,4 +56,4 @@ def construir_grafo(checkpointer=None):
     grafo.add_conditional_edges("validate", depois_da_validacao, ["extract", "quarentena", "adapt"])
     grafo.add_edge("quarentena", "adapt")
     grafo.add_edge("adapt", END)
-    return grafo.compile(checkpointer=checkpointer)
+    return grafo.compile()

@@ -136,6 +136,7 @@ class ClienteLLM:
         nivel: str | None = None,
         celula_id: str | None = None,
         tentativa: int | None = None,
+        rodada: int | None = None,
         raciocinio: str | None = None,
     ) -> T:
         """`raciocinio` é uma chave de `raciocinio` em config/models.yaml (ex: extractor_correcao); chave
@@ -161,6 +162,7 @@ class ClienteLLM:
                     nivel=nivel,
                     celula_id=celula_id,
                     tentativa=tentativa,
+                    rodada=rodada,
                     modelo=modelo,
                     tokens_entrada=tokens_entrada,
                     tokens_saida=tokens_saida,

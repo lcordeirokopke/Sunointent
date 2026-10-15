@@ -34,10 +34,12 @@ create table runs (
   custo_total_tokens bigint not null default 0,
   custo_total_brl    numeric(14, 6) not null default 0,
 
-  -- Falha do run inteiro (E0, referência do --dev, leitura na E1, teto de orçamento).
+  -- Falha do run inteiro (E0, referência do --dev, leitura na E1).
   -- Preenchido só com status 'abortado'.
   erro_classe        classe_falha,
   erro_mensagem      text,
+  -- Nó do grafo em que o run abortou: o que estava em execução. Nulo quando o run abortou fora do grafo.
+  etapa_erro         text,
 
   criado_em          timestamptz not null default now(),
 
@@ -48,6 +50,7 @@ create table runs (
   unique (run_id, doc_id, doc_sha256),  -- alvo da FK composta de documentos_processados
   check ((status = 'abortado') = (erro_classe is not null)),
   check ((erro_classe is null) = (erro_mensagem is null)),
+  check (etapa_erro is null or status = 'abortado'),
   -- Documento conhecido: modo normal tem coleta, --dev não tem.
   check (case when doc_sha256 is null then coleta_id is null
               else (modo = 'normal') = (coleta_id is not null) end),
@@ -58,12 +61,3 @@ create table runs (
 create index runs_doc_sha256_idx on runs (doc_sha256);
 create index runs_doc_id_idx on runs (doc_id);
 create index runs_timestamp_idx on runs ("timestamp" desc);
-
--- Checkpoint do LangGraph: as tabelas (checkpoints, checkpoint_blobs, checkpoint_writes,
--- checkpoint_migrations) são criadas pelo PostgresSaver.setup() do langgraph-checkpoint-postgres
--- no schema langgraph, fora dos schemas expostos pela Data API. A conexão do checkpointer é
--- separada da conexão das tabelas do projeto e usa search_path = langgraph, sem public.
--- Granularidade: um thread por célula (docs/arquiteturas.md, Granularidade do checkpoint),
--- thread_id = <run_id>:<celula_id>.
-create schema if not exists langgraph;
-revoke all on schema langgraph from public, anon, authenticated;

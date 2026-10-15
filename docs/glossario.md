@@ -11,7 +11,7 @@ O arquivo está montado e versionado no git. Todas as analogias estão em `rascu
 ## Formato e campos
 
 ```yaml
-versao: 2
+versao: 5
 termos:
   - id: selic
     termo: Selic
@@ -75,6 +75,7 @@ Os termos ficam agrupados por categoria, cada grupo aberto por um comentário (`
 - **Mecanismo, não causa:** o texto descreve o mecanismo geral ("juros mais altos tendem a encarecer o crédito"), nunca o motivo de uma decisão.
 - **Definição simples:** não usa outro termo do glossário com `nivel_minimo` acima de iniciante.
 - **Analogias:** só termos com `nivel_minimo` acima de iniciante têm analogia; o termo iniciante fica com `analogias: []`. Toda analogia preenche `limite`, que diz onde ela deixa de valer. A analogia não pode ensinar algo errado: sem analogia segura, a lista fica vazia.
+- **Forma da analogia:** o `texto` começa com "É como..." e compara o conceito com algo do dia a dia, sem citar o próprio termo. A analogia `nova` do planejador segue a mesma forma.
 - **Ambiguidade:** com `ambiguo: true`, só as formas de mais de uma palavra casam no texto (por exemplo, `ação` casa como "ações ordinárias" ou "mercado de ações", e não sozinha). Uma entrada cujo termo tem várias palavras também é marcada quando tem variante de uma palavra só com sentido comum.
 - **Variantes:** cada forma (termo ou variante) pertence a uma única entrada. Sigla ou expressão que coincide com uma palavra comum do português em outro sentido não vira variante (por exemplo, `IR` coincide com o verbo "ir" e `AGE` com "age", de agir). Expressão que os documentos usam em outro sentido também fica de fora (por exemplo, `curva futura`, usada para o preço do petróleo, e `termos reais`, usada para salários).
 - **YAML:** sigla que o YAML lê como booleano vai entre aspas (`"ON"`, de ação ordinária).
@@ -84,9 +85,10 @@ Os termos ficam agrupados por categoria, cada grupo aberto por um comentário (`
 | Leitor | Uso |
 |---|---|
 | `manifesto.py` | registra `versao` em `glossario_versao` e o SHA-256 do arquivo em `arquivos_sha256` do `RunManifest`. |
-| E4.2, planejador | recebe os termos acima de iniciante encontrados no texto dos candidatos do Iniciante que não têm nenhuma analogia no glossário, e cria uma analogia `nova` para os que estiverem nos claims usados. |
+| E4.2, planejador | recebe, em cada claim, os termos acima de iniciante do texto com o `nivel_minimo` de cada um, e os termos acima de iniciante encontrados no texto dos candidatos do Iniciante que não têm nenhuma analogia no glossário; cria uma analogia `nova` para os que estiverem nos claims usados. |
 | E4.3, complemento | no Iniciante, cada termo acima de iniciante encontrado no texto dos claims usados recebe a primeira analogia `aprovada` do termo ou, sem nenhuma aprovada, a primeira `rascunho`, com a referência `<id>#<n>`. |
-| E4.3, gate | `jargao_sem_analogia`: todo termo acima de iniciante nos claims usados do Iniciante tem analogia no plano. `motivo_invalido`: `exige_base_tecnica` só vale para claim com termo de `nivel_minimo` acima do nível. |
+| E4.3, gate | `jargao_sem_analogia`: todo termo acima de iniciante nos claims usados do Iniciante tem analogia no plano. `analogia_invalida`: a analogia `nova` não só repete as formas do termo. `motivo_invalido`: `exige_base_tecnica` só vale para claim com termo de `nivel_minimo` acima do nível, o que nunca acontece no Avançado. `tese_invalida`: a tese do Iniciante não tem termo acima de iniciante, e as formas dos termos ficam fora da busca de números da tese (o 15 de IPCA-15). |
+| E4.3, limpeza | depois da última rodada, o claim do Iniciante com termo sem analogia sai do nível como `exige_base_tecnica`, e as analogias ficam só para os termos dos claims que restaram. |
 | M4 | casa a peça contra termos e variantes pela [regra de casamento](#casamento-no-texto); a densidade é termos técnicos únicos sobre tokens de conteúdo, com piso e teto por nível. |
 | M5 | no Iniciante, todo termo acima de iniciante encontrado no texto precisa de `Analogia` no plano e de um marcador de analogia antes da primeira ocorrência. |
 | M6 | pode receber a definição do termo como referência ao julgar se a analogia está correta. |
@@ -119,13 +121,6 @@ A E4, a M4 e a M5 usam a mesma regra para dizer se um termo aparece num texto. O
 ### Revisar e aprovar analogias
 
 A revisão humana troca `status: rascunho` por `status: aprovada` no próprio arquivo, sem mudar a posição da analogia na lista. Uma analogia enganosa é corrigida ou removida; remover muda as referências das seguintes, por isso sobe a `versao`.
-
-As analogias `nova`, criadas pelo planejador em runs, são revisadas numa seção própria do dashboard (E8) e gravadas em `decisoes_analogia`. Quem aprova escreve o `limite`, que a analogia do plano não tem. Um comando executado à mão leva as aprovadas para este arquivo, para revisão e commit humanos:
-
-- termo já cadastrado (pelo `termo` ou por uma variante): a analogia entra no fim da lista do termo, com o `texto` do plano, o `limite` da revisão e `status: aprovada`;
-- termo sem cadastro: o comando cria a entrada com `id`, `termo` e a analogia aprovada (`texto`, `limite` e `status: aprovada`), e deixa em branco `variantes`, `categoria`, `nivel_minimo`, `definicao_simples`, `definicao_tecnica`, `ambiguo` e `fonte`, para alguém completar antes do commit;
-- analogia com o mesmo texto de uma existente não é repetida;
-- a `versao` sobe.
 
 ### Quando subir a `versao`
 

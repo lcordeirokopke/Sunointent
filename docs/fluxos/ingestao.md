@@ -228,7 +228,7 @@ Os dois modos atendem necessidades opostas, e cada um resolve a sua:
 
 No modo normal, a reprodutibilidade não é objetivo: o produto quer a informação mais atual. O RunManifest ainda registra `doc_id`, `doc_sha256`, `url_origem` e `coletado_em`, de modo que sempre se sabe **qual** documento foi processado, e o documento de qualquer run fica recuperável no bucket `documentos` pelo `doc_sha256`.
 
-No modo desenvolvimento, documento, hash e metadados são fixos e versionados, e o hash é conferido a cada run. Junto com o restante do RunManifest (modelos, prompts, LevelSpec, glossário e `K`), isso permite comparar runs e atribuir uma diferença de resultado ao que de fato mudou. Os dois modos gravam no mesmo projeto Supabase, e a coluna `modo` de `runs` separa os runs de desenvolvimento dos de uso do produto em qualquer consulta, como a comparação entre o veredito do avaliador e a decisão humana da E8.
+No modo desenvolvimento, documento, hash e metadados são fixos e versionados, e o hash é conferido a cada run. Junto com o restante do RunManifest (modelos, prompts, LevelSpec, glossário e `K`), isso permite comparar runs e atribuir uma diferença de resultado ao que de fato mudou. Os dois modos gravam no mesmo projeto Supabase, e a coluna `modo` de `runs` separa os runs de desenvolvimento dos de uso do produto em qualquer consulta.
 
 ## Requisitos dos scripts de `ingestao/`
 
@@ -245,7 +245,7 @@ No modo desenvolvimento, documento, hash e metadados são fixos e versionados, e
 ## Testes
 
 - Nenhum teste acessa a internet nem o Supabase do site. As respostas HTTP das fontes são simuladas. A cópia local do Supabase CLI roda em `localhost` e não conta como internet.
-- Os testes de unidade usam um repositório em memória no lugar do Supabase, o checkpointer em memória do LangGraph e uma pasta temporária (`tmp_path`) no lugar de `data/`. Por isso as funções que persistem recebem por parâmetro o que usam entre o cliente do Supabase (na E0, o repositório de `persistencia.py`), o checkpointer e a pasta raiz de dados, e nunca os criam por conta própria. A E0 não usa o checkpointer, porque não tem células.
+- Os testes de unidade usam um repositório em memória no lugar do Supabase, uma pasta temporária (`tmp_path`) no lugar de `data/`. Por isso as funções que persistem recebem por parâmetro o que usam entre o cliente do Supabase (na E0, o repositório de `persistencia.py`) e a pasta raiz de dados, e nunca os criam por conta própria.
 - Os testes de integração têm o marker `supabase`, usam a cópia local do Supabase CLI (`supabase start`) e são pulados quando ela não está no ar. Eles cobrem o que o repositório em memória não reproduz: constraints, triggers de imutabilidade e o bucket `documentos`. A limpeza entre testes é por `supabase db reset`, porque `TRUNCATE` é bloqueado nas tabelas imutáveis.
 - O `tests/conftest.py` interrompe o pytest antes da coleta se `SUPABASE_URL` ou `SUPABASE_DB_URL` apontarem para um host diferente de `localhost`, `127.0.0.1` ou `::1`.
 - `tests/fixtures/http/<fonte>/` guarda as respostas simuladas de cada fonte: a resposta que lista as publicações e a página de erro usada no teste de formato inválido. Timeout, erro de conexão e códigos HTTP são simulados no próprio teste, sem arquivo.

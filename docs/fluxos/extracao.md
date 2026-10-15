@@ -45,9 +45,20 @@ Regras pedidas ao modelo:
 
 ## Tipos e tags
 
-`tipo`, um só: `decisao`, `resultado`, `projecao`, `condicionante` ou `risco`.
+`tipo`, um só: `decisao`, `resultado`, `projecao`, `condicionante`, `risco` ou `evento_corporativo`.
 
-`tags`, uma ou mais, de um vocabulário fixo que o schema impõe (a E4 prioriza por elas):
+| Tipo | Quando usar |
+|---|---|
+| `decisao` | Algo decidido ou deliberado: decisão de juros, deliberação de órgão, aprovação de pagamento. |
+| `resultado` | Dado realizado e medido: receita, lucro, volume, inflação passada, indicador divulgado. |
+| `projecao` | Expectativa, estimativa ou previsão sobre o futuro. |
+| `condicionante` | Justificativa, avaliação, premissa ou condição que orienta decisões futuras. |
+| `risco` | Risco, incerteza ou fator que pode mudar o cenário. |
+| `evento_corporativo` | Acontecimento na empresa anunciado pelo documento, que não é deliberação de órgão nem dado medido: aquisição, incorporação, venda de ativo, troca de executivo, lançamento de produto ou serviço, início ou fim de uma operação, e os prazos e etapas de uma operação societária. A aprovação do evento por conselho ou assembleia continua sendo `decisao`. |
+
+A E4 usa o tipo em `atribuir_fonte`: `projecao`, `condicionante` e `risco` pedem atribuição na peça; `evento_corporativo`, fato consumado, não pede.
+
+`tags`, uma ou mais, de um vocabulário fixo que o schema impõe (a E4 prioriza por elas). Claim sem tag é resposta fora do schema: o `llm.py` recusa e pede de novo, pela regra de `TENTATIVAS_PARSE`.
 
 | Tag | Significado |
 |---|---|

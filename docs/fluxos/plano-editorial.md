@@ -1,6 +1,6 @@
 # Plano editorial (E4)
 
-Este documento detalha a E4: como o `FactSheet` assinado vira o `PlanoEditorial` dos 3 níveis e as 9 células em `PENDENTE`. O desenho da etapa (pré-filtro, planejador, complemento e gate, e os objetos `PlanoEditorial`, `PlanoNivel`, `Descarte`, `ClaimPlanejado` e `Analogia`) está em `docs/arquiteturas.md`, E4 e "Plano editorial". O glossário e a regra de casamento de termos estão em `docs/glossario.md`. A E2 e a E3, que entregam o FactSheet, estão em `docs/fluxos/extracao.md`.
+Este documento detalha a E4: como o `FactSheet` assinado vira o `PlanoEditorial` dos 3 níveis e as 9 células em `PENDENTE`. O desenho da etapa (pré-filtro, planejador, complemento, gate e limpeza, e os objetos `PlanoEditorial`, `PlanoNivel`, `Descarte`, `ClaimPlanejado` e `Analogia`) está em `docs/arquiteturas.md`, E4 e "Plano editorial". O glossário e a regra de casamento de termos estão em `docs/glossario.md`. A E2 e a E3, que entregam o FactSheet, estão em `docs/fluxos/extracao.md`.
 
 ## Estado
 
@@ -8,49 +8,58 @@ Implementada. O grafo termina na E4: o run fecha com o plano gravado e as 9 cél
 
 ## Responsabilidade
 
-- **Pré-filtro (código):** por nível, separa os candidatos dos descartados por regra (`metodologico`, `origem="prefiltro"`) e marca os claims candidatos nos 3 níveis, os únicos que podem ser núcleo.
-- **Planejador (LLM, 1 chamada para os 3 níveis):** escolhe o núcleo, a seleção, a ordem, o papel, a tese, os descartes com motivo específico e as analogias `nova`. Na correção, o prompt traz as mesmas regras e claims, o plano enviado e só a lista de problemas do gate; o modelo devolve o plano inteiro de novo, com o raciocínio `adapter_correcao`.
-- **Complemento e gate (código):** completa `atribuir_fonte`, os descartes `secundario` e as analogias do glossário, deixa na tese só os ids dos claims usados no nível, confere as 6 regras do gate e devolve só os problemas ao planejador, em até 3 rodadas.
-- **Gravação:** `validacoes_plano` por rodada, `planos_editoriais`, `planos_nivel` e as 9 linhas de `celulas` em `PENDENTE`.
+- **Pré-filtro (código):** por nível, separa os candidatos dos descartados por regra (`metodologico`, `origem="prefiltro"`) e marca os claims candidatos nos 3 níveis, os únicos que podem ser núcleo. Sem nenhum candidato nos 3 níveis, o run aborta antes de chamar o modelo.
+- **Planejador (LLM, 1 chamada para os 3 níveis):** escolhe o núcleo, a seleção, a ordem, o papel, a prioridade, a tese, os descartes com motivo específico e as analogias `nova`. Na correção, o prompt traz as mesmas regras e claims, o plano enviado e só a lista de problemas do gate; o modelo devolve o plano inteiro de novo, com o raciocínio `adapter_correcao`.
+- **Complemento e gate (código):** completa `atribuir_fonte`, os descartes `secundario` e as analogias do glossário, confere as 9 regras do gate e devolve só os problemas ao planejador, em até 3 rodadas.
+- **Limpeza (código):** depois da última rodada, corrige por código o que o gate ainda acusa, para que o plano que chega à E5 passe sempre no gate, e registra no `aviso` o que mudou.
+- **Gravação:** `rodadas_plano` e `validacoes_plano` por rodada, `planos_editoriais`, `planos_nivel` e as 9 linhas de `celulas` em `PENDENTE`.
 
 ## Módulos
 
 | Arquivo | Função |
 |---|---|
-| `sunontent/nodes/adapt.py` | Nó da E4: roda pré-filtro, planejador, complemento e gate em loop, grava as rodadas, o plano e as 9 células. Grava os spans. |
-| `sunontent/adaptacao/` | Pré-filtro, planejador (monta o prompt de `prompts/adapter.j2` e chama o modelo), complemento e gate. |
+| `sunontent/nodes/adapt.py` | Nó da E4: roda pré-filtro, planejador, complemento e gate em loop, a limpeza depois da última rodada, grava as rodadas, o plano e as 9 células. Grava os spans. |
+| `sunontent/adaptacao/` | Pré-filtro, planejador (monta o prompt de `prompts/adapter.j2` e chama o modelo), complemento, gate e limpeza (`limpeza.py`). |
 | `sunontent/levelspec.py` | Leitura e validação de `config/levels/`. Usado pela E4 e, depois, pela E5 e pelas métricas. |
-| `sunontent/glossario.py` | Leitura e validação de `config/glossario.yaml`, casamento de termos e escolha da analogia do glossário. Usado pela E4 e, depois, pela M4, pela M5 e pelo comando das analogias da E8. |
+| `sunontent/glossario.py` | Leitura e validação de `config/glossario.yaml`, casamento de termos e escolha da analogia do glossário. Usado pela E4 e, depois, pela M4 e pela M5. |
 | `prompts/adapter.j2` | Template único do planejador, parametrizado pelo LevelSpec dos 3 níveis. |
 
 ## LevelSpec da E4
 
-A E4 lê de cada `config/levels/<nivel>.yaml` os campos `foco`, `tags_priorizadas`, `tags_descartaveis` e `max_claims`. Os campos das métricas e dos formatos (legibilidade, densidade, analogia, contratos de formato) entram no LevelSpec junto com a M2 a M5 e a E5.
+A E4 lê de cada `config/levels/<nivel>.yaml` os campos `foco`, `tags_priorizadas`, `tags_descartaveis` e o `max_claims` do artigo. O mesmo arquivo tem o contrato de formato (`peso_papel` e `formatos`), lido pela E5.1 e pela M2. Os campos das métricas (legibilidade, densidade e analogia) entram no LevelSpec junto com a M2 a M5.
 
 | Campo | Iniciante | Intermediário | Avançado |
 |---|---|---|---|
 | `foco` | impacto prático no bolso do leitor | alocação e tendências | análise técnica e institucional |
 | `tags_descartaveis` | `[metodologico]` | `[]` | `[]` |
 | `tags_priorizadas` | `[impacto_pratico]` | `[indicador_chave, contexto_macro]` | `[indicador_chave, metodologico, governanca]` |
-| `max_claims` | 5 | 7 | 9 |
+| `max_claims` (artigo, carrossel, roteiro) | 5, 4 e 3 | 7, 5 e 5 | 9, 6 e 5 |
+| palavras do artigo | 350 a 550 | 450 a 750 | 600 a 900 |
+
+Nos 3 níveis:
+
+- `peso_papel`: `principal` 3, `apoio` 2 e `contexto` 1, para dividir as palavras do artigo entre os claims e as palavras das cenas de claim do roteiro;
+- carrossel: de 5 a 7 slides, contando o gancho e a conclusão, com no máximo 120 caracteres no gancho, 220 em cada slide de corpo e 160 na conclusão;
+- roteiro: 60 s a 2,5 palavras por segundo (150 palavras), com uma cena de abertura (o gancho) de 6 s, uma cena por claim e uma de fechamento de 6 s.
 
 Por que esses valores:
 
 - **Iniciante:** o foco é o efeito prático. Premissa e método de cálculo (no Copom, as hipóteses de câmbio, petróleo e bandeira tarifária do cenário de referência) são o que o leitor iniciante não usa, e saem por regra. `governanca` não é descartável: no fato relevante da CVM, o evento principal é societário.
 - **Intermediário:** o foco é alocação e tendências. Os números centrais e o cenário macro orientam a alocação, e as premissas do cenário também interessam, por isso nada sai por regra; o planejador corta com `exige_base_tecnica` ou `fora_do_foco`.
 - **Avançado:** o foco é analítico. Método e governança (hedge, alíquota efetiva, diretoria, órgãos) são material do leitor institucional.
-- **`max_claims`:** o mesmo plano serve aos 3 formatos, e o roteiro de 60 s precisa cobrir todos os claims do plano. A 2 a 3 palavras por segundo, o roteiro tem de 120 a 180 palavras, cerca de 25 por claim. O Iniciante fica com 5, porque as analogias ocupam parte do roteiro; o Intermediário com 7; o Avançado com 9, com texto mais denso. O mínimo é 3, porque o núcleo tem até 3 claims e entra nos 3 níveis.
+- **`max_claims` por formato:** o plano do nível tem os claims do artigo, o formato mais longo. O carrossel e o roteiro usam menos: o núcleo e os claims de maior `prioridade` (E5.1). No roteiro, 150 palavras menos o gancho e o fechamento deixam cerca de 120 para os claims; o Iniciante fica com 3, porque as analogias ocupam parte do texto falado. O mínimo de cada formato é 3, porque o núcleo tem até 3 claims e entra nos 3 níveis e nos 3 formatos.
 
 Os valores são de partida e sobem a `versao` de cada YAML quando mudam.
 
 ### Validação
 
-O `levelspec.py` valida cada arquivo com Pydantic, sem aceitar campo desconhecido:
+O `levelspec.py` valida cada arquivo com Pydantic, sem aceitar campo desconhecido em nenhum nível do arquivo:
 
 - `nivel` igual ao nome do arquivo;
 - `tags_priorizadas` e `tags_descartaveis` só com tags do vocabulário `Tag` (`sunontent/schemas.py`), sem tag em comum entre as duas listas;
 - `tags_descartaveis` só aceita `metodologico`, a única tag que corresponde a um motivo de descarte;
-- `max_claims` inteiro maior ou igual a 3.
+- `max_claims` de cada formato inteiro maior ou igual a 3, com artigo >= carrossel >= roteiro;
+- faixas com `min` menor ou igual a `max`; carrossel com pelo menos 3 slides; no roteiro, abertura e fechamento menores que a duração; pesos de papel inteiros maiores ou iguais a 1.
 
 Arquivo inválido é erro terminal: o run aborta no início da E4.
 
@@ -71,7 +80,7 @@ Glossário inválido é erro terminal: o run aborta no início da E4.
 
 O casamento segue a regra de `docs/glossario.md`, Casamento no texto: formas explícitas, sem lematizar, ignorando maiúsculas e acentos, sigla só com a caixa exata, termo `ambiguo` só pelas formas de mais de uma palavra, a forma mais longa vence, e os marcadores `{{...}}` ficam fora. Sigla é a forma escrita só com maiúsculas, dígitos e sinais (`CDI`, `IPCA-15`, `NTN-B`, `EMBI+`). Espaço e quebra de linha entre as palavras de uma forma se equivalem.
 
-O casador devolve, para um texto, cada ocorrência com o `id` do termo, a forma casada e as posições de início e fim no texto. A E4 usa só os termos encontrados; a M4 e a M5 usam também as posições (termos únicos para a densidade, primeira ocorrência para a janela da analogia). Um filtro devolve só os termos com `nivel_minimo` acima de um nível.
+O casador devolve, para um texto, cada ocorrência com o `id` do termo, a forma casada e as posições de início e fim no texto. A E4 usa os termos encontrados no texto dos claims (complemento, gate e a coluna de termos do prompt) e na tese (gate); a M4 e a M5 usam também as posições (termos únicos para a densidade, primeira ocorrência para a janela da analogia). Um filtro devolve só os termos com `nivel_minimo` acima de um nível.
 
 Um teste roda o casador sobre os claims dos 3 documentos de referência (`tests/fixtures/referencia/`) e lista os termos do glossário escritos com flexão que não está em `variantes`, para completar o glossário.
 
@@ -79,11 +88,39 @@ Um teste roda o casador sobre os claims dos 3 documentos de referência (`tests/
 
 Para um termo, a analogia do complemento é a primeira com `status: aprovada` ou, sem nenhuma aprovada, a primeira `rascunho`, com a referência `<id>#<n>` (posição na lista, começando em 1). `revisada` é `true` só para a aprovada. Termo sem analogia no glossário vai para a lista que o planejador recebe, para criar uma analogia `nova`.
 
-A analogia `nova` vale para o termo da lista cujo nome casa, sem maiúsculas e sem acento, com o `termo` ou uma variante. O complemento deixa de fora a `nova` de termo fora da lista, de termo que já tem analogia no glossário e de termo fora dos claims usados.
+A analogia `nova` vale para o termo da lista cujo nome casa, sem maiúsculas e sem acento, com o `termo` ou uma variante. O complemento deixa de fora a `nova` de termo fora da lista, de termo que já tem analogia no glossário e de termo fora dos claims usados. Como as analogias do glossário, a `nova` começa com "É como..." e não tem número.
 
-### Gate
+## Prompt do planejador
 
-As 6 regras são as de `docs/arquiteturas.md`, E4.3. `contraditorio` também acusa o claim que aparece duas vezes nos claims do mesmo nível.
+`prompts/adapter.j2` (versão no cabeçalho) traz, para cada claim, o id, o tipo, as tags, onde ele é candidato, os termos do glossário acima de iniciante do texto com o `nivel_minimo` de cada um e se o termo tem analogia no glossário (`Selic (intermediario, com analogia)`) e o texto.
+
+Antes dos níveis, o prompt diz o que vem primeiro no tipo de documento, nos 3 níveis:
+
+- ata do Copom: a decisão de juros, a orientação futura (como e por quanto tempo a política fica restritiva, e a reação a choques e aos efeitos secundários) e a projeção de inflação no horizonte relevante; as premissas do cenário de referência e a lista de quem votou vêm depois;
+- release de resultados: os resultados centrais (receita, lucro, EBITDA), o que vai para os acionistas e os eventos corporativos de maior efeito; o detalhe de cada linha de receita e despesa vem depois;
+- fato relevante: o evento principal e o que muda para o acionista (o que recebe, o que pode fazer e até quando); as etapas operacionais do cronograma vêm depois.
+
+As regras do prompt são estas; o gate confere todas, menos a preferência do Iniciante no `exige_base_tecnica`, o que vem primeiro no tipo de documento e o sentido da tese, que ficam para a revisão humana na matriz do dashboard:
+
+- núcleo entre os candidatos nos 3 níveis, presente nos 3 níveis;
+- claims só entre os candidatos do nível, até o máximo do artigo, com papel e `prioridade` de 1 a n, sem repetir (1 é o mais importante; o carrossel e o roteiro ficam com o núcleo e os de maior prioridade);
+- os claims que o pré-filtro tirou de um nível não entram nem nos claims nem nos descartes desse nível;
+- `redundante` só quando o outro claim usado tem todos os números e todas as datas deste;
+- `exige_base_tecnica` só com termo da coluna de termos acima do nível do leitor, e nunca no Avançado; no Iniciante, o planejador prefere usar o claim de impacto prático cujo termo tem analogia (do glossário ou `nova`) a descartá-lo;
+- tese como paráfrase dos claims de `tese_claim_ids`, todos usados no nível, sem causa, tendência ou recomendação que eles não digam, sem números além de datas e, no Iniciante, sem termo técnico;
+- analogias `nova` só no Iniciante, começando com "É como...", sem números e sem só repetir o termo.
+
+## Gate
+
+As 9 regras estão em `docs/arquiteturas.md`, E4.3: `id_inexistente`, `contraditorio`, `nucleo_ausente`, `acima_do_limite`, `prioridade_invalida`, `jargao_sem_analogia`, `analogia_invalida`, `motivo_invalido` e `tese_invalida`. A mensagem de cada problema diz ao planejador o que fazer e cita só o que ele vê no prompt (ids, motivos, números e termos), nunca a origem interna de um descarte.
+
+O `redundante` compara os números por valor e unidade (`R$ 3,1 bilhões` e `R$ 3.100 milhões` são o mesmo valor em `BRL_mi`) e as datas por dia, mês e ano, lidas com `numeros.datas` (`19/10` e `19 de outubro` são a mesma data; ano ausente de um lado vale para qualquer ano), mais os componentes de data sem dia lidos com `numeros.varrer` (ano e trimestre).
+
+## Limpeza
+
+Se o gate ainda acusa problema depois da 3ª rodada, `sunontent/adaptacao/limpeza.py` corrige o plano na ordem de `docs/arquiteturas.md`, E4.3 (Limpeza): ids inexistentes, contraditório, núcleo, analogia `nova` inválida, jargão sem analogia, limite pela prioridade, motivo inválido, tese e prioridades. Depois o gate confere o plano de novo e precisa devolver zero problemas, aceitando só a tese vazia produzida pela limpeza.
+
+O `aviso` do plano é a lista das mudanças, cada uma com a regra e o nível: `[acima_do_limite] iniciante: C06 saiu pela prioridade (máximo de 5); [tese_invalida] iniciante: a tese saiu (com número)`. Sem problema depois das rodadas, o plano não tem `aviso`.
 
 ## Modelo
 
@@ -91,9 +128,9 @@ As 6 regras são as de `docs/arquiteturas.md`, E4.3. `contraditorio` também acu
 |---|---|---|
 | `adapter` | `gemini-3.8-flash` | padrão do modelo na rodada 1; `low` nas correções (chave `adapter_correcao` em `raciocinio` de `config/models.yaml`) |
 
-O preço é o mesmo já registrado para o extractor em `config/models.yaml`. Uma rodada no release da B3 (89 claims) fica perto de 10 mil tokens de entrada e de 4 a 6 mil de saída, contando o raciocínio: cerca de US$ 0,03 por rodada, até 3 rodadas.
+O preço é o mesmo já registrado para o extractor em `config/models.yaml`. Nos runs do release da B3, a rodada 1 tem cerca de 5,7 a 5,9 mil tokens de entrada; na ata do Copom, cerca de 3,2 a 3,9 mil; no fato relevante da CVM, cerca de 1,9 mil. Os spans registram o custo em BRL, pela cotação de `config/models.yaml`: a E4 custou de R$ 0,07 a R$ 0,46 por run, quase todo em tokens de saída, porque o raciocínio do modelo conta como saída e varia de 3 a 22 mil tokens entre runs. Cada span do `adapter` traz a rodada do gate.
 
-O nó troca para `gemini-4-argon` só pelo `config/models.yaml`, com o preço do snapshot, se os runs mostrarem o gate reprovando com frequência ou o revisor da E8 discordando das seleções. Preços e status consultados em 2026-10-14 em https://ai.google.dev/gemini-api/docs/pricing e https://ai.google.dev/gemini-api/docs/models: `gemini-3.8-flash` a US$ 0,75 de entrada e US$ 3,75 de saída por milhão de tokens até 2026-12-31 (US$ 1,50 e US$ 7,50 a partir de 2027-01-01); `gemini-4-argon` a US$ 2,00 e US$ 10,00 até 2026-11-30 (US$ 4,00 e US$ 20,00 a partir de 2026-12-01).
+O nó troca para `gemini-4-argon` só pelo `config/models.yaml`, com o preço do snapshot, se os runs mostrarem o gate reprovando com frequência ou a revisão humana na matriz do dashboard discordando das seleções. Preços e status consultados em 2026-10-14 em https://ai.google.dev/gemini-api/docs/pricing e https://ai.google.dev/gemini-api/docs/models: `gemini-3.8-flash` a US$ 0,75 de entrada e US$ 3,75 de saída por milhão de tokens até 2026-12-31 (US$ 1,50 e US$ 7,50 a partir de 2027-01-01); `gemini-4-argon` a US$ 2,00 e US$ 10,00 até 2026-11-30 (US$ 4,00 e US$ 20,00 a partir de 2026-12-01).
 
 ## Grafo
 
@@ -103,29 +140,29 @@ O nó troca para `gemini-4-argon` só pelo `config/models.yaml`, com o preço do
 ```
 
 - A E4 entra depois da E3 com todos os claims aprovados e depois da quarentena; o plano usa só os claims do FactSheet assinado.
-- O loop do gate fica dentro do nó `adapt`, que é um nó só para os 3 níveis: cada rodada atualiza `rodada_plano` e grava as suas linhas em `validacoes_plano`.
+- O loop do gate fica dentro do nó `adapt`, que é um nó só para os 3 níveis: cada rodada atualiza `rodada_plano` e grava a saída do planejador em `rodadas_plano` e os problemas em `validacoes_plano`.
 - O grafo termina depois da E4. As 9 células ficam em `PENDENTE` em `celulas`, e o run fecha como `concluido`.
-- O `thread_id` continua sendo o `run_id`: o formato `<run_id>:<celula_id>` começa no fan-out da E5.
-- Na retomada, o nó confere se `planos_editoriais` já tem o plano do run; se tem, reaproveita o plano e as células, grava a cópia local que faltar e não chama o modelo. Sem plano gravado, o nó apaga as linhas de `validacoes_plano` do run e a cópia local delas antes da rodada 1.
+- Antes da rodada 1, o nó apaga as linhas de `rodadas_plano` e `validacoes_plano` do run e a cópia local delas.
 - O limite de rodadas é `RODADAS_PLANO` (3), em `graph.py`, passado ao nó `adapt`.
 
 ## Saída
 
-- Supabase: `validacoes_plano` (uma linha por problema, por rodada), `planos_editoriais`, `planos_nivel` e `celulas` (9 linhas, estado `PENDENTE`, tentativa 0). Plano e células são gravados numa transação.
-- Cópia local em `data/runs/<run_id>/`: `validacoes_plano/<rodada>.json`, `plano.json` e `celulas/<celula_id>/estado.json`. `validacoes_plano/<rodada>.json` existe em toda rodada, com `problemas: []` na que passou.
-- A retirada dos ids inexistentes, depois da última rodada, tira o id do núcleo, dos claims, dos descartes e da tese, e `relacionado` inexistente vira nulo.
+- Supabase: `rodadas_plano` (a saída do planejador, uma linha por rodada, inclusive a que passou), `validacoes_plano` (uma linha por problema, por rodada), `planos_editoriais`, `planos_nivel` e `celulas` (9 linhas, estado `PENDENTE`, tentativa 0). Plano e células são gravados numa transação. Se o run já tem plano gravado, a gravação não muda nada: o mesmo plano não é erro, outro plano é erro terminal.
+- Cópia local em `data/runs/<run_id>/`: `validacoes_plano/<rodada>.json` (a rodada, os problemas e a saída do planejador; existe em toda rodada, com `problemas: []` na que passou), `plano.json` e `celulas/<celula_id>/estado.json`.
 - Estado do grafo: `rodada_plano`, `plano` e `celulas`.
+- O estado e a tentativa de uma célula mudam por `atualizar_celula` (`persistencia.py`), que grava `atualizado_em` e a cópia local; a E5 usa a função na mesma transação que grava a peça.
 
 ## Terminal e dashboard
 
 - O terminal ganha as linhas `etapa adapt: iniciada` e `etapa adapt: concluída` (`docs/execucao.md`, Linhas de etapa no terminal). A linha final diz em quantas rodadas o plano ficou pronto e, com `aviso`, que o plano tem aviso: `concluído: <doc> (<hash>), 22 claims, 1 em quarentena, plano em 2 rodadas (com aviso), 10836 tokens, R$ 0.1516`.
-- No dashboard, a E4 entra como etapa da lista do fluxo, com o nó `adapt`. A subaba da E4 e a aba Resultado mostram o plano gravado: o núcleo, o aviso, e, por nível, a tese, os claims usados, as analogias e os descartes, além dos problemas do gate por rodada (`docs/fluxos/dashboard.md`, Plano editorial).
+- No dashboard, a E4 entra como etapa da lista do fluxo, com o nó `adapt`. A subaba da E4 e a aba Resultado mostram o plano gravado: o núcleo, o aviso, e, por nível, a tese, os claims usados com a prioridade, as analogias e os descartes, além dos problemas do gate por rodada (`docs/fluxos/dashboard.md`, Plano editorial).
 
 ## Como falha
 
 Os modos de falha do plano (trivialização, núcleo mal escolhido, analogia enganosa) estão em `docs/arquiteturas.md`, E4. Os próprios desta implementação:
 
 - LevelSpec ou glossário inválido: erro terminal no início da E4, antes de chamar o modelo.
-- Gate ainda com problema depois da 3ª rodada: o run segue com `aviso`, e as células dos níveis afetados chegam à E8 com esse aviso.
-- Núcleo vazio ou nível sem claim depois da retirada dos ids inexistentes: erro terminal, depois de gravar as rodadas em `validacoes_plano`.
-- Falha do modelo: a mesma regra do `llm.py` da E2 (backoff na falha de infraestrutura, nova tentativa na resposta fora do schema, troca de chave em `docs/fluxos/extracao.md`, Cliente LLM).
+- Nenhum claim candidato nos 3 níveis: erro terminal antes de chamar o modelo.
+- Gate ainda com problema depois da 3ª rodada: a limpeza corrige o plano, o run segue com `aviso`, e as células dos níveis citados no `aviso` chegam à matriz do dashboard com ele.
+- Núcleo vazio, ou claim do núcleo com termo sem analogia no Iniciante, na limpeza: erro terminal, depois de gravar as rodadas. Problema que o gate ainda acusasse no plano limpo também seria erro terminal (conferência de segurança).
+- Falha do modelo: a mesma regra do `llm.py` da E2 (backoff na falha de infraestrutura, nova tentativa na resposta fora do schema, troca de chave em `docs/fluxos/extracao.md`, Cliente LLM). Resposta do planejador com analogia sem termo ou sem explicação, ou com prioridade menor que 1, é resposta fora do schema.

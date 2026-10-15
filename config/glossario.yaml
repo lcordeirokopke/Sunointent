@@ -1,4 +1,4 @@
-versao: 4
+versao: 5
 termos:
   # ---------------------------------------------------------------- juros
   - id: juros
@@ -32,7 +32,7 @@ termos:
     definicao_simples: "Taxa de juros de referência do país, definida pelo Banco Central, que influencia os juros de empréstimos, financiamentos e aplicações."
     definicao_tecnica: "Taxa média das operações compromissadas de um dia útil lastreadas em títulos públicos federais registrados no Sistema Especial de Liquidação e de Custódia; o Copom define a meta para a Selic e o Banco Central atua no mercado aberto para manter a taxa efetiva em linha com essa meta. É o principal instrumento de política monetária."
     analogias:
-      - texto: "A Selic é como o juro de referência que o Banco Central define para os empréstimos entre bancos: quando ele sobe, os juros cobrados de pessoas e empresas tendem a subir junto."
+      - texto: "É como o juro de referência que o Banco Central define para os empréstimos entre bancos: quando ele sobe, os juros cobrados de pessoas e empresas tendem a subir junto."
         limite: "Ela não é a taxa que o cliente paga no banco nem uma medida da inflação; as taxas de cada operação somam custos, risco e margem e podem mudar em ritmos diferentes."
         status: rascunho
     ambiguo: false
@@ -49,7 +49,7 @@ termos:
     definicao_simples: "Grupo formado pelo presidente e pelos diretores do Banco Central que se reúne periodicamente para decidir a taxa de juros de referência do país."
     definicao_tecnica: "Órgão do Banco Central, formado pelo presidente e pelos diretores, que define a meta para a taxa Selic com base na avaliação do cenário macroeconômico, das expectativas de inflação e do balanço de riscos; divulga a decisão em comunicado e publica ata da reunião."
     analogias:
-      - texto: "O Copom é como o conselho que ajusta o termostato da economia: decide se o juro de referência sobe, cai ou fica igual para manter a inflação perto do alvo."
+      - texto: "É como o conselho que ajusta o termostato da economia: decide se o juro de referência sobe, cai ou fica igual para manter a inflação perto do alvo."
         limite: "O comitê não controla diretamente preços nem a economia; a decisão leva tempo para fazer efeito e outros fatores também influenciam o resultado."
         status: rascunho
     ambiguo: false
@@ -67,7 +67,7 @@ termos:
     definicao_simples: "Conjunto de ações do Banco Central para mexer no custo do dinheiro e na quantidade de dinheiro em circulação, com o objetivo principal de manter os preços estáveis."
     definicao_tecnica: "Ações do Banco Central para afetar as taxas de juros e as condições de liquidez da economia, visando primordialmente a estabilidade de preços; usa como instrumentos a taxa Selic, as operações de mercado aberto, os depósitos voluntários, os depósitos compulsórios e o redesconto."
     analogias:
-      - texto: "A política monetária é como o pedal de freio e acelerador do crédito: juros mais altos freiam o consumo e o investimento, juros mais baixos aceleram."
+      - texto: "É como o pedal de freio e acelerador do crédito: juros mais altos freiam o consumo e o investimento, juros mais baixos aceleram."
         limite: "Os efeitos chegam com atraso e de forma desigual entre setores; a economia também responde a fatores fora do controle do Banco Central."
         status: rascunho
     ambiguo: false
@@ -129,7 +129,7 @@ termos:
     definicao_simples: "O quanto os juros rendem de verdade depois de descontar a alta dos preços no mesmo período."
     definicao_tecnica: "Taxa de juros descontada a inflação do mesmo período; mede o ganho ou o custo em poder de compra de uma aplicação ou de um empréstimo."
     analogias:
-      - texto: "Se o salário sobe mas os preços sobem quase o mesmo tanto, o ganho de verdade é só a diferença; com os juros é igual: o juro real é o que sobra depois de descontar a inflação."
+      - texto: "É como o aumento de salário que sobra depois que os preços sobem: se o salário sobe quase o mesmo tanto que os preços, o ganho de verdade é só a diferença; com os juros, vale o que sobra depois de descontar a inflação."
         limite: "O desconto correto não é uma simples subtração quando as taxas são altas, e a inflação usada pode ser a passada ou a esperada, o que muda o resultado."
         status: rascunho
     ambiguo: false
@@ -185,7 +185,7 @@ termos:
     definicao_simples: "Taxa dos empréstimos de um dia entre bancos, usada como referência para o rendimento de muitas aplicações."
     definicao_tecnica: "Título de emissão bancária usado em empréstimos de curto prazo entre instituições financeiras; a taxa DI, média das operações de um dia útil entre instituições de grupos diferentes, é a principal referência de rentabilidade das aplicações pós-fixadas, como CDBs, LCIs, LCAs e fundos DI."
     analogias:
-      - texto: "O CDI é como o preço de atacado do dinheiro entre bancos; muitas aplicações dizem quanto pagam usando esse preço como régua (por exemplo, uma fração ou um múltiplo dele)."
+      - texto: "É como o preço de atacado do dinheiro entre bancos; muitas aplicações dizem quanto pagam usando esse preço como régua (por exemplo, uma fração ou um múltiplo dele)."
         limite: "Pessoas físicas não compram CDI diretamente; ele é uma referência, e a taxa acompanha de perto a Selic, mas não é igual a ela."
         status: rascunho
     ambiguo: false
@@ -455,7 +455,7 @@ termos:
     definicao_simples: "Postura mais dura de um banco central, disposto a manter ou subir os juros para controlar a inflação."
     definicao_tecnica: "Viés de comunicação ou decisão de autoridade monetária que prioriza o controle da inflação, inclinado a juros mais altos ou por mais tempo."
     analogias:
-      - texto: "Do inglês para falcão: um banco central hawkish é vigilante e firme contra a inflação, mesmo que isso custe crescimento."
+      - texto: "É como um falcão vigilante: um banco central assim é firme contra a inflação, mesmo que isso custe crescimento."
         limite: "É um rótulo do mercado para o tom da comunicação, não uma categoria oficial, e a mesma autoridade pode mudar de tom."
         status: rascunho
     ambiguo: false
@@ -473,7 +473,7 @@ termos:
     definicao_simples: "Postura mais branda de um banco central, inclinada a juros mais baixos para estimular a economia."
     definicao_tecnica: "Viés de comunicação ou decisão de autoridade monetária que dá mais peso ao crescimento e ao emprego, aceitando juros mais baixos mesmo com alguma pressão inflacionária no curto prazo."
     analogias:
-      - texto: "Do inglês para pomba: um banco central dovish é mais suave e tende a afrouxar os juros."
+      - texto: "É como uma pomba: um banco central assim é mais suave e tende a afrouxar os juros."
         limite: "É um rótulo do mercado para o tom da comunicação, não uma categoria oficial; dovish não significa descuidar da meta de inflação."
         status: rascunho
     ambiguo: false
@@ -496,7 +496,7 @@ termos:
     definicao_simples: "Unidade bem pequena usada para descrever variações de taxas e margens; é uma pequena fração de um ponto de porcentagem."
     definicao_tecnica: "Convenção de mercado em que um ponto-base corresponde a um centésimo de ponto percentual; usada para expressar pequenas variações de rendimentos, spreads e margens."
     analogias:
-      - texto: "É como medir em centavos em vez de reais: o ponto-base está para o ponto de porcentagem assim como o centavo está para o real."
+      - texto: "É como medir em centavos em vez de reais: é a centésima parte de um ponto de porcentagem, assim como o centavo é a centésima parte do real."
         limite: "Ponto-base mede diferença entre taxas, não dinheiro; uma variação em pontos-base não diz quanto isso representa em reais sem saber o valor sobre o qual a taxa incide."
         status: rascunho
     ambiguo: false
@@ -679,7 +679,7 @@ termos:
     definicao_simples: "Medida de inflação calculada pela FGV que mistura preços no atacado, ao consumidor e da construção, muito usada para reajustar aluguéis."
     definicao_tecnica: "Índices gerais de preços calculados pela FGV como média ponderada de preços ao produtor (com o maior peso), ao consumidor e do custo da construção; o IGP-M e o IGP-DI diferem no período de coleta e são usados em correção de contratos."
     analogias:
-      - texto: "Enquanto o índice oficial olha o carrinho de compras da família, o IGP-M olha também o preço da matéria-prima na porta da fábrica."
+      - texto: "É como olhar, além do carrinho de compras da família que o índice oficial acompanha, também o preço da matéria-prima na porta da fábrica."
         limite: "Por pesar muito os preços no atacado, o IGP-M reage mais a câmbio e commodities e pode se afastar bastante da inflação ao consumidor."
         status: rascunho
     ambiguo: false
@@ -801,7 +801,7 @@ termos:
     definicao_simples: "O que pessoas, empresas e analistas acham que vai acontecer com os preços no futuro."
     definicao_tecnica: "Projeções dos agentes econômicos para a inflação futura em diferentes horizontes, medidas por pesquisas (como a Focus) e por preços de ativos; influenciam a formação de preços e salários e são uma das causas da inflação."
     analogias:
-      - texto: "Se todo mundo acha que o aluguel vai subir muito no ano que vem, donos de imóveis já pedem reajustes maiores hoje: a expectativa ajuda a fazer o preço subir."
+      - texto: "É como quando todo mundo acha que o aluguel vai subir muito no ano que vem e os donos de imóveis já pedem reajustes maiores hoje: a expectativa ajuda a fazer o preço subir."
         limite: "Expectativas são opiniões que podem errar; nem toda alta esperada se confirma, e o Banco Central age justamente para influenciá-las."
         status: rascunho
     ambiguo: false
@@ -884,7 +884,7 @@ termos:
     definicao_simples: "Preços definidos ou influenciados pelo governo ou por agências reguladoras, como tarifas de energia, de transporte público e planos de saúde."
     definicao_tecnica: "Componentes do IPCA sob influência potencial ou efetiva de órgão público ou agência reguladora; são menos sensíveis às condições de oferta e demanda e muitas vezes reajustados com base na inflação passada."
     analogias:
-      - texto: "São como preços tabelados por contrato: não sobem nem descem com a procura do dia a dia, mas em datas e regras definidas."
+      - texto: "É como um preço tabelado por contrato: não sobe nem desce com a procura do dia a dia, mas em datas e regras definidas."
         limite: "Nem todo preço administrado é fixado diretamente pelo governo, e alguns seguem parcialmente o mercado."
         status: rascunho
     ambiguo: false
@@ -902,7 +902,7 @@ termos:
     definicao_simples: "Preços que variam conforme a procura e a oferta do mercado, sem regra do governo, como alimentos, roupas e muitos serviços."
     definicao_tecnica: "Componentes do IPCA não classificados como administrados, com preços mais sensíveis às condições usuais de oferta e demanda; dividem-se em alimentação no domicílio, serviços e bens industriais."
     analogias:
-      - texto: "São como os preços de uma feira: mudam conforme a procura, a safra e a concorrência."
+      - texto: "É como o preço numa feira: muda conforme a procura, a safra e a concorrência."
         limite: "A divisão entre livres e administrados é analítica e não estrita; alguns itens ficam numa zona intermediária."
         status: rascunho
     ambiguo: false
@@ -920,7 +920,7 @@ termos:
     definicao_simples: "Alta de preços de serviços, como aluguel, manutenção, cabeleireiro e serviços médicos."
     definicao_tecnica: "Variação dos preços do segmento de serviços dos preços livres do IPCA (produtos intangíveis); tende a ser mais persistente e mais ligada ao mercado de trabalho e ao hiato do produto."
     analogias:
-      - texto: "Serviços dependem muito de trabalho de pessoas; quando os salários sobem, o preço do corte de cabelo tende a acompanhar, e costuma demorar a cair."
+      - texto: "É como o preço do corte de cabelo, que depende muito do trabalho de pessoas: quando os salários sobem, ele tende a acompanhar e costuma demorar a cair."
         limite: "A ligação com salários é uma tendência, não uma regra; aluguéis e outros serviços seguem também contratos e índices próprios."
         status: rascunho
     ambiguo: false
@@ -989,7 +989,7 @@ termos:
     definicao_simples: "Quando a alta de preço de um item, causada por um evento passageiro, começa a se espalhar para outros preços e para os salários."
     definicao_tecnica: "Propagação de um choque que altera preços relativos para preços da economia não diretamente afetados por ele, via indexação, salários e expectativas; os efeitos primários são o impacto direto do choque. A política monetária, com expectativas ancoradas, deve combater apenas os efeitos secundários."
     analogias:
-      - texto: "É como um incêndio numa casa (efeito primário): o perigo maior é o fogo passar para as casas vizinhas (efeitos de segunda ordem)."
+      - texto: "É como um incêndio numa casa: o perigo maior é o fogo passar para as casas vizinhas, que não pegaram fogo no começo."
         limite: "Com expectativas de inflação ancoradas, a propagação costuma ser contida; se as pessoas passarem a esperar mais inflação, ela pode se espalhar mais. Na economia o espalhamento acontece por reajustes de preços e salários, não por contato físico."
         status: rascunho
     ambiguo: false
@@ -1007,7 +1007,7 @@ termos:
     definicao_simples: "Preço de um produto comparado com o de outros; quando um sobe muito mais que os demais, mudam os preços relativos."
     definicao_tecnica: "Relação entre os preços de diferentes bens e serviços; um choque pode alterá-los (ajuste de preços relativos) sem significar aumento generalizado e persistente de preços."
     analogias:
-      - texto: "Se o tomate dobra de preço e o resto fica igual, o tomate ficou caro em relação ao resto: isso é mudança de preço relativo, não necessariamente inflação."
+      - texto: "É como quando o tomate dobra de preço e o resto fica igual: o tomate ficou caro em relação ao resto, o que não é necessariamente inflação."
         limite: "Se a alta de um item começa a puxar todos os outros, o ajuste relativo vira inflação generalizada."
         status: rascunho
     ambiguo: false
@@ -1237,7 +1237,7 @@ termos:
     definicao_simples: "Produtos básicos produzidos em grande quantidade e quase iguais entre si, como petróleo, minério, soja e café, com preço definido no mercado mundial."
     definicao_tecnica: "Bens primários padronizados, negociados globalmente, que servem de matéria-prima (agrícolas, minerais e energéticos); seus preços internacionais afetam inflação, câmbio e contas externas."
     analogias:
-      - texto: "Um quilo de soja de uma fazenda é praticamente igual ao de outra; por isso o preço é o mesmo no mundo todo, como acontece com o ouro."
+      - texto: "É como um quilo de soja, que é praticamente igual em qualquer fazenda: por isso o preço é o mesmo no mundo todo, como acontece com o ouro."
         limite: "Ainda há diferenças de qualidade, frete e prazo que fazem o preço local variar em relação à referência internacional."
         status: rascunho
     ambiguo: false
@@ -1289,7 +1289,7 @@ termos:
     definicao_simples: "Parte da economia que estuda o país como um todo: produção, emprego, preços, juros e contas com o exterior."
     definicao_tecnica: "Ramo da ciência econômica dedicado ao estudo do comportamento agregado de variáveis como produção, emprego, inflação, juros e câmbio, em nível regional, nacional ou global."
     analogias:
-      - texto: "É olhar a floresta inteira em vez de cada árvore: em vez de uma empresa ou família, o foco é o conjunto."
+      - texto: "É como olhar a floresta inteira em vez de cada árvore: em vez de uma empresa ou família, o foco é o conjunto."
         limite: "O que vale para o conjunto nem sempre vale para cada parte; a média pode esconder situações muito diferentes."
         status: rascunho
     ambiguo: false
@@ -1390,7 +1390,7 @@ termos:
     definicao_simples: "Quando o real perde valor e passa a ser preciso mais reais para comprar um dólar; o contrário é a valorização do real."
     definicao_tecnica: "Perda de valor da moeda nacional frente às estrangeiras (alta da taxa de câmbio); encarece importados e insumos e tende a pressionar a inflação, enquanto a apreciação tem efeito oposto."
     analogias:
-      - texto: "Se o real fosse um ingresso de show, depreciação é quando o mesmo ingresso passa a valer menos dólares na troca."
+      - texto: "É como um ingresso de show que passa a valer menos dólares na troca: o mesmo real compra menos moeda de fora."
         limite: "A analogia trata só do preço da troca; o efeito sobre a inflação depende de quanto as empresas repassam aos preços."
         status: rascunho
     ambiguo: false
@@ -1407,7 +1407,7 @@ termos:
     definicao_simples: "Ideia de que, com o tempo, o câmbio tende a se ajustar à diferença entre a inflação de um país e a dos outros."
     definicao_tecnica: "Teoria que relaciona câmbio e diferencial de inflação; na versão em diferenças, a variação da taxa de câmbio é dada pela diferença entre inflação doméstica e externa. O Copom usa essa hipótese para a trajetória do câmbio nas projeções."
     analogias:
-      - texto: "Se no Brasil os preços sobem mais rápido que lá fora, o real tende a perder valor na mesma proporção, para que a mesma cesta continue custando parecido nos dois lugares."
+      - texto: "É como uma mesma cesta de compras que deveria custar parecido no Brasil e lá fora: se aqui os preços sobem mais rápido, o real tende a perder valor na mesma proporção."
         limite: "É uma tendência de longo prazo e uma hipótese de trabalho; no dia a dia o câmbio se afasta bastante dela por fluxos de capital, juros e risco."
         status: rascunho
     ambiguo: false
@@ -1442,7 +1442,7 @@ termos:
     definicao_simples: "Dinheiro e bens em moeda estrangeira guardados pelo Banco Central, como um seguro do país para pagar compromissos com o exterior."
     definicao_tecnica: "Ativos em moeda estrangeira mantidos pelo Banco Central (depósitos, títulos, direitos especiais de saque, ouro); funcionam como seguro para obrigações externas e permitem atuar contra variações bruscas do câmbio."
     analogias:
-      - texto: "São como a reserva de emergência de uma família, só que em dólar e para o país inteiro."
+      - texto: "É como a reserva de emergência de uma família, só que em dólar e para o país inteiro."
         limite: "Manter reservas tem custo, e usá-las para segurar o câmbio só funciona por algum tempo; não são dinheiro livre para gastos do governo."
         status: rascunho
     ambiguo: false
@@ -1714,7 +1714,7 @@ termos:
     definicao_simples: "Papel vendido pelo governo para pegar dinheiro emprestado das pessoas e das empresas, devolvendo depois com juros."
     definicao_tecnica: "Instrumento de renda fixa (prefixado ou pós-fixado) emitido pelo governo federal para financiar o déficit, realizar operações definidas em lei ou refinanciar a dívida; negociado no mercado e no Tesouro Direto."
     analogias:
-      - texto: "Comprar um título público é emprestar dinheiro ao governo, que devolve com juros na data combinada, como um empréstimo com recibo."
+      - texto: "É como emprestar dinheiro ao governo com recibo: ele devolve com juros na data combinada."
         limite: "O título pode ser vendido antes do vencimento por preço diferente do aplicado, com ganho ou perda."
         status: rascunho
     ambiguo: false
@@ -1965,7 +1965,7 @@ termos:
     definicao_simples: "Indicador que acompanha o desempenho médio dos fundos que investem em imóveis e são negociados na bolsa."
     definicao_tecnica: "Índice de retorno total da bolsa brasileira que reúne os fundos de investimento imobiliário mais negociados e representativos, considerando variação de preços e distribuição de rendimentos."
     analogias:
-      - texto: "É o termômetro do mercado de fundos imobiliários, assim como há um termômetro para as ações."
+      - texto: "É como um termômetro do mercado de fundos imobiliários, assim como há um termômetro para as ações."
         limite: "O índice mostra a média; um fundo específico pode ir bem diferente."
         status: rascunho
     ambiguo: false
@@ -2245,7 +2245,7 @@ termos:
     definicao_simples: "Aplicação em que se empresta dinheiro a um banco, que devolve o valor com juros."
     definicao_tecnica: "Título de renda fixa representativo de depósito a prazo emitido por bancos; pode ser prefixado, pós-fixado ou híbrido e conta com garantia do FGC dentro dos limites."
     analogias:
-      - texto: "É o banco pegando dinheiro emprestado do cliente, com recibo e juros combinados, em vez de o cliente pegar do banco."
+      - texto: "É como o banco pegando dinheiro emprestado do cliente, com recibo e juros combinados, em vez de o cliente pegar do banco."
         limite: "O risco é do banco emissor; a garantia do fundo garantidor tem limites e não cobre tudo."
         status: rascunho
     ambiguo: false
@@ -2624,7 +2624,7 @@ termos:
     definicao_simples: "Facilidade de transformar um bem ou aplicação em dinheiro rapidamente, sem perder valor."
     definicao_tecnica: "Capacidade de um ativo ser convertido em dinheiro rapidamente e a preço próximo ao de mercado; no sistema financeiro, também designa a disponibilidade de recursos para honrar obrigações."
     analogias:
-      - texto: "Dinheiro na carteira tem liquidez total; um apartamento tem pouca, porque vender rápido costuma exigir desconto."
+      - texto: "É como a diferença entre o dinheiro na carteira, que se usa na hora, e um apartamento, que para ser vendido rápido costuma exigir desconto."
         limite: "A liquidez de um mesmo ativo muda com o momento do mercado; algo líquido hoje pode ficar difícil de vender numa crise."
         status: rascunho
     ambiguo: false
@@ -2739,7 +2739,7 @@ termos:
     definicao_simples: "Venda de ações ou cotas novas, em que o dinheiro arrecadado vai para a própria empresa ou fundo."
     definicao_tecnica: "Emissão de novas ações ou cotas ofertadas ao mercado, com ingresso dos recursos no próprio emissor."
     analogias:
-      - texto: "É a empresa vendendo pedaços novos de si mesma para colocar dinheiro no caixa."
+      - texto: "É como a empresa vendendo pedaços novos de si mesma para colocar dinheiro no caixa."
         limite: "Com mais ações no total, cada ação antiga passa a representar uma fatia menor da empresa."
         status: rascunho
     ambiguo: false
@@ -2758,7 +2758,7 @@ termos:
     definicao_simples: "Venda ao público de ações que já existiam, em que o dinheiro vai para os sócios que estão vendendo, e não para a empresa."
     definicao_tecnica: "Oferta de ações ou cotas já existentes, com recursos direcionados aos acionistas ou cotistas vendedores e não ao emissor."
     analogias:
-      - texto: "É um sócio antigo vendendo a sua parte para novos sócios; a empresa em si não recebe nada."
+      - texto: "É como um sócio antigo vendendo a sua parte para novos sócios: a empresa em si não recebe nada."
         limite: "Mesmo sem dinheiro novo, a oferta pode mudar quem controla a empresa e a quantidade de ações em circulação."
         status: rascunho
     ambiguo: false
@@ -2812,7 +2812,7 @@ termos:
     definicao_simples: "Parte das ações de uma empresa que está nas mãos do público e pode ser negociada livremente na bolsa."
     definicao_tecnica: "Ações emitidas pela companhia excetuadas as detidas pelos controladores, pessoas a eles vinculadas, administradores e as mantidas em tesouraria."
     analogias:
-      - texto: "É a parte do bolo que está na mesa para todos; o pedaço guardado pelo dono não entra na conta."
+      - texto: "É como a parte do bolo que está na mesa para todos: o pedaço guardado pelo dono não entra na conta."
         limite: "Ter muitas ações em circulação não garante que elas sejam muito negociadas."
         status: rascunho
     ambiguo: false
@@ -2907,7 +2907,7 @@ termos:
     definicao_simples: "Chance de quem pegou dinheiro emprestado não pagar de volta."
     definicao_tecnica: "Risco de o tomador ou contraparte não honrar sua obrigação nos termos contratados."
     analogias:
-      - texto: "É o risco de emprestar dinheiro a um amigo e ele não devolver."
+      - texto: "É como emprestar dinheiro a um amigo e correr o risco de ele não devolver."
         limite: "No mercado esse risco é medido e precificado: quem tem mais risco paga juros maiores."
         status: rascunho
     ambiguo: false
@@ -2943,7 +2943,7 @@ termos:
     definicao_simples: "Quando quem deve não paga a dívida na data combinada."
     definicao_tecnica: "Atraso ou não pagamento de principal ou juros de título na data de vencimento; também a declaração de insolvência do devedor pelos credores."
     analogias:
-      - texto: "É o famoso calote, só que com nome técnico e regras contratuais sobre o que acontece depois."
+      - texto: "É como o famoso calote, só que com nome técnico e regras contratuais sobre o que acontece depois."
         limite: "Há graus: atraso pontual, renegociação e falência são situações diferentes, com efeitos diferentes para o credor."
         status: rascunho
     ambiguo: false
@@ -3048,7 +3048,7 @@ termos:
     definicao_simples: "Lucro obtido ao vender um bem ou investimento por um valor maior do que se pagou."
     definicao_tecnica: "Diferença positiva entre o valor de alienação de um bem ou direito e o respectivo custo de aquisição, sujeita a tributação conforme a legislação."
     analogias:
-      - texto: "É o lucro de comprar uma bicicleta usada e revendê-la por mais do que pagou."
+      - texto: "É como o lucro de comprar uma bicicleta usada e revendê-la por mais do que pagou."
         limite: "Há custos e impostos que reduzem esse ganho, e a regra de tributação depende do tipo de bem."
         status: rascunho
     ambiguo: false
@@ -3138,7 +3138,7 @@ termos:
     definicao_simples: "Risco de não conseguir dinheiro a tempo para pagar compromissos, ou de não conseguir vender um bem sem grande desconto."
     definicao_tecnica: "Risco de uma instituição se tornar incapaz de honrar suas obrigações no prazo, ou de não conseguir negociar um ativo a preço justo por falta de compradores."
     analogias:
-      - texto: "É o risco de precisar vender a casa às pressas e só achar comprador oferecendo bem menos."
+      - texto: "É como o risco de precisar vender a casa às pressas e só achar comprador oferecendo bem menos."
         limite: "Uma instituição pode ter muitos bens e ainda assim faltar dinheiro no curto prazo; liquidez e solvência são coisas diferentes."
         status: rascunho
     ambiguo: false
@@ -3506,7 +3506,7 @@ termos:
     definicao_simples: "Grupo eleito pelos sócios para fiscalizar as contas e os atos dos administradores da empresa."
     definicao_tecnica: "Órgão de fiscalização da companhia, eleito pela assembleia, que acompanha os atos dos administradores e opina sobre as demonstrações financeiras e propostas submetidas à assembleia."
     analogias:
-      - texto: "É como o conselho fiscal de um condomínio, que confere as contas do síndico."
+      - texto: "É como a comissão de moradores que confere as contas do síndico de um condomínio."
         limite: "Não substitui a auditoria independente, que tem outro papel e outra responsabilidade."
         status: rascunho
     ambiguo: false
@@ -3757,7 +3757,7 @@ termos:
     definicao_simples: "Venda ou transferência de um bem ou de uma participação numa empresa para outra pessoa."
     definicao_tecnica: "Transferência ou cessão de bens ou direitos, como a venda de participação societária ou do controle de uma companhia."
     analogias:
-      - texto: "No mercado, é o nome formal para vender ou passar adiante algo que se possui, como uma fatia de outra empresa."
+      - texto: "É como vender ou passar adiante algo que se possui, por exemplo uma fatia de outra empresa: no mercado, esse é o nome formal da venda."
         limite: "A palavra tem outros sentidos no dia a dia; aqui vale só o sentido jurídico de transferir a propriedade."
         status: rascunho
     ambiguo: true
@@ -3794,7 +3794,7 @@ termos:
     definicao_simples: "Forma de a empresa pagar parte do lucro aos sócios que permite à empresa pagar menos imposto; para o sócio, há desconto de imposto na fonte."
     definicao_tecnica: "Remuneração aos acionistas calculada sobre o patrimônio líquido e limitada a uma taxa de referência, dedutível da base do imposto de renda e da contribuição social da empresa, com retenção de imposto na fonte para o beneficiário; pode ser imputada ao dividendo obrigatório."
     analogias:
-      - texto: "É um primo do dividendo: também distribui lucro aos sócios, mas por outra porta, com efeito diferente no imposto."
+      - texto: "É como um primo do dividendo: também distribui lucro aos sócios, mas por outra porta, com efeito diferente no imposto."
         limite: "Para o acionista pessoa física, o valor líquido recebido sofre retenção de imposto, ao contrário da regra usual dos dividendos."
         status: rascunho
     ambiguo: false
@@ -3848,7 +3848,7 @@ termos:
     definicao_simples: "Pagamentos e benefícios que o sócio recebe da empresa, como parte do lucro ou ações extras."
     definicao_tecnica: "Remunerações e direitos recebidos pelos detentores de ações, como dividendos, juros sobre capital próprio, bonificações e direitos de subscrição."
     analogias:
-      - texto: "É o nome guarda-chuva para tudo que a empresa entrega aos sócios por serem sócios."
+      - texto: "É como um nome guarda-chuva para tudo que a empresa entrega aos sócios por serem sócios."
         limite: "Cada tipo de provento tem regra e tributação próprias."
         status: rascunho
     ambiguo: false
@@ -4411,7 +4411,7 @@ termos:
     definicao_simples: "Total vendido pela empresa no período, antes de tirar impostos sobre vendas, devoluções e descontos."
     definicao_tecnica: "Receita das vendas de bens e serviços antes das deduções (impostos sobre vendas, devoluções e abatimentos), primeira linha da demonstração do resultado."
     analogias:
-      - texto: "É todo o dinheiro que entrou no caixa da loja pelas vendas, antes de separar o que vai para impostos e trocas."
+      - texto: "É como todo o dinheiro que entrou no caixa da loja pelas vendas, antes de separar o que vai para impostos e trocas."
         limite: "Receita não é lucro; ainda faltam custos e despesas."
         status: rascunho
     ambiguo: false
@@ -4429,7 +4429,7 @@ termos:
     definicao_simples: "Total vendido pela empresa depois de tirar impostos sobre vendas, devoluções e descontos."
     definicao_tecnica: "Receita bruta menos deduções (tributos sobre vendas, devoluções e abatimentos); base para o cálculo de margens na demonstração do resultado."
     analogias:
-      - texto: "É o dinheiro das vendas que de fato fica com a loja depois de separar impostos e trocas, mas antes de pagar fornecedores e salários."
+      - texto: "É como o dinheiro das vendas que de fato fica com a loja depois de separar impostos e trocas, mas antes de pagar fornecedores e salários."
         limite: "Ainda não é lucro; custos e despesas vêm depois."
         status: rascunho
     ambiguo: false
@@ -4446,7 +4446,7 @@ termos:
     definicao_simples: "O que sobra das vendas depois de pagar o custo direto de produzir ou comprar o que foi vendido."
     definicao_tecnica: "Receita líquida menos o custo das mercadorias e serviços vendidos."
     analogias:
-      - texto: "É o que sobra da venda de um bolo depois de pagar ingredientes, antes de pagar aluguel e funcionários."
+      - texto: "É como o que sobra da venda de um bolo depois de pagar os ingredientes, antes de pagar aluguel e funcionários."
         limite: "Despesas gerais, juros e impostos sobre o lucro ainda vão ser descontados."
         status: rascunho
     ambiguo: false
@@ -4463,13 +4463,10 @@ termos:
       - lucro líquido societário
       - lucro atribuído aos acionistas
     categoria: contabil
-    nivel_minimo: intermediario
+    nivel_minimo: iniciante
     definicao_simples: "O que sobra para a empresa depois de pagar todos os custos, despesas, juros e impostos do período."
     definicao_tecnica: "Resultado final do exercício após custos, despesas operacionais, resultado financeiro, tributos sobre o lucro e participações; base da distribuição de dividendos."
-    analogias:
-      - texto: "É o que sobra no bolso no fim do mês depois de pagar todas as contas."
-        limite: "Lucro não é o mesmo que dinheiro em caixa; vendas a prazo e despesas sem saída de caixa fazem os dois diferirem."
-        status: rascunho
+    analogias: []
     ambiguo: false
     fonte:
       nome: "Presidência da República, Lei nº 6.404 (Lei das S.A.)"
@@ -4771,7 +4768,7 @@ termos:
     definicao_simples: "Preço pelo qual um bem seria vendido, ou uma dívida transferida, numa negociação normal entre interessados."
     definicao_tecnica: "Preço que seria recebido pela venda de um ativo ou pago pela transferência de um passivo em transação não forçada entre participantes do mercado na data de mensuração."
     analogias:
-      - texto: "É o preço que um comprador e um vendedor bem informados, sem pressa, combinariam hoje."
+      - texto: "É como o preço que um comprador e um vendedor bem informados, sem pressa, combinariam hoje."
         limite: "Quando não há mercado ativo, o valor justo é estimado por modelos e pode variar com as premissas."
         status: rascunho
     ambiguo: false
@@ -4846,7 +4843,7 @@ termos:
     definicao_simples: "Conjunto de bens e direitos que a empresa possui, como dinheiro, estoques, prédios e valores a receber."
     definicao_tecnica: "Recurso econômico presente controlado pela entidade como resultado de eventos passados, com potencial de gerar benefícios econômicos; dividido em circulante e não circulante no balanço patrimonial."
     analogias:
-      - texto: "É tudo o que entra na lista do que a empresa tem, como na declaração de bens de uma pessoa."
+      - texto: "É como a lista do que a empresa tem, parecida com a declaração de bens de uma pessoa."
         limite: "Ter muitos ativos não significa estar bem; é preciso olhar as dívidas do outro lado."
         status: rascunho
     ambiguo: true
@@ -4865,7 +4862,7 @@ termos:
     definicao_simples: "Conjunto das dívidas e obrigações da empresa com terceiros, como fornecedores, bancos e impostos."
     definicao_tecnica: "Obrigação presente da entidade de transferir recursos econômicos como resultado de eventos passados; dividido em circulante (curto prazo) e não circulante no balanço."
     analogias:
-      - texto: "É a lista de contas a pagar da empresa, das que vencem logo às de longo prazo."
+      - texto: "É como a lista de contas a pagar da empresa, das que vencem logo às de longo prazo."
         limite: "Algumas obrigações são estimadas, como provisões, e podem mudar de valor."
         status: rascunho
     ambiguo: true

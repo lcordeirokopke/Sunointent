@@ -1,17 +1,17 @@
 # Fluxo de execução (run)
 
-Este documento descreve como um run começa, como o grafo é montado e executado e como ele termina, concluído ou abortado. A ingestão (E0 e o modo `--dev`) está em `docs/fluxos/ingestao.md`, a leitura (E1) em `docs/fluxos/leitura.md`, a extração e a validação (E2 e E3) em `docs/fluxos/extracao.md`, o plano editorial (E4) em `docs/fluxos/plano-editorial.md`, o dashboard em `docs/fluxos/dashboard.md`, e o RunManifest, o estado e o checkpoint em `docs/arquiteturas.md`.
+Este documento descreve como um run começa, como o grafo é montado e executado e como ele termina, concluído ou abortado. A ingestão (E0 e o modo `--dev`) está em `docs/fluxos/ingestao.md`, a leitura (E1) em `docs/fluxos/leitura.md`, a extração e a validação (E2 e E3) em `docs/fluxos/extracao.md`, o plano editorial (E4) em `docs/fluxos/plano-editorial.md`, o dashboard em `docs/fluxos/dashboard.md`, e o RunManifest e o estado em `docs/arquiteturas.md`.
 
 ## Responsabilidades
 
 | Peça | Papel |
 | ---- | ----- |
 | `sunontent/__main__.py` | Ponto de entrada (`python -m sunontent [fonte] [--dev]`). Lê o `.env`, confere as credenciais do Supabase e do Gemini, gera o `run_id`, monta o manifest, registra o run, executa o grafo escrevendo as linhas de etapa no terminal e fecha o run como `concluido` ou `abortado`, com o custo do run. |
-| `sunontent/graph.py` | Monta o grafo LangGraph: as duas entradas (E0 ou referência), a E1, a E2, a E3, o loop E2/E3, a quarentena e a E4, as constantes `K`, `RODADAS_EXTRACAO` e `RODADAS_PLANO` e `construir_grafo(checkpointer)`. A ordem das etapas fica só aqui. |
+| `sunontent/graph.py` | Monta o grafo LangGraph: as duas entradas (E0 ou referência), a E1, a E2, a E3, o loop E2/E3, a quarentena e a E4, as constantes `K`, `RODADAS_EXTRACAO` e `RODADAS_PLANO` e `construir_grafo()`. A ordem das etapas fica só aqui. |
 | `sunontent/manifesto.py` | Lê `config/` e `prompts/` e devolve o `RunManifest` sem os campos do documento. |
 | `sunontent/schemas.py` | `RunManifest`, `PipelineState` e os tipos `Nivel`, `Fonte` e `Modo`. |
 | `sunontent/llm.py` | `conferir_credenciais` (`GOOGLE_API_KEY_PRINC`) e `criar_cliente`: um `ClienteLLM` por run, com as chaves na ordem `GOOGLE_API_KEY_PRINC` e `GOOGLE_API_KEY_SEC`, que acumula os tokens e o custo do run. |
-| `sunontent/persistencia.py` | Funções do run: `criar_run`, `concluir_run`, `abortar_run`, `gravar_manifest_local`, `criar_repositorio_supabase` e `checkpointer_postgres`. Única porta de gravação no Supabase e em `data/`. |
+| `sunontent/persistencia.py` | Funções do run: `criar_run`, `concluir_run`, `abortar_run`, `gravar_manifest_local` e `criar_repositorio_supabase`. Única porta de gravação no Supabase e em `data/`. |
 | `sunontent/nodes/` | Nós finos: `coleta` e `referencia` (entradas), `leitura` (E1), `extract` (E2), `validate` (E3), `quarentena` e `adapt` (E4). Não tratam erro: a `Falha` sobe até o `__main__.py`. |
 
 ## Ciclo de vida do run
@@ -20,8 +20,7 @@ Este documento descreve como um run começa, como o grafo é montado e executado
 flowchart TD
     CLI["python -m sunontent [fonte]"] --> ENV["le o .env e confere SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL e GOOGLE_API_KEY_PRINC"]
     ENV -->|"ausente ou conexao recusada"| PARA["erro na tela, codigo 1, sem linha em runs"]
-    ENV --> CK["abre o checkpointer: conexao propria, schema langgraph, setup()"]
-    CK --> MAN["gera run_id e monta o RunManifest a partir de config/ e prompts/"]
+    ENV --> MAN["gera run_id e monta o RunManifest a partir de config/ e prompts/"]
     MAN -->|"arquivo ausente, vazio ou sem versao"| PARA
     MAN --> RUN["insere a linha em runs com status em_andamento e grava data/runs/run_id/manifest.json"]
     RUN --> G{"graph.stream: manifest.modo"}
@@ -37,17 +36,16 @@ flowchart TD
     QUA --> E4
     E4 --> FIM{"resultado"}
     FIM -->|"plano e 9 celulas gravados"| OK["status concluido, manifest.json com os campos do documento e o custo, codigo 0"]
-    FIM -->|"Falha"| AB["abortar_run: status abortado com erro_classe e erro_mensagem, codigo 1"]
+    FIM -->|"Falha"| AB["abortar_run: status abortado com erro_classe, erro_mensagem e etapa_erro, codigo 1"]
     FIM -->|"outra excecao"| AB2["abortar_run como terminal, mensagem Tipo: texto, e a excecao sobe"]
 ```
 
 1. **Parâmetros.** `fonte` é opcional e vale `copom`, `cvm` ou `b3`; sem ela, as três rodam em sequência, um run por fonte. `--dev` escolhe o documento de referência no lugar do download.
 2. **Credenciais.** O `.env` da raiz do repositório é carregado e as variáveis obrigatórias de `.env.example` são conferidas: as três do Supabase, por `persistencia.criar_repositorio_supabase`, e a `GOOGLE_API_KEY_PRINC`, por `llm.conferir_credenciais`. A `GOOGLE_API_KEY_SEC` é opcional: sem ela, o run roda só com a principal, sem chave de reserva. O banco recebe um `select 1` sem retentativa. Se algo falhar, a execução para com a mensagem na tela e código de saída 1, **sem criar linha em `runs`** e sem chamar `abortar_run`.
-3. **Checkpointer.** `PostgresSaver` em conexão própria (`autocommit`, `dict_row`, `search_path = langgraph`). O `setup()` cria as tabelas na primeira execução.
-4. **`run_id` e manifest.** O `run_id` tem o formato `<fonte>_<AAAAMMDDTHHMMSSZ>_<6 hex>`, por exemplo `copom_20261006T150000Z_9f2c1a`, e o instante é o mesmo do `timestamp` do manifest. Se a config for inválida, a execução para antes de existir linha em `runs`.
-5. **Registro.** `criar_run` insere a linha em `runs` com status `em_andamento` (sem efeito se o `run_id` já existe) e o `manifest.json` local é gravado em seguida.
-6. **Execução.** O grafo roda com `thread_id = run_id`. Os recursos vão em `config["configurable"]`: `repositorio`, `raiz` (raiz do repositório, de onde vêm `prompts/` e `config/`), `raiz_dados` (`data/`), `llm` (o `ClienteLLM` do run), `pasta_referencia` (`tests/fixtures/referencia/`) e, nos testes, `cliente_http`. Cada run recebe um `ClienteLLM` novo, para que o custo acumulado seja só daquele run. O `__main__.py` roda o grafo com `stream` e escreve no terminal o início e o fim de cada etapa (ver "Linhas de etapa no terminal").
-7. **Fim.** Concluído ou abortado, como descrito abaixo.
+3. **`run_id` e manifest.** O `run_id` tem o formato `<fonte>_<AAAAMMDDTHHMMSSZ>_<6 hex>`, por exemplo `copom_20261006T150000Z_9f2c1a`, e o instante é o mesmo do `timestamp` do manifest. Se a config for inválida, a execução para antes de existir linha em `runs`.
+4. **Registro.** `criar_run` insere a linha em `runs` com status `em_andamento` (sem efeito se o `run_id` já existe) e o `manifest.json` local é gravado em seguida.
+5. **Execução.** Os recursos vão em `config["configurable"]`: `repositorio`, `raiz` (raiz do repositório, de onde vêm `prompts/` e `config/`), `raiz_dados` (`data/`), `llm` (o `ClienteLLM` do run), `pasta_referencia` (`tests/fixtures/referencia/`) e, nos testes, `cliente_http`. Cada run recebe um `ClienteLLM` novo, para que o custo acumulado seja só daquele run. O `__main__.py` roda o grafo com `stream`. Ele escreve no terminal o início e o fim de cada etapa (ver "Linhas de etapa no terminal") e guarda o nome do último nó iniciado, que é a etapa do erro se o run abortar.
+6. **Fim.** Concluído ou abortado, como descrito abaixo.
 
 O código de saída é 0 para run concluído e 1 para run abortado ou para erro antes de existir o run.
 
@@ -67,9 +65,8 @@ START -> (modo normal) coleta     -> leitura -> extract -> validate -> adapt -> 
 - O nó `extract` (E2) coloca o FactSheet não assinado no estado, e o nó `validate` (E3) o confere. Sem claim reprovado, o FactSheet é assinado e o grafo segue para o nó `adapt` (E4). Com claim reprovado, `depois_da_validacao` volta ao `extract` enquanto `rodada < RODADAS_EXTRACAO` (3); na terceira rodada, segue para o nó `quarentena`, que grava os reprovados em quarentena e assina o FactSheet com os válidos (sem nenhum válido, levanta `FalhaTerminal`). O loop e a quarentena estão detalhados em `docs/fluxos/extracao.md`.
 - O nó `adapt` (E4) recebe o FactSheet assinado, na E3 ou na quarentena, roda o loop do gate dentro dele, até `RODADAS_PLANO` (3), e grava o plano e as 9 células em `PENDENTE`. O grafo termina depois dele; a E5 em diante ainda não existe no grafo. A E4 está detalhada em `docs/fluxos/plano-editorial.md`.
 - `K = 2` é uma constante de `graph.py`. O valor lido no início do run entra no manifest.
-- `construir_grafo(checkpointer=None)` aceita qualquer checkpointer do LangGraph. O `__main__.py` passa o `PostgresSaver`, e os testes passam o `InMemorySaver`.
 - `PipelineState` tem `run_id`, `manifest`, `documento_fonte` (entradas), `documento` (E1), `factsheet` (não assinado na E2, assinado na E3) os campos do loop E2/E3 (`rodada`, `propostas`, `pendencias` e `correcoes`) e os da E4: `rodada_plano`, `plano` e `celulas`.
-- O `thread_id` é o `run_id`. A E4 cria as 9 células em `PENDENTE`, e o formato `<run_id>:<celula_id>` vale a partir do fan-out da E5, que ainda não existe no grafo.
+- A E4 cria as 9 células em `PENDENTE`; o fan-out da E5 ainda não existe no grafo.
 
 ## Linhas de etapa no terminal
 
@@ -121,22 +118,22 @@ Em `runs`, o custo é somado na mesma instrução que grava cada span (`docs/flu
 
 ## Run abortado
 
-Toda `Falha` que sobe do grafo (E0, referência do `--dev`, E1, E2, E3 e E4) é registrada por `persistencia.abortar_run(repositorio, raiz_dados, manifest, classe, mensagem)`:
+Toda `Falha` que sobe do grafo (E0, referência do `--dev`, E1, E2, E3, E4) é registrada por `persistencia.abortar_run(repositorio, raiz_dados, manifest, classe, mensagem, etapa)`:
 
 1. A mensagem aparece na tela (stderr) antes de qualquer gravação.
-2. Com `com_retentativa`, o `abortar_run` faz o update em `runs`: `status = 'abortado'`, `erro_classe` e `erro_mensagem`, `where run_id = ... and status = 'em_andamento'`. Os campos de documento não são tocados: podem estar vazios se o run abortou antes de a E0 entregar o documento.
+2. Com `com_retentativa`, o `abortar_run` faz o update em `runs`: `status = 'abortado'`, `erro_classe`, `erro_mensagem` e `etapa_erro`, `where run_id = ... and status = 'em_andamento'`. A `etapa_erro` é o nome do nó em que o run abortou: o que estava em execução. É nula quando a falha veio antes do primeiro nó. Os campos de documento não são tocados: podem estar vazios se o run abortou antes de a E0 entregar o documento.
 3. O mesmo erro é gravado em `data/runs/<run_id>/manifest.json`, com o custo acumulado até o aborto.
 4. O código de saída é 1.
 
-As constraints de `runs` são respeitadas: `status = 'abortado'` se, e somente se, `erro_classe` não é nulo, e `erro_classe` e `erro_mensagem` são nulos juntos. Mensagem vazia vira `sem mensagem`.
+As constraints de `runs` são respeitadas: `status = 'abortado'` se, e somente se, `erro_classe` não é nulo, `erro_classe` e `erro_mensagem` são nulos juntos, e `etapa_erro` só é preenchida em run abortado. Mensagem vazia vira `sem mensagem`.
 
 | Situação | Resultado |
 | -------- | --------- |
-| `Falha` (retriável esgotada ou terminal) no grafo | Run `abortado` com `falha.classe` e `falha.mensagem`. |
-| Exceção que não é `Falha` (bug) | Run `abortado` como `terminal`, mensagem `NomeDoTipo: texto`, e a exceção sobe com o traceback. |
+| `Falha` (retriável esgotada ou terminal) no grafo | Run `abortado` com `falha.classe`, `falha.mensagem` e a etapa do erro. |
+| Exceção que não é `Falha` (bug) | Run `abortado` como `terminal`, mensagem `NomeDoTipo: texto`, com a etapa do erro, e a exceção sobe com o traceback. |
 | Run já `concluido` ou `abortado` | O update não altera nada: o primeiro estado final é mantido. |
-| Supabase inacessível no update (retentativas esgotadas) | O erro fica só no `manifest.json`, com `status` `em_andamento`, `erro_classe` e `erro_mensagem` (a mensagem original mais a nota `status não gravado no Supabase`). A linha de `runs` segue `em_andamento`. A falha de gravação não é levantada e não esconde o erro original. |
-| Falha antes de existir o run (credencial, conexão, config ou checkpointer) | Mensagem na tela e código 1. Nenhuma linha em `runs` e nenhuma chamada a `abortar_run`. |
+| Supabase inacessível no update (retentativas esgotadas) | O erro fica só no `manifest.json`, com `status` `em_andamento`, `erro_classe`, `erro_mensagem` (a mensagem original mais a nota `status não gravado no Supabase`) e `etapa_erro`. A linha de `runs` segue `em_andamento`. A falha de gravação não é levantada e não esconde o erro original. |
+| Falha antes de existir o run (credencial, conexão ou config) | Mensagem na tela e código 1. Nenhuma linha em `runs` e nenhuma chamada a `abortar_run`. |
 | Falha ao gravar o fechamento de um run concluído | Mensagem na tela e código 1. A linha segue `em_andamento` e o `manifest.json` mantém o status gravado no início. |
 
 A classificação dos erros da E0 e do `--dev` está em `docs/fluxos/ingestao.md`, seção "Classificação de erros".
@@ -151,12 +148,12 @@ data/runs/<run_id>/
 ├── validacoes/<rodada>.json # E3: resultado de cada rodada
 ├── factsheet.json           # E3: FactSheet assinado, sem a tabela_numeros
 ├── quarentena.json          # claims em quarentena, quando há
-├── validacoes_plano/<rodada>.json  # E4: problemas do gate em cada rodada
+├── validacoes_plano/<rodada>.json  # E4: problemas do gate e saída do planejador em cada rodada
 ├── plano.json               # E4: núcleo, aviso e os 3 planos de nível
 └── celulas/<celula_id>/estado.json # E4: as 9 células em PENDENTE
 ```
 
-O `manifest.json` contém os campos do `RunManifest` (em JSON) e, ao lado deles, `status`, `erro_classe` e `erro_mensagem`. Só o processo principal grava esse arquivo. Todos os arquivos são gravados num arquivo temporário renomeado no fim, e sempre depois de gravar no Supabase. Um run abortado tem só os arquivos das etapas que chegaram a gravar.
+O `manifest.json` contém os campos do `RunManifest` (em JSON) e, ao lado deles, `status`, `erro_classe`, `erro_mensagem` e `etapa_erro`. Só o processo principal grava esse arquivo. Todos os arquivos são gravados num arquivo temporário renomeado no fim, e sempre depois de gravar no Supabase. Um run abortado tem só os arquivos das etapas que chegaram a gravar.
 
 ## Como rodar
 
@@ -176,4 +173,4 @@ Sem a fonte, as três rodam em sequência, cada uma com o seu `run_id`. Se um ru
 python -m pytest
 ```
 
-`tests/test_main_graph.py` cobre o manifest, a escolha da entrada do grafo, os dois modos, o loop E2/E3, a E4 no grafo, as linhas de etapa no terminal e os caminhos de erro: falha da E0, bug, referência ausente, hash divergente, config inválida, Supabase fora no aborto, run concluído não sobrescrito, credenciais ausentes, claim que não converge e extractor sem claims. Os testes usam o repositório em memória e o LLM simulado (`tests/conftest.py`), o `InMemorySaver` e `tmp_path`; não acessam internet, o Gemini nem o Supabase do site.
+`tests/test_main_graph.py` cobre o manifest, a escolha da entrada do grafo, os dois modos, o loop E2/E3, a E4 no grafo, as linhas de etapa no terminal e os caminhos de erro: falha da E0, bug, referência ausente, hash divergente, config inválida, Supabase fora no aborto, run concluído não sobrescrito, credenciais ausentes, claim que não converge e extractor sem claims. Os testes usam o repositório em memória e o LLM simulado (`tests/conftest.py`) e `tmp_path`; não acessam internet, o Gemini nem o Supabase do site.

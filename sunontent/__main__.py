@@ -42,12 +42,17 @@ def _ler_parametros(argv: Sequence[str] | None) -> argparse.Namespace:
 
 
 def _abortar(
-    repositorio: persistencia.Repositorio, raiz_dados: Path, manifest: RunManifest, classe: str, mensagem: str
+    repositorio: persistencia.Repositorio,
+    raiz_dados: Path,
+    manifest: RunManifest,
+    classe: str,
+    mensagem: str,
+    etapa: str | None,
 ) -> None:
-    """Mostra o erro e registra o aborto. Uma falha ao registrar não esconde o erro original."""
+    """Mostra o erro e registra o aborto, com a etapa do erro. Uma falha ao registrar não esconde o erro original."""
     print(f"abortado ({classe}): {mensagem}", file=sys.stderr)
     try:
-        persistencia.abortar_run(repositorio, raiz_dados, manifest, classe, mensagem)
+        persistencia.abortar_run(repositorio, raiz_dados, manifest, classe, mensagem, etapa)
     except Falha as falha:
         print(f"o aborto não foi registrado: {falha.mensagem}", file=sys.stderr)
 
@@ -62,17 +67,20 @@ def _com_custo(manifest: RunManifest, cliente_llm: llm.ClienteLLM) -> RunManifes
     )
 
 
-def _rodar_grafo(grafo, estado: PipelineState, config: dict) -> dict:
+def _rodar_grafo(grafo, estado: PipelineState, config: dict, progresso: dict | None = None) -> dict:
     """Roda o grafo e escreve uma linha no início e no fim de cada etapa. Devolve o estado final.
 
     Formato: `etapa <no>: iniciada` e `etapa <no>: concluída`. A etapa que falha não tem a linha de fim: a exceção
     sobe e o `abortado (...)` vem em seguida. O dashboard (app/) lê essas linhas.
+    `progresso["etapa"]` guarda o último nó iniciado: na falha, é o nó em execução.
     """
     resultado = None
     for modo, evento in grafo.stream(estado, config, stream_mode=["tasks", "values"]):
         if modo == "values":
             resultado = evento
         else:
+            if progresso is not None:
+                progresso["etapa"] = evento["name"]
             print(f"etapa {evento['name']}: {'concluída' if 'result' in evento else 'iniciada'}", flush=True)
     return resultado
 
@@ -82,7 +90,6 @@ def executar(
     *,
     dev: bool,
     repositorio: persistencia.Repositorio,
-    checkpointer,
     cliente_llm: llm.ClienteLLM,
     raiz: Path = RAIZ,
     cliente_http=None,
@@ -105,7 +112,6 @@ def executar(
     print(f"run {run_id} ({manifest.modo})")
 
     configuravel = {
-        "thread_id": run_id,
         "repositorio": repositorio,
         "raiz": raiz,
         "raiz_dados": raiz_dados,
@@ -115,19 +121,25 @@ def executar(
     if cliente_http is not None:
         configuravel["cliente_http"] = cliente_http
 
+    progresso: dict = {}
     try:
         resultado = _rodar_grafo(
-            graph.construir_grafo(checkpointer),
+            graph.construir_grafo(),
             PipelineState(run_id=run_id, manifest=manifest),
             {"configurable": configuravel},
+            progresso,
         )
     except Falha as falha:
-        _abortar(repositorio, raiz_dados, _com_custo(manifest, cliente_llm), falha.classe, falha.mensagem)
+        _abortar(
+            repositorio, raiz_dados, _com_custo(manifest, cliente_llm), falha.classe, falha.mensagem,
+            progresso.get("etapa"),
+        )
         return 1
     except Exception as erro:
         # Bug fora do contrato de falhas: registra como terminal, com o tipo da exceção, e propaga.
         _abortar(
-            repositorio, raiz_dados, _com_custo(manifest, cliente_llm), "terminal", f"{type(erro).__name__}: {erro}"
+            repositorio, raiz_dados, _com_custo(manifest, cliente_llm), "terminal", f"{type(erro).__name__}: {erro}",
+            progresso.get("etapa"),
         )
         raise
 
@@ -164,19 +176,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         load_dotenv(RAIZ / ".env")
         repositorio = persistencia.criar_repositorio_supabase(os.environ)
         llm.conferir_credenciais(os.environ)
-        with persistencia.checkpointer_postgres(os.environ["SUPABASE_DB_URL"]) as checkpointer:
-            # Um cliente por run, para que o custo acumulado seja só daquele run.
-            codigos = [
-                executar(
-                    fonte,
-                    dev=parametros.dev,
-                    repositorio=repositorio,
-                    checkpointer=checkpointer,
-                    cliente_llm=llm.criar_cliente(RAIZ, os.environ),
-                )
-                for fonte in ([parametros.fonte] if parametros.fonte else FONTES)
-            ]
-            return int(any(codigos))
+        # Um cliente por run, para que o custo acumulado seja só daquele run.
+        codigos = [
+            executar(
+                fonte,
+                dev=parametros.dev,
+                repositorio=repositorio,
+                cliente_llm=llm.criar_cliente(RAIZ, os.environ),
+            )
+            for fonte in ([parametros.fonte] if parametros.fonte else FONTES)
+        ]
+        return int(any(codigos))
     except Falha as falha:
         # Antes de existir a linha em runs: credencial, conexão ou config inválida.
         print(f"erro ({falha.classe}): {falha.mensagem}", file=sys.stderr)

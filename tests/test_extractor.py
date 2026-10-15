@@ -12,11 +12,11 @@ import shutil
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
+from typing import get_args
 
 import pytest
 import yaml
 from pydantic import BaseModel
-from langgraph.checkpoint.memory import InMemorySaver
 
 from conftest import FIXTURES, ProviderFalso, RepositorioMemoria, cliente_falso
 from sunontent import __main__ as principal
@@ -24,7 +24,7 @@ from sunontent import llm, persistencia
 from sunontent.extracao import ancoragem, extractor, leitura, validador
 from sunontent.llm import ClienteLLM, FalhaChave, Preco, RespostaBruta
 from sunontent.retentativa import FalhaRetriavel, FalhaTerminal
-from sunontent.schemas import Ancora, Claim, ClaimProposto, DocumentoFonte, FactSheet, Numero
+from sunontent.schemas import Ancora, Claim, ClaimProposto, DocumentoFonte, FactSheet, Numero, TipoClaim
 
 RAIZ = Path(__file__).resolve().parent.parent
 REFERENCIA = FIXTURES / "referencia"
@@ -359,6 +359,26 @@ def test_correcao_mostra_so_os_chunks_em_volta_do_claim_recusado(documentos):
     assert len(blocos_do_prompt(extractor.montar_prompt(RAIZ, doc))) == len(doc.chunks)
 
 
+def test_claim_sem_tag_e_recusado_e_o_modelo_responde_de_novo(documentos):
+    sem_tag = proposto("x").model_dump() | {"tags": []}
+    llm_falso = cliente_falso([json.dumps({"claims": [sem_tag]}), json.dumps({"claims": [proposto("x").model_dump()]})])
+    spans = []
+    propostas = extractor.extrair(llm_falso, RAIZ, documentos["copom"], run_id="r", registrar_span=spans.append)
+    assert propostas["C01"].tags == ["indicador_chave"]
+    assert spans[0].falha_classe == "retriavel" and "claims.0.tags" in spans[0].falha_mensagem
+    assert "claims.0.tags" in llm_falso._provider.prompts[1]
+    with pytest.raises(ValueError, match="tags"):
+        Claim(id="C01", texto="x", numeros=[], tipo="decisao", tags=[],
+              ancora=Ancora(pagina=1, offset_inicio=0, offset_fim=1), literal_fonte="x")
+
+
+def test_prompt_do_extractor_descreve_todos_os_tipos(documentos):
+    prompt = extractor.montar_prompt(RAIZ, documentos["copom"])
+    regra = prompt.split("7. tipo, um só:", 1)[1].split("8. tags", 1)[0]
+    assert sorted(linha.split(":")[0].strip(" -") for linha in regra.strip().splitlines()) == sorted(get_args(TipoClaim))
+    assert "evento_corporativo: acontecimento na empresa" in regra
+
+
 def test_extracao_usa_o_raciocinio_padrao_do_modelo(documentos):
     llm_falso = cliente_falso([json.dumps({"claims": [proposto("x").model_dump()]})])
     extractor.extrair(llm_falso, RAIZ, documentos["copom"], run_id="r", registrar_span=lambda s: None)
@@ -598,12 +618,13 @@ def test_gemini_cobre_os_fatos_anotados(documentos, raiz_completa, fonte):
     repo = RepositorioMemoria()
     cliente = llm.criar_cliente(raiz_completa, chaves)
     codigo = principal.executar(
-        fonte, dev=True, repositorio=repo, checkpointer=InMemorySaver(), cliente_llm=cliente,
+        fonte, dev=True, repositorio=repo, cliente_llm=cliente,
         raiz=raiz_completa, relogio=lambda: datetime.now(timezone.utc),
     )
     (run,) = repo.runs.values()
     assert codigo == 0, run.get("erro_mensagem")
-    (factsheet,) = repo.factsheets.values()
+    (run_id,) = repo.factsheets
+    factsheet = repo.factsheet_gravado(run_id)
     print(f"\n{fonte}: {len(factsheet.claims)} claims, {cliente.custo_total_tokens} tokens,"
           f" R$ {cliente.custo_total_brl:.4f}, rodadas {max(k[1] for k in repo.validacoes)}")
     for numero, span in enumerate(repo.spans.values(), start=1):  # uma chamada por rodada, mais as retentativas

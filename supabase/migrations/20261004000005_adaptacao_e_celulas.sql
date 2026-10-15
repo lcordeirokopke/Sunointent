@@ -13,13 +13,21 @@ create table validacoes_plano (
   primary key (run_id, rodada, ordem)
 );
 
+-- Saída do planejador em cada rodada do gate, inclusive a que passou (auditoria do que cada correção mudou).
+create table rodadas_plano (
+  run_id text not null references runs (run_id),
+  rodada int not null check (rodada between 1 and 3),
+  saida  jsonb not null,  -- SaidaPlanejador, como o modelo devolveu
+  primary key (run_id, rodada)
+);
+
 -- PlanoEditorial (docs/arquiteturas.md, Plano editorial). Um por run, gravado depois do gate e nunca
 -- regerado no retry das células (docs/arquiteturas.md, Regras do loop).
 create table planos_editoriais (
   run_id  text primary key references factsheets (run_id),
   nucleo  text[] not null check (cardinality(nucleo) between 1 and 3),
   rodadas int not null check (rodadas between 1 and 3),
-  aviso   text  -- o que o gate ainda acusava depois da última rodada; null quando passou. Mostrado na E8.
+  aviso   text  -- o que a limpeza do código mudou depois da última rodada; null quando passou. Mostrado na matriz do dashboard.
 );
 
 -- PlanoNivel, um por nível, compartilhado pelas 3 células do nível.
@@ -28,8 +36,8 @@ create table planos_nivel (
   nivel          nivel not null,
   tese           text not null,
   tese_claim_ids text[] not null,
-  claims         jsonb not null,                -- list[ClaimPlanejado]: {claim_id, papel, atribuir_fonte}, em ordem de leitura
-  descartes      jsonb not null default '[]',   -- list[Descarte]: {claim_id, motivo, relacionado, origem}, auditoria na E8
+  claims         jsonb not null,                -- list[ClaimPlanejado]: {claim_id, papel, prioridade, atribuir_fonte}, em ordem de leitura
+  descartes      jsonb not null default '[]',   -- list[Descarte]: {claim_id, motivo, relacionado, origem}, auditoria na matriz do dashboard
   analogias      jsonb not null default '[]',   -- list[Analogia]: {termo, explicacao, origem, glossario_ref, revisada}
   primary key (run_id, nivel)
 );
@@ -45,15 +53,13 @@ create table celulas (
   -- PENDENTE: motivo de REPROVADA (incluindo não convergência, docs/arquiteturas.md, E7. Router, Regras do loop e Ciclo de vida de uma célula)
   -- não tem campo na documentação.
   motivo_reprovacao  text,
-  -- PENDENTE: contador de retry de parse separado de K (docs/arquiteturas.md, 1. Model client / router) sem campo definido.
-  tentativas_parse   int not null default 0,
-  atualizado_em      timestamptz not null default now(),
+  atualizado_em      timestamptz not null default now(),  -- escrito por persistencia.atualizar_celula
   primary key (run_id, celula_id),
   check (celula_id = nivel::text || '__' || formato::text)
 );
 
 comment on column celulas.tentativa is
-  'Última tentativa gerada. 0 = nenhuma. PENDENTE: CelulaState começa em 0 e Peca é 1-indexada.';
+  'Número da última peça gerada (pecas.tentativa, 1-indexada). 0 = nenhuma. Atualizado na mesma transação que grava a peça.';
 
 -- Peca, uma linha por tentativa (docs/arquiteturas.md, Peça final). O histórico é necessário para o
 -- Router comparar violações de tentativas seguidas (docs/arquiteturas.md, E7. Router).
@@ -72,7 +78,7 @@ create table pecas (
 );
 
 -- Rastreabilidade granular: cada unidade estrutural (seção, slide, cena) ligada aos seus claims
--- (docs/arquiteturas.md, E5. Format Synthesizer, E8. Revisão humana e 7. Observability / tracing). Permite consulta claim -> peças e claim -> página do PDF.
+-- (docs/arquiteturas.md, E5. Format Synthesizer, Matriz no dashboard e 6. Observability / tracing). Permite consulta claim -> peças e claim -> página do PDF.
 create table peca_unidade_claims (
   run_id         text not null,
   celula_id      text not null,

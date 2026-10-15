@@ -1,4 +1,4 @@
-"""Testes do manifest, do grafo e do __main__: repositório em memória, checkpointer em memória e tmp_path."""
+"""Testes do manifest, do grafo e do __main__: repositório em memória e tmp_path."""
 
 import hashlib
 import json
@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-from langgraph.checkpoint.memory import InMemorySaver
 
 from conftest import RepositorioMemoria, cliente_falso, resposta_plano
 from sunontent import __main__ as principal
@@ -54,7 +53,7 @@ def repo():
 
 def rodar(raiz, repo, *, dev, http=None, llm=None):
     return principal.executar(
-        "copom", dev=dev, repositorio=repo, checkpointer=InMemorySaver(),
+        "copom", dev=dev, repositorio=repo,
         cliente_llm=llm or cliente_falso([RESPOSTA_COPOM, PLANO]), raiz=raiz,
         cliente_http=http, relogio=lambda: MOMENTO,
     )
@@ -68,13 +67,21 @@ def manifest_local(raiz):
 # Manifest
 
 
+def versao_prompt(raiz, nome):
+    cabecalho = (raiz / "prompts" / f"{nome}.j2").read_text(encoding="utf-8").splitlines()[0]
+    return int(cabecalho.split("versao:")[1].split("#")[0])
+
+
 def test_manifest_le_versoes_e_hashes_da_config(raiz):
     m = manifesto.montar(raiz, run_id="copom_20261006T150000Z_aaaaaa", timestamp=MOMENTO,
                          modo="normal", fonte="copom", k=2)
-    assert m.level_specs == {"iniciante": 2, "intermediario": 2, "avancado": 2}
+    assert m.level_specs == {
+        n: yaml.safe_load((raiz / "config" / "levels" / f"{n}.yaml").read_text(encoding="utf-8"))["versao"]
+        for n in ("iniciante", "intermediario", "avancado")}
     glossario = yaml.safe_load((raiz / "config" / "glossario.yaml").read_text(encoding="utf-8"))
     assert m.glossario_versao == glossario["versao"]
-    assert m.prompts == {"adapter": 1, "extractor": 7}  # templates vazios ficam de fora
+    # templates vazios ficam de fora
+    assert m.prompts == {"adapter": versao_prompt(raiz, "adapter"), "extractor": versao_prompt(raiz, "extractor")}
     assert set(m.arquivos_sha256) == {
         "config/models.yaml", "config/glossario.yaml", "prompts/extractor.j2", "prompts/adapter.j2",
         "config/levels/iniciante.yaml", "config/levels/intermediario.yaml", "config/levels/avancado.yaml",
@@ -100,7 +107,7 @@ def test_template_com_conteudo_exige_cabecalho_de_versao(raiz):
 def test_template_com_cabecalho_entra_no_manifest(raiz):
     (raiz / "prompts" / "adapter.j2").write_text("{# versao: 3 #}\nolá", encoding="utf-8")
     m = manifesto.montar(raiz, run_id="x", timestamp=MOMENTO, modo="normal", fonte="copom", k=2)
-    assert m.prompts == {"adapter": 3, "extractor": 7}
+    assert m.prompts == {"adapter": 3, "extractor": versao_prompt(raiz, "extractor")}
     assert "prompts/adapter.j2" in m.arquivos_sha256
 
 
@@ -233,7 +240,7 @@ def test_run_concluido_nao_e_sobrescrito_pelo_aborto(raiz, repo):
     assert rodar(raiz, repo, dev=True) == 0
     (run_id, run), = repo.runs.items()
     manifest = run["manifest"]
-    persistencia.abortar_run(repo, raiz / "data", manifest, "terminal", "tarde demais")
+    persistencia.abortar_run(repo, raiz / "data", manifest, "terminal", "tarde demais", "adapt")
     assert run["status"] == "concluido" and "erro_classe" not in run
 
 
@@ -241,9 +248,10 @@ def test_run_abortado_mantem_a_primeira_mensagem(raiz, repo):
     (raiz / "tests" / "fixtures" / "referencia" / "copom.pdf").unlink()
     rodar(raiz, repo, dev=True)
     (run,) = repo.runs.values()
-    primeira = run["erro_mensagem"]
-    persistencia.abortar_run(repo, raiz / "data", run["manifest"], "terminal", "outra")
-    assert run["erro_mensagem"] == primeira
+    primeira = run["erro_mensagem"], run["etapa_erro"]
+    assert primeira[1] == "referencia" and manifest_local(raiz)["etapa_erro"] == "referencia"
+    persistencia.abortar_run(repo, raiz / "data", run["manifest"], "terminal", "outra", "adapt")
+    assert (run["erro_mensagem"], run["etapa_erro"]) == primeira
 
 
 def test_credenciais_ausentes_param_antes_de_tudo():
@@ -295,8 +303,6 @@ def test_e1_com_hash_diferente_aborta_o_run_sem_gravar_nada(raiz, repo, monkeypa
 
 
 def test_sem_fonte_o_cli_roda_as_tres(monkeypatch, repo):
-    from contextlib import nullcontext
-
     chamadas = []
 
     def falso(fonte, **kwargs):
@@ -307,7 +313,6 @@ def test_sem_fonte_o_cli_roda_as_tres(monkeypatch, repo):
     monkeypatch.setattr(principal.llm, "criar_cliente", lambda raiz, ambiente: None)
     monkeypatch.setenv("GOOGLE_API_KEY_PRINC", "chave-de-teste")
     monkeypatch.setattr(principal.persistencia, "criar_repositorio_supabase", lambda ambiente: repo)
-    monkeypatch.setattr(principal.persistencia, "checkpointer_postgres", lambda url: nullcontext(None))
     monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://localhost/x")
     monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **k: None)
     assert principal.main(["--dev"]) == 1  # a CVM falhou, mas as outras rodaram
@@ -318,10 +323,7 @@ def test_sem_fonte_o_cli_roda_as_tres(monkeypatch, repo):
 
 
 def test_sem_chave_do_gemini_para_antes_de_criar_o_run(monkeypatch, repo):
-    from contextlib import nullcontext
-
     monkeypatch.setattr(principal.persistencia, "criar_repositorio_supabase", lambda ambiente: repo)
-    monkeypatch.setattr(principal.persistencia, "checkpointer_postgres", lambda url: nullcontext(None))
     monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://localhost/x")
     monkeypatch.delenv("GOOGLE_API_KEY_PRINC", raising=False)
     monkeypatch.setenv("GOOGLE_API_KEY_SEC", "reserva")  # a reserva sozinha não basta
@@ -337,7 +339,7 @@ def test_modo_dev_assina_e_grava_o_factsheet(raiz, repo):
     llm = cliente_falso([RESPOSTA_COPOM, PLANO])
     assert rodar(raiz, repo, dev=True, llm=llm) == 0
     (run_id, run), = repo.runs.items()
-    (factsheet,) = repo.factsheets.values()
+    factsheet = repo.factsheet_gravado(run_id)
     assert factsheet.assinado and [c.id for c in factsheet.claims] == ["C01"]
     (c,) = factsheet.claims
     assert c.ancora.pagina == 5 and [n.bruto for n in c.numeros] == ["13,75%"]
@@ -365,7 +367,7 @@ def test_claim_recusado_volta_para_o_extractor_e_e_corrigido(raiz, repo):
     assert repo.validacoes[(run_id, 2, "C01")]["passou"]
     segundo_prompt = llm._provider.prompts[1]
     assert "# Correção" in segundo_prompt and "O Copom cortou a Selic" in segundo_prompt
-    (factsheet,) = repo.factsheets.values()
+    factsheet = repo.factsheet_gravado(next(iter(repo.factsheets)))
     assert factsheet.claims[0].literal_fonte.startswith("O Copom decidiu reduzir")
 
 
@@ -384,7 +386,7 @@ def test_claim_que_nao_converge_vai_para_a_quarentena_e_o_run_conclui(raiz, repo
     (run_id, run), = repo.runs.items()
     assert run["status"] == "concluido"
     assert {chave[1] for chave in repo.validacoes} == {1, 2, 3}
-    (factsheet,) = repo.factsheets.values()
+    factsheet = repo.factsheet_gravado(next(iter(repo.factsheets)))
     assert factsheet.assinado and [c.id for c in factsheet.claims] == ["C02"]
     item = repo.quarentena[(run_id, "C01")]
     assert item.rodada == 3 and "13,75%" in item.motivo and item.proposto.literal_fonte == ERRADO["literal_fonte"]
@@ -448,7 +450,7 @@ def test_e4_grava_o_plano_e_as_9_celulas_pendentes(raiz, repo, capsys):
     assert rodar(raiz, repo, dev=True) == 0
     (run_id, run), = repo.runs.items()
     assert run["status"] == "concluido"
-    plano = repo.planos[run_id]
+    plano = repo.plano_gravado(run_id)
     assert plano.nucleo == ["C01"] and plano.rodadas == 1 and plano.aviso is None
     assert [p.nivel for p in plano.niveis] == ["iniciante", "intermediario", "avancado"]
     analogias = plano.nivel("iniciante").analogias
@@ -460,12 +462,13 @@ def test_e4_grava_o_plano_e_as_9_celulas_pendentes(raiz, repo, capsys):
     assert {(c.estado, c.tentativa) for c in repo.celulas.values()} == {("PENDENTE", 0)}
     assert not repo.validacoes_plano  # a rodada que passa não grava linha
     pasta = raiz / "data" / "runs" / run_id
-    assert json.loads((pasta / "validacoes_plano" / "1.json").read_text(encoding="utf-8")) == {
-        "rodada": 1, "problemas": []}
+    rodada_1 = json.loads((pasta / "validacoes_plano" / "1.json").read_text(encoding="utf-8"))
+    assert rodada_1 == {"rodada": 1, "problemas": [], "saida": json.loads(PLANO)}
+    assert repo.rodadas_plano == {(run_id, 1): json.loads(PLANO)}
     assert json.loads((pasta / "plano.json").read_text(encoding="utf-8"))["nucleo"] == ["C01"]
     assert (pasta / "celulas" / "avancado__roteiro" / "estado.json").exists()
     (span_plano,) = [s for s in repo.spans.values() if s.no == "adapter"]
-    assert span_plano.nivel is None and span_plano.celula_id is None
+    assert span_plano.nivel is None and span_plano.celula_id is None and span_plano.rodada == 1
     saida = capsys.readouterr().out
     assert etapas(saida)[-2:] == ["etapa adapt: iniciada", "etapa adapt: concluída"]
     assert "1 claims, plano em 1 rodada, 2400 tokens" in saida
@@ -476,7 +479,9 @@ def test_e4_devolve_so_os_problemas_ao_planejador(raiz, repo, capsys):
     llm = cliente_falso([RESPOSTA_COPOM, com_problema, PLANO])
     assert rodar(raiz, repo, dev=True, llm=llm) == 0
     (run_id,) = repo.runs
-    assert repo.planos[run_id].rodadas == 2 and repo.planos[run_id].aviso is None
+    assert repo.plano_gravado(run_id).rodadas == 2 and repo.plano_gravado(run_id).aviso is None
+    assert sorted(repo.rodadas_plano) == [(run_id, 1), (run_id, 2)]
+    assert [s.rodada for s in repo.spans.values() if s.no == "adapter"] == [1, 2]
     linhas = sorted(repo.validacoes_plano.items())
     assert [(chave[1], p.regra, p.nivel) for chave, p in linhas] == [
         (1, "id_inexistente", "iniciante"), (1, "id_inexistente", "intermediario"), (1, "id_inexistente", "avancado")]
@@ -494,9 +499,10 @@ def test_e4_com_problema_depois_da_3a_rodada_segue_com_aviso(raiz, repo, capsys)
     llm = cliente_falso([RESPOSTA_COPOM] + [com_problema] * 3)
     assert rodar(raiz, repo, dev=True, llm=llm) == 0
     (run_id,) = repo.runs
-    plano = repo.planos[run_id]
+    plano = repo.plano_gravado(run_id)
     assert plano.rodadas == 3
-    assert plano.aviso.startswith("[id_inexistente] iniciante: C99 nos claims não existe no FactSheet")
+    assert plano.aviso == "; ".join(f"[id_inexistente] {n}: C99 saiu dos claims"
+                                    for n in ("iniciante", "intermediario", "avancado"))
     assert all([c.claim_id for c in p.claims] == ["C01"] for p in plano.niveis)  # o C99 foi retirado
     assert {chave[1] for chave in repo.validacoes_plano} == {1, 2, 3}
     assert len(repo.celulas) == 9
@@ -507,15 +513,16 @@ def test_e4_nucleo_vazio_depois_da_retirada_aborta_e_grava_as_rodadas(raiz, repo
     sem_nucleo = plano_com(["C99"], ["C01"])
     assert rodar(raiz, repo, dev=True, llm=cliente_falso([RESPOSTA_COPOM] + [sem_nucleo] * 3)) == 1
     (run_id, run), = repo.runs.items()
-    assert run["status"] == "abortado" and run["erro_classe"] == "terminal"
+    assert run["status"] == "abortado" and run["erro_classe"] == "terminal" and run["etapa_erro"] == "adapt"
     assert "o núcleo ficou vazio" in run["erro_mensagem"]
+    assert manifest_local(raiz)["etapa_erro"] == "adapt"
     assert {chave[1] for chave in repo.validacoes_plano} == {1, 2, 3}
     assert not repo.planos and not repo.celulas
 
 
 @pytest.mark.parametrize("arquivo, conteudo, mensagem", [
     ("config/levels/iniciante.yaml", "nivel: iniciante\nversao: 2\nfoco: x\ntags_priorizadas: []\n"
-     "tags_descartaveis: [governanca]\nmax_claims: 5\n", "iniciante.yaml: LevelSpec inválido"),
+     "tags_descartaveis: [governanca]\nformatos: {}\n", "iniciante.yaml: LevelSpec inválido"),
     ("config/glossario.yaml", "versao: 1\ntermos:\n  - id: x\n", "config/glossario.yaml: glossário inválido"),
 ])
 def test_e4_config_invalida_aborta_antes_do_modelo(raiz, repo, arquivo, conteudo, mensagem):
@@ -536,29 +543,30 @@ def test_e4_falha_do_modelo_aborta_o_run(raiz, repo):
 
 
 def _estado_e_config(raiz, repo, llm):
-    """Estado de um run concluído até a E3, para chamar o nó adapt direto (retomada)."""
+    """Estado de um run concluído até a E3, para chamar o nó adapt direto."""
     from sunontent.nodes.adapt import adapt
     from sunontent.schemas import PipelineState
 
     assert rodar(raiz, repo, dev=True) == 0
     (run_id,) = repo.runs
     manifest = repo.runs[run_id]["manifest"]
-    estado = PipelineState(run_id=run_id, manifest=manifest, factsheet=repo.factsheets[run_id])
+    estado = PipelineState(run_id=run_id, manifest=manifest, factsheet=repo.factsheet_gravado(run_id))
     config = {"configurable": {"repositorio": repo, "raiz": raiz, "raiz_dados": raiz / "data", "llm": llm}}
     return adapt, estado, config, run_id
 
 
-def test_retomada_reaproveita_o_plano_sem_chamar_o_modelo(raiz, repo):
+def test_e4_sem_candidato_nos_3_niveis_aborta_antes_do_modelo(raiz, repo):
     llm = cliente_falso([])
     adapt, estado, config, run_id = _estado_e_config(raiz, repo, llm)
-    (raiz / "data" / "runs" / run_id / "plano.json").unlink()
-    saida = adapt(estado, config, rodadas=3)
-    assert saida["plano"] == repo.planos[run_id] and saida["rodada_plano"] == 1 and len(saida["celulas"]) == 9
+    del repo.planos[run_id]
+    so_metodologico = estado.factsheet.model_copy(update={"claims": [
+        c.model_copy(update={"tags": ["metodologico"]}) for c in estado.factsheet.claims]})
+    with pytest.raises(FalhaTerminal, match="nenhum claim é candidato nos 3 níveis"):
+        adapt(estado.model_copy(update={"factsheet": so_metodologico}), config, rodadas=3)
     assert llm._provider.prompts == []
-    assert (raiz / "data" / "runs" / run_id / "plano.json").exists()
 
 
-def test_retomada_sem_plano_apaga_as_rodadas_antigas(raiz, repo):
+def test_e4_apaga_as_rodadas_antigas_do_run(raiz, repo):
     from sunontent.schemas import ProblemaPlano
 
     llm = cliente_falso([PLANO])
@@ -568,5 +576,5 @@ def test_retomada_sem_plano_apaga_as_rodadas_antigas(raiz, repo):
     repo.validacoes_plano[(run_id, 2, 1)] = ProblemaPlano(regra="contraditorio", nivel="avancado", detalhe="antiga")
     saida = adapt(estado, config, rodadas=3)
     assert saida["rodada_plano"] == 1
-    assert not repo.validacoes_plano and repo.planos[run_id].rodadas == 1
+    assert not repo.validacoes_plano and repo.plano_gravado(run_id).rodadas == 1
     assert len(llm._provider.prompts) == 1
