@@ -597,11 +597,17 @@ const ROTULO_MOTIVO = {
   exige_base_tecnica: "exige base técnica", fora_do_foco: "fora do foco",
 };
 
-function cartaoPlano(plano, factsheet) {
-  if (!plano) return `<div class="vazio">O run não chegou a gravar o plano editorial.</div>`;
+function contextoPlano(plano, factsheet) {
   const texto = Object.fromEntries((factsheet?.claims ?? []).map((c) => [c.id, c.texto]));
   const nucleo = new Set(plano.nucleo);
   const chip = (id) => `<span class="claim-mini${nucleo.has(id) ? " nucleo" : ""}" title="${esc(texto[id] ?? "")}">${esc(id)}</span>`;
+  return { texto, nucleo, chip };
+}
+
+function cartaoPlano(plano, factsheet) {
+  if (!plano) return `<div class="vazio">O run não chegou a gravar o plano editorial.</div>`;
+  const ctx = contextoPlano(plano, factsheet);
+  const { texto, chip } = ctx;
   const resumo = `<div class="cartao"><div class="cabecalho-etapa"><h3>Plano editorial</h3>
       ${plano.aviso ? selo("erro", "com aviso") : selo("ok", "sem aviso")}</div>
     <div class="metricas">
@@ -611,44 +617,46 @@ function cartaoPlano(plano, factsheet) {
     ${plano.aviso ? `<p class="motivo aviso-plano">${esc(plano.aviso)}</p>` : ""}
     <ul class="nucleo-textos">${plano.nucleo.map((id) => `<li><code>${esc(id)}</code> ${esc(texto[id] ?? "")}</li>`).join("")}</ul>
   </div>`;
-  const niveis = plano.niveis.map((p) => {
-    const usados = p.claims.map((c, i) => `<tr>
-      <td class="num">${i + 1}</td>
-      <td class="num">${esc(c.claim_id)}${nucleo.has(c.claim_id) ? `<div style="margin-top:4px">${selo("normal", "núcleo")}</div>` : ""}</td>
-      <td>${selo("", c.papel)}</td>
-      <td class="num">${esc(c.prioridade ?? "")}</td>
-      <td>${esc(texto[c.claim_id] ?? "")}</td>
-      <td>${c.atribuir_fonte ? selo("normal", "atribui a fonte") : ""}</td>
-    </tr>`).join("");
-    const analogias = p.analogias.length ? `<h4>Analogias</h4><div class="tabela-rolagem"><table>
-      <thead><tr><th>Termo</th><th>Explicação</th><th>Origem</th><th>Revisão</th></tr></thead>
-      <tbody>${p.analogias.map((a) => `<tr>
-        <td>${esc(a.termo)}</td>
-        <td>${esc(a.explicacao)}</td>
-        <td>${selo(a.origem === "nova" ? "dev" : "normal", a.origem)}${a.glossario_ref ? `<div class="motivo-neutro"><code>${esc(a.glossario_ref)}</code></div>` : ""}</td>
-        <td>${a.revisada ? selo("ok", "revisada") : selo("", "não revisada")}</td>
-      </tr>`).join("")}</tbody></table></div>` : "";
-    const descartes = p.descartes.length ? `<details class="descartes"><summary>Descartes (${p.descartes.length})</summary>
-      <div class="tabela-rolagem"><table>
-      <thead><tr><th>ID</th><th>Motivo</th><th>Origem</th><th>Claim</th></tr></thead>
-      <tbody>${p.descartes.map((d) => `<tr>
-        <td class="num">${esc(d.claim_id)}</td>
-        <td>${selo(d.origem === "planejador" ? "normal" : "", ROTULO_MOTIVO[d.motivo] ?? d.motivo)}${d.relacionado ? `<div class="motivo-neutro">igual a <code>${esc(d.relacionado)}</code></div>` : ""}</td>
-        <td>${esc(d.origem)}</td>
-        <td>${esc(texto[d.claim_id] ?? "")}</td>
-      </tr>`).join("")}</tbody></table></div></details>` : "";
-    return `<div class="cartao"><div class="cabecalho-etapa"><h3>${esc(ROTULO_NIVEL[p.nivel] ?? p.nivel)}</h3>
-        <span class="rotulo">${p.claims.length} claims · ${p.analogias.length} analogias · ${p.descartes.length} descartes</span></div>
-      <p class="tese"><span class="rotulo">Tese</span> ${p.tese ? esc(p.tese) : `<span class="motivo-neutro">sem tese (retirada pela limpeza do plano)</span>`}
-        <span class="claims-mini">${p.tese_claim_ids.map(chip).join("")}</span></p>
-      <div class="tabela-rolagem"><table>
-        <thead><tr><th>#</th><th>ID</th><th>Papel</th><th title="1 é o mais importante; o carrossel e o roteiro usam os de maior prioridade">Prioridade</th><th>Claim</th><th>Fonte</th></tr></thead>
-        <tbody>${usados}</tbody></table></div>
-      ${analogias}
-      ${descartes}
-    </div>`;
-  }).join("");
-  return resumo + niveis;
+  return resumo + plano.niveis.map((p) => blocoNivelPlano(p, ctx)).join("");
+}
+
+// Plano de um nível: tese, claims usados em ordem de leitura, analogias e descartes.
+function blocoNivelPlano(p, { texto, nucleo, chip }) {
+  const usados = p.claims.map((c, i) => `<tr>
+    <td class="num">${i + 1}</td>
+    <td class="num">${esc(c.claim_id)}${nucleo.has(c.claim_id) ? `<div style="margin-top:4px">${selo("normal", "núcleo")}</div>` : ""}</td>
+    <td>${selo("", c.papel)}</td>
+    <td class="num">${esc(c.prioridade ?? "")}</td>
+    <td>${esc(texto[c.claim_id] ?? "")}</td>
+    <td>${c.atribuir_fonte ? selo("normal", "atribui a fonte") : ""}</td>
+  </tr>`).join("");
+  const analogias = p.analogias.length ? `<h4>Analogias</h4><div class="tabela-rolagem"><table>
+    <thead><tr><th>Termo</th><th>Explicação</th><th>Origem</th><th>Revisão</th></tr></thead>
+    <tbody>${p.analogias.map((a) => `<tr>
+      <td>${esc(a.termo)}</td>
+      <td>${esc(a.explicacao)}</td>
+      <td>${selo(a.origem === "nova" ? "dev" : "normal", a.origem)}${a.glossario_ref ? `<div class="motivo-neutro"><code>${esc(a.glossario_ref)}</code></div>` : ""}</td>
+      <td>${a.revisada ? selo("ok", "revisada") : selo("", "não revisada")}</td>
+    </tr>`).join("")}</tbody></table></div>` : "";
+  const descartes = p.descartes.length ? `<details class="descartes"><summary>Descartes (${p.descartes.length})</summary>
+    <div class="tabela-rolagem"><table>
+    <thead><tr><th>ID</th><th>Motivo</th><th>Origem</th><th>Claim</th></tr></thead>
+    <tbody>${p.descartes.map((d) => `<tr>
+      <td class="num">${esc(d.claim_id)}</td>
+      <td>${selo(d.origem === "planejador" ? "normal" : "", ROTULO_MOTIVO[d.motivo] ?? d.motivo)}${d.relacionado ? `<div class="motivo-neutro">igual a <code>${esc(d.relacionado)}</code></div>` : ""}</td>
+      <td>${esc(d.origem)}</td>
+      <td>${esc(texto[d.claim_id] ?? "")}</td>
+    </tr>`).join("")}</tbody></table></div></details>` : "";
+  return `<div class="cartao"><div class="cabecalho-etapa"><h3>${esc(ROTULO_NIVEL[p.nivel] ?? p.nivel)}</h3>
+      <span class="rotulo">${p.claims.length} claims · ${p.analogias.length} analogias · ${p.descartes.length} descartes</span></div>
+    <p class="tese"><span class="rotulo">Tese</span> ${p.tese ? esc(p.tese) : `<span class="motivo-neutro">sem tese (retirada pela limpeza do plano)</span>`}
+      <span class="claims-mini">${p.tese_claim_ids.map(chip).join("")}</span></p>
+    <div class="tabela-rolagem"><table>
+      <thead><tr><th>#</th><th>ID</th><th>Papel</th><th title="1 é o mais importante; o carrossel e o roteiro usam os de maior prioridade">Prioridade</th><th>Claim</th><th>Fonte</th></tr></thead>
+      <tbody>${usados}</tbody></table></div>
+    ${analogias}
+    ${descartes}
+  </div>`;
 }
 
 // Rodadas do gate da E4: os problemas devolvidos ao planejador. A rodada que passou não tem linha no banco.
@@ -806,6 +814,8 @@ async function carregarHistorico() {
   }
   if (estado.aba === "historico") renderHistorico();
   if (estado.aba === "resultado") renderResultado();
+  if (estado.aba === "matriz") renderMatriz();
+  if (estado.aba === "quarentena" && !revisao.ocupado) renderQuarentena();
 }
 
 // Durante o run, várias leituras do mesmo run podem estar em andamento; só a mais recente vale.
@@ -824,6 +834,8 @@ async function carregarDetalhe(runId) {
   }
   agendarRender();
   if (estado.aba === "resultado" && estado.resultadoRun === runId) renderResultado();
+  if (estado.aba === "matriz" && matriz.run === runId) renderMatriz();
+  if (estado.aba === "quarentena" && revisao.run === runId && !revisao.ocupado) renderQuarentena();
 }
 
 function conectar(desde) {
@@ -885,23 +897,33 @@ async function parar() {
 
 // Endereço da aba na URL: #fluxo, #fluxo/E3, #resultado/<run_id>, #historico.
 function gravarEndereco() {
-  const extra = estado.aba === "fluxo" ? estado.subaba : estado.aba === "resultado" ? estado.resultadoRun : null;
-  history.replaceState(null, "", `#${estado.aba}${extra ? `/${extra}` : ""}`);
+  const extras = {
+    fluxo: [estado.subaba],
+    resultado: [estado.resultadoRun],
+    matriz: [matriz.run, matriz.celula],
+    quarentena: [revisao.run],
+  }[estado.aba] ?? [];
+  const caminho = extras.filter(Boolean).map(encodeURIComponent).join("/");
+  history.replaceState(null, "", `#${estado.aba}${caminho ? `/${caminho}` : ""}`);
 }
 
 function lerEndereco() {
-  const [aba, extra] = location.hash.slice(1).split("/");
-  if (!["fluxo", "resultado", "historico"].includes(aba)) return;
+  const [aba, extra, extra2] = location.hash.slice(1).split("/");
+  if (!["fluxo", "resultado", "matriz", "quarentena", "historico"].includes(aba)) return;
   if (aba === "fluxo" && extra && (extra === "terminal" || ETAPAS.some((e) => e.id === extra))) estado.subaba = extra;
   if (aba === "resultado" && extra) estado.resultadoRun = decodeURIComponent(extra);
+  if (aba === "matriz" && extra) { matriz.run = decodeURIComponent(extra); matriz.celula = extra2 ? decodeURIComponent(extra2) : null; }
+  if (aba === "quarentena" && extra) revisao.run = decodeURIComponent(extra);
   trocarAba(aba);
 }
 
 function trocarAba(aba) {
   estado.aba = aba;
   for (const b of document.querySelectorAll(".aba")) b.setAttribute("aria-selected", String(b.dataset.aba === aba));
-  for (const nome of ["fluxo", "resultado", "historico"]) $(`#painel-${nome}`).hidden = nome !== aba;
+  for (const nome of ["fluxo", "resultado", "matriz", "quarentena", "historico"]) $(`#painel-${nome}`).hidden = nome !== aba;
   if (aba === "resultado") { renderResultado(); carregarHistorico(); }
+  if (aba === "matriz") { renderMatriz(); carregarHistorico(); }
+  if (aba === "quarentena") { renderQuarentena(); carregarHistorico(); }
   if (aba === "historico") { renderHistorico(); carregarHistorico(); }
   if (aba === "fluxo") agendarRender();
   gravarEndereco();

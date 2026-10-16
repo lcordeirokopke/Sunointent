@@ -4,10 +4,11 @@
 JSON no schema Pydantic, valida e devolve o objeto, nunca texto. Cada tentativa vira um Span,
 entregue a `registrar_span` (gravado por persistencia.py), com tokens e custo estimado em BRL.
 
-Chaves da Gemini API em ordem de chamada: GOOGLE_API_KEY_PRINC e, como reserva, GOOGLE_API_KEY_SEC.
-Cada tentativa começa pela PRINC e só passa para a SEC quando a PRINC tem falha de infraestrutura ou de
-chave (FalhaChave: 401, 403 ou chave inválida). Quando todas as chaves falham, a tentativa conta como
-uma falha de infraestrutura; se todas foram recusadas por chave, a falha é terminal.
+Provider por nó: o juiz (judge) chama o OpenRouter com a API_KEY_ROUTER, sem chave de reserva; os outros nós
+chamam a Gemini API. Chaves da Gemini API em ordem de chamada: GOOGLE_API_KEY_PRINC e, como reserva,
+GOOGLE_API_KEY_SEC. Cada tentativa começa pela PRINC e só passa para a SEC quando a PRINC tem falha de
+infraestrutura ou de chave (FalhaChave: 401, 403 ou chave inválida). Quando todas as chaves falham, a tentativa
+conta como uma falha de infraestrutura; se todas foram recusadas por chave, a falha é terminal.
 
 Duas contagens separadas, nenhuma ligada ao K de qualidade:
 - falha de infraestrutura (429, 5xx, timeout, conexão) em todas as chaves: repete com backoff até
@@ -15,9 +16,10 @@ Duas contagens separadas, nenhuma ligada ao K de qualidade:
 - resposta fora do schema: repete até TENTATIVAS_PARSE, reinjetando o erro de validação no prompt.
 Bloqueio de conteúdo e os demais erros 4xx são terminais, sem passar para a chave seguinte.
 
-Só este módulo importa o SDK do provider (google-genai).
+Só este módulo importa o SDK do provider (google-genai) e chama o OpenRouter (por httpx, sem SDK).
 """
 
+import json
 import sys
 import threading
 import time
@@ -42,6 +44,10 @@ TIMEOUT_S = 300
 MAX_TOKENS_SAIDA = 65536
 CHAVE_PRINCIPAL = "GOOGLE_API_KEY_PRINC"
 CHAVE_RESERVA = "GOOGLE_API_KEY_SEC"
+CHAVE_ROUTER = "API_KEY_ROUTER"
+URL_OPENROUTER = "https://openrouter.ai/api/v1/chat/completions"
+# Saída máxima do endpoint DeepInfra do juiz; o raciocínio conta dentro dela.
+MAX_TOKENS_SAIDA_ROUTER = 16384
 NIVEIS_RACIOCINIO = ("minimal", "low", "medium", "high")
 
 
@@ -74,17 +80,26 @@ class Provider(Protocol):
         ...
 
 
+Cadeia = Provider | Sequence[tuple[str, Provider]]
+
+
+def _cadeia(provider: Cadeia) -> list[tuple[str, Provider]]:
+    return list(provider) if isinstance(provider, Sequence) else [("", provider)]
+
+
 class ClienteLLM:
-    """`provider` é um Provider só ou a lista de pares (nome da chave, Provider) na ordem de chamada."""
+    """`provider` é um Provider só ou a lista de pares (nome da chave, Provider) na ordem de chamada, usada pelos
+    nós sem entrada em `por_no`; `por_no` dá a cadeia de um nó (o juiz no OpenRouter)."""
 
     def __init__(
         self,
-        provider: Provider | Sequence[tuple[str, Provider]],
+        provider: Cadeia,
         modelos: Mapping[str, str],
         precos: Mapping[str, Preco],
         cotacao_usd_brl: Decimal,
         relogio: Callable[[], float] = time.monotonic,
         raciocinio: Mapping[str, str] | None = None,
+        por_no: Mapping[str, Cadeia] | None = None,
     ):
         sem_preco = sorted({m for m in modelos.values() if m not in precos})
         if sem_preco:
@@ -97,8 +112,9 @@ class ClienteLLM:
                 f"use {', '.join(NIVEIS_RACIOCINIO)}"
             )
         self._raciocinio = dict(raciocinio or {})
-        self._providers = list(provider) if isinstance(provider, Sequence) else [("", provider)]
+        self._providers = _cadeia(provider)
         self._provider = self._providers[0][1]  # o da chave principal
+        self._por_no = {no: _cadeia(cadeia) for no, cadeia in (por_no or {}).items()}
         self._modelos = dict(modelos)
         self._precos = dict(precos)
         self._cotacao = cotacao_usd_brl
@@ -109,7 +125,7 @@ class ClienteLLM:
         self.custo_total_brl = Decimal(0)
 
     @classmethod
-    def de_config(cls, raiz: Path, provider: Provider | Sequence[tuple[str, Provider]]) -> "ClienteLLM":
+    def de_config(cls, raiz: Path, provider: Cadeia, por_no: Mapping[str, Cadeia] | None = None) -> "ClienteLLM":
         """Lê modelos, preços, cotação e níveis de raciocínio de config/models.yaml."""
         relativo = "config/models.yaml"
         try:
@@ -121,7 +137,9 @@ class ClienteLLM:
             cotacao = Decimal(str(dados["cotacao_usd_brl"]))
         except (OSError, yaml.YAMLError, KeyError, TypeError, ArithmeticError) as erro:
             raise FalhaTerminal(f"{relativo}: preços ou cotacao_usd_brl inválidos ({erro!r})") from erro
-        return cls(provider, dados.get("modelos") or {}, precos, cotacao, raciocinio=dados.get("raciocinio") or {})
+        return cls(
+            provider, dados.get("modelos") or {}, precos, cotacao, raciocinio=dados.get("raciocinio") or {}, por_no=por_no
+        )
 
     def custo_brl(self, modelo: str, tokens_entrada: int, tokens_saida: int) -> Decimal:
         preco = self._precos[modelo]
@@ -149,6 +167,7 @@ class ClienteLLM:
         if modelo is None:
             raise FalhaTerminal(f"config/models.yaml: nenhum modelo para o nó {no!r}")
         json_schema = schema.model_json_schema()
+        providers = self._por_no.get(no, self._providers)
         falhas_infra = 0
         erros_parse = 0
         prompt_atual = prompt
@@ -180,7 +199,7 @@ class ClienteLLM:
         while True:
             bruta = None
             falhas: list[tuple[FalhaRetriavel | FalhaChave, str]] = []  # (falha, mensagem com a chave)
-            for posicao, (chave, provider) in enumerate(self._providers):
+            for posicao, (chave, provider) in enumerate(providers):
                 inicio = self._relogio()
                 try:
                     bruta = provider.gerar(modelo, prompt_atual, json_schema, nivel_raciocinio)
@@ -189,9 +208,9 @@ class ClienteLLM:
                     mensagem = _com_chave(chave, falha.mensagem)
                     span(inicio, classe=falha.classe, mensagem=mensagem)
                     falhas.append((falha, mensagem))
-                    if posicao + 1 < len(self._providers):
+                    if posicao + 1 < len(providers):
                         print(
-                            f"{no} ({modelo}): {mensagem}; chamando {self._providers[posicao + 1][0]}",
+                            f"{no} ({modelo}): {mensagem}; chamando {providers[posicao + 1][0]}",
                             file=sys.stderr,
                             flush=True,
                         )
@@ -315,15 +334,118 @@ class ProviderGemini:
         return RespostaBruta(resposta.text or "", tokens_entrada, tokens_saida, bloqueio)
 
 
+class ProviderOpenRouter:
+    """OpenRouter por HTTP (httpx), com saída JSON no schema pedido (`strict`) e só para endpoints que aceitam
+    todos os parâmetros da chamada (`require_parameters`).
+
+    Falhas: 408, 429 e 5xx retriáveis; 401 chave recusada; 402 (sem crédito), 403 sem motivo de moderação (como o
+    teto de gasto da chave) e os demais 4xx terminais; 403 com motivos de moderação e `finish_reason`
+    `content_filter` são bloqueio de conteúdo. Resposta vazia com `finish_reason`
+    `length` (o raciocínio esgotou a saída) volta como texto vazio, que o ClienteLLM trata como fora do schema.
+    Os tokens de raciocínio já vêm dentro de `completion_tokens` e contam como saída.
+    """
+
+    def __init__(self, api_key: str, timeout_s: int = TIMEOUT_S, cliente_http=None):
+        import httpx
+
+        self._api_key = api_key
+        self._http = cliente_http or httpx.Client(timeout=timeout_s)
+
+    def gerar(self, modelo: str, prompt: str, json_schema: dict, raciocinio: str | None = None) -> RespostaBruta:
+        import httpx
+
+        corpo = {
+            "model": modelo,
+            "messages": [{"role": "user", "content": prompt}],
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": "resposta", "strict": True, "schema": schema_estrito(json_schema)},
+            },
+            "provider": {"require_parameters": True},
+            "max_tokens": MAX_TOKENS_SAIDA_ROUTER,
+        }
+        if raciocinio:
+            corpo["reasoning"] = {"effort": raciocinio, "exclude": True}
+        try:
+            resposta = self._http.post(URL_OPENROUTER, json=corpo, headers={"Authorization": f"Bearer {self._api_key}"})
+        except (httpx.TimeoutException, httpx.TransportError) as erro:
+            raise FalhaRetriavel(f"{type(erro).__name__}: {erro}") from erro
+        try:
+            dados = resposta.json()
+        except ValueError:
+            dados = {}
+        if not isinstance(dados, dict):
+            dados = {}
+        if resposta.status_code != 200:
+            return _erro_openrouter(resposta.status_code, dados.get("error") or {}, resposta.text)
+        # Erro durante a geração vem com HTTP 200: no corpo, sem `choices`, ou dentro de `choices[0]`.
+        if dados.get("error") and not dados.get("choices"):
+            erro = dados["error"]
+            return _erro_openrouter(int(erro.get("code") or 502), erro, "")
+
+        uso = dados.get("usage") or {}
+        tokens_entrada = int(uso.get("prompt_tokens") or 0)
+        tokens_saida = int(uso.get("completion_tokens") or 0)
+        escolhas = dados.get("choices") or []
+        if not escolhas:
+            return RespostaBruta("", tokens_entrada, tokens_saida, "nenhuma resposta candidata")
+        escolha = escolhas[0]
+        motivo = escolha.get("finish_reason")
+        if motivo == "error":
+            erro = escolha.get("error") or {}
+            raise FalhaRetriavel(f"erro durante a geração: {erro.get('message') or 'sem mensagem'}")
+        bloqueio = "finish_reason content_filter" if motivo == "content_filter" else None
+        texto = (escolha.get("message") or {}).get("content") or ""
+        return RespostaBruta(texto, tokens_entrada, tokens_saida, bloqueio)
+
+
+def _erro_openrouter(codigo: int, erro: dict, texto: str) -> RespostaBruta:
+    """Classifica um erro do OpenRouter; o 403 de moderação (com `metadata.reasons`) volta como bloqueio de
+    conteúdo."""
+    mensagem = f"HTTP {codigo}: {erro.get('message') or texto[:300] or 'sem mensagem'}"
+    if codigo in (408, 429) or codigo >= 500:
+        raise FalhaRetriavel(mensagem)
+    if codigo == 401:
+        raise FalhaChave(mensagem)
+    motivos = (erro.get("metadata") or {}).get("reasons") if codigo == 403 else None
+    if motivos:
+        return RespostaBruta("", 0, 0, f"{mensagem} ({', '.join(map(str, motivos))})")
+    raise FalhaTerminal(mensagem)
+
+
+def schema_estrito(schema: dict) -> dict:
+    """O JSON Schema do Pydantic no formato do modo `strict`: todo objeto com todas as propriedades em `required`
+    e `additionalProperties` falso. Campo com valor padrão continua aceitando o valor do seu tipo (ex.: null)."""
+
+    def ajustar(no):
+        if isinstance(no, dict):
+            novo = {chave: ajustar(valor) for chave, valor in no.items() if chave != "default"}
+            if novo.get("type") == "object" and isinstance(novo.get("properties"), dict):
+                novo["required"] = list(novo["properties"])
+                novo["additionalProperties"] = False
+            return novo
+        if isinstance(no, list):
+            return [ajustar(item) for item in no]
+        return no
+
+    return ajustar(schema)
+
+
 def conferir_credenciais(ambiente: Mapping[str, str]) -> None:
-    """A chave principal é obrigatória; a reserva é opcional."""
+    """A chave principal do Gemini e a do OpenRouter (juiz) são obrigatórias; a reserva do Gemini é opcional."""
     if not ambiente.get(CHAVE_PRINCIPAL):
         raise FalhaTerminal(f"credencial do Gemini ausente: {CHAVE_PRINCIPAL}. Preencha o .env a partir do .env.example.")
+    if not ambiente.get(CHAVE_ROUTER):
+        raise FalhaTerminal(f"credencial do OpenRouter ausente: {CHAVE_ROUTER}. Preencha o .env a partir do .env.example.")
 
 
 def criar_cliente(raiz: Path, ambiente: Mapping[str, str]) -> ClienteLLM:
-    """Confere as chaves e monta o cliente com um provider Gemini por chave, na ordem PRINC e SEC, e a
-    config de config/models.yaml."""
+    """Confere as chaves e monta o cliente com um provider Gemini por chave, na ordem PRINC e SEC, o juiz no
+    OpenRouter e a config de config/models.yaml."""
     conferir_credenciais(ambiente)
     chaves = [c for c in (CHAVE_PRINCIPAL, CHAVE_RESERVA) if ambiente.get(c)]
-    return ClienteLLM.de_config(raiz, [(c, ProviderGemini(ambiente[c])) for c in chaves])
+    return ClienteLLM.de_config(
+        raiz,
+        [(c, ProviderGemini(ambiente[c])) for c in chaves],
+        por_no={"judge": [(CHAVE_ROUTER, ProviderOpenRouter(ambiente[CHAVE_ROUTER]))]},
+    )

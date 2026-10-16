@@ -1,6 +1,6 @@
 # Testes
 
-Os testes ficam em `tests/` e rodam com `pytest` a partir da raiz do repositório. Hoje cobrem a E0 (coleta dos PDFs de Copom, CVM e B3), a E1 (leitura), a E2 (extractor e ancoragem), a E3 (validador de âncoras), a E4 (LevelSpec, glossário e plano editorial), a E5 de uma célula (pacote, redator, montagem e gravação da peça), a E6 e a E7 de uma célula (scorecard, Router e o refinement loop no subgrafo da célula), as métricas determinísticas, o cliente LLM, o manifest do run, o grafo, o `__main__`, o dashboard (`app/`) e as consultas de leitura do dashboard.
+Os testes ficam em `tests/` e rodam com `pytest` a partir da raiz do repositório. Hoje cobrem a E0 (coleta dos PDFs de Copom, CVM e B3), a E1 (leitura), a E2 (extractor e ancoragem), a E3 (validador de âncoras), a E4 (LevelSpec, glossário e plano editorial), a E5 de uma célula (pacote, redator, montagem e gravação da peça), a E6 e a E7 de uma célula (scorecard, Router e o refinement loop no subgrafo da célula), as métricas determinísticas, o juiz (M6) e a sua calibração, o cliente LLM, o manifest do run, o grafo, o `__main__`, o dashboard (`app/`) e as consultas de leitura do dashboard.
 
 ## Para que servem
 
@@ -19,16 +19,18 @@ Quase tudo é simulado. O código do projeto roda de verdade; o mundo externo (i
 |---|---|---|
 | Internet (BCB, CVM, B3) | `httpx.MockTransport` devolve respostas prontas de `tests/fixtures/http/`, inclusive 503, 429, timeout e 404 | `test_ingestao.py` |
 | Supabase | `RepositorioMemoria`: classe em memória com as mesmas regras do banco usadas pelo pipeline (E0 a E7), que também injeta falhas por método | `conftest.py` |
-| Leitura do Supabase pelo dashboard | `ConsultaFalsa`: devolve runs prontos ou levanta a falha pedida | `test_app.py` |
+| Leitura do Supabase pelo dashboard | `ConsultaFalsa`: devolve runs e peças prontos ou levanta a falha pedida | `test_app.py` |
+| Gravação da revisão da quarentena pelo dashboard | `RepositorioMemoria` no lugar do `RepositorioSupabase` | `test_app.py` |
 | Processo do pipeline iniciado pelo dashboard | script Python que escreve as mesmas linhas do `__main__.py` | `test_app.py` |
 | Storage do Supabase | `_StorageFalso`: só devolve o erro que o teste pede | `test_ingestao.py` |
 | Espera do backoff | `monkeypatch` troca `retentativa._dormir` por uma lista; o teste confere o tamanho da lista e que as esperas crescem, sem esperar de verdade | `conftest.py` |
 | Disco | `tmp_path` do pytest no lugar de `data/` | todos |
+| OpenRouter | `httpx.MockTransport` devolve as respostas do OpenRouter, inclusive os erros HTTP e o erro com HTTP 200; o juiz nos testes de `llm_judge` usa o `ProviderFalso` | `test_juiz.py` |
 | Gemini API | `ProviderFalso`: devolve respostas prontas em ordem (JSON, `RespostaBruta` ou exceção) e guarda os prompts recebidos; `cliente_falso` monta o `ClienteLLM` com ele, para o extractor e o adapter; `resposta_plano` monta a resposta do planejador | `conftest.py` |
 
 Rodam de verdade: `copom.py`, `cvm.py`, `b3.py`, `comum.py`, `retentativa.py`, `manifesto.py`, `graph.py` e `__main__.py` (parsing, validação de `%PDF-`, hash, limite de tamanho, classificação dos erros, ordem das gravações), o grafo LangGraph, o servidor do dashboard (`app/servidor.py` e `app/execucao.py`, com um processo filho de verdade), a leitura e o hash dos arquivos de `config/` e `prompts/` (copiados para o `tmp_path`) e a escrita de arquivos no disco dentro do `tmp_path`.
 
-Usam serviços reais só `test_persistencia_supabase.py`, contra o Supabase **local** do CLI, e o teste de cobertura com marker `gemini`, que chama a Gemini API.
+Usam serviços reais só `test_persistencia_supabase.py`, contra o Supabase **local** do CLI, o teste de cobertura com marker `gemini`, que chama a Gemini API, e a calibração do juiz com marker `judge`, que chama o OpenRouter.
 
 ## Proteções
 
@@ -36,6 +38,7 @@ Usam serviços reais só `test_persistencia_supabase.py`, contra o Supabase **lo
 - O `.env` não é carregado pelos testes.
 - Marker `supabase`: identifica os testes de integração com o Supabase local.
 - Marker `gemini`: identifica os testes que chamam a Gemini API e gastam tokens. Ficam pulados, a menos que o `-m` os peça. Leem só a `GOOGLE_API_KEY_PRINC` e a `GOOGLE_API_KEY_SEC` do `.env`, sem carregar o resto do arquivo, e pulam se a `GOOGLE_API_KEY_PRINC` estiver ausente.
+- Marker `judge`: identifica a calibração do juiz, que chama o OpenRouter e gasta tokens. Fica pulada, a menos que o `-m` a peça. Lê só a `API_KEY_ROUTER` do `.env` e pula se ela estiver ausente.
 
 ## Limite do que provam
 
@@ -61,12 +64,14 @@ tests/
 ├── test_schemas.py                # schemas do redator, da peça, do scorecard e da célula
 ├── test_sintese.py                # E5 de uma célula: pacote, redator (LLM simulado), montagem, plan_contract, gravação e nó
 ├── test_router.py                 # E6 e E7 de uma célula: scorecard, Router, relatório corretivo e o refinement loop
+├── test_juiz.py                   # juiz (M6): OpenRouter, contexto, prompt, completude, violações, matriz de níveis e calibração (marker judge)
 ├── test_main_graph.py             # manifest, grafo (E0 a E4 e o fan-out com as células simuladas) e __main__
 ├── test_fanout.py                 # fan-out das 9 células: Send, max_concurrency, isolamento de falhas, fechamento, terminal e trava do custo
-├── test_app.py                    # dashboard: linhas do terminal e API com processo e consulta simulados
+├── test_app.py                    # dashboard: linhas do terminal, API, slide em SVG e revisão da quarentena, com processo, consulta e repositório simulados
 ├── test_persistencia_supabase.py  # integração com o Supabase local
 └── fixtures/
     ├── http/                      # respostas simuladas por fonte (listagem e página de erro)
+    ├── juiz/                      # calibracao.yaml: as peças de calibração do juiz, metade com erro plantado
     └── referencia/                # documentos congelados por fonte, o snapshot <fonte>.documento.json, a anotação <fonte>.anotacao.yaml e os claims <fonte>.claims.json
 ```
 
@@ -134,8 +139,8 @@ tests/
 - a regra 7 do prompt descreve todos os tipos do `TipoClaim`, inclusive `evento_corporativo`;
 - falha de infraestrutura repete com espera crescente, sem gastar o contador de parse; 4 falhas viram terminal;
 - bloqueio de conteúdo e erro 4xx são terminais, sem repetir;
-- nó sem modelo, modelo sem preço e nível de raciocínio inválido são terminais; o `config/models.yaml` do repositório tem preço para cada modelo (inclusive o do juiz, US$ 0,50 de entrada e US$ 2,20 de saída por milhão de tokens) e o raciocínio da correção do extractor, do planejador e do redator;
-- sem `GOOGLE_API_KEY_PRINC`, erro terminal, mesmo com a `GOOGLE_API_KEY_SEC`; o cliente monta as chaves na ordem PRINC e SEC, e a SEC só entra se estiver preenchida;
+- nó sem modelo, modelo sem preço e nível de raciocínio inválido são terminais; o `config/models.yaml` do repositório tem preço para cada modelo (inclusive o do juiz, US$ 0,50 de entrada e US$ 2,20 de saída por milhão de tokens) e o raciocínio da correção do extractor, do planejador e do redator e o do juiz;
+- sem `GOOGLE_API_KEY_PRINC`, erro terminal, mesmo com a `GOOGLE_API_KEY_SEC`; sem `API_KEY_ROUTER`, erro terminal; o cliente monta as chaves na ordem PRINC e SEC, a SEC só entra se estiver preenchida, e o juiz vai só ao OpenRouter, sem reserva;
 - falha de infraestrutura ou chave recusada na PRINC passa para a SEC na mesma tentativa, sem esperar, e o span da falha leva o nome da chave;
 - cada chamada começa pela PRINC, mesmo depois de uma passagem para a SEC;
 - as duas chaves com falha de infraestrutura contam uma tentativa, com espera, e a seguinte recomeça pela PRINC; 4 tentativas viram terminal;
@@ -238,8 +243,8 @@ Os testes do bloco `analogia` e das instruções do redator conferem:
 
 Não contém testes, só infraestrutura compartilhada:
 
-- `pytest_configure`: registra os markers `supabase` e `gemini` e aplica a trava de host.
-- `pytest_collection_modifyitems`: pula os testes `gemini`, a menos que o `-m` os peça.
+- `pytest_configure`: registra os markers `supabase`, `gemini` e `judge` e aplica a trava de host.
+- `pytest_collection_modifyitems`: pula os testes `gemini` e `judge`, a menos que o `-m` os peça.
 - `sem_espera` (autouse): troca a espera do backoff por uma lista que registra os tempos.
 - `RepositorioMemoria`: substitui o Supabase. Guarda runs, documentos, objetos do bucket e coletas; aceita falhas injetadas por método e simula a perda de resposta depois do commit.
 - `repositorio` e `run_id`: fixtures com um run `copom_...` já registrado.
@@ -283,8 +288,21 @@ Não contém testes, só infraestrutura compartilhada:
 - **Correção de verdade:** a tentativa 1 tem um número escrito à mão (M1) e um slide de corpo acima de 220 caracteres (M2); o Router devolve a célula à E5 com o relatório; o prompt da tentativa 2 traz a peça anterior, o que passou (`analogy_rule` e `plan_contract`, com o valor), as violações por slide e as instruções; a tentativa 2 passa, e a célula termina `APROVADA` na tentativa 2, com os dois scorecards (`REPROVADA` e `APROVADA`), os tokens de cada tentativa e as cópias locais.
 - **`K` esgotado:** duas tentativas reprovadas terminam em `REPROVADA` com `k_esgotado`; aprovada na tentativa 1, o redator não é chamado de novo.
 - **Falhas:** a `Falha` do redator vira `ERRO_INFRA` com a classe e a mensagem, tentativa 0 e nada gravado; a falha na gravação do scorecard vira `ERRO_INFRA` com a peça gravada e sem scorecard; a falha no retry deixa a tentativa da última peça; sem plano, `ERRO_INFRA`; uma exceção que não é `Falha` sobe.
-- **Juiz no config:** só roda quando as 4 determinísticas passam, entra no fim do scorecard e pode reprovar, com a instrução no retry; a `Falha` do juiz grava o scorecard com veredito `ERRO_INFRA` e as 4 determinísticas.
+- **Juiz no config:** recebe os chunks do documento processado, só roda quando as 4 determinísticas passam, entra no fim do scorecard e pode reprovar, com a instrução no retry; a `Falha` do juiz grava o scorecard com veredito `ERRO_INFRA` e as 4 determinísticas.
 - **Router:** o relatório corretivo com até 5 violações por métrica e o resto em `restantes`; a não convergência (mesma contagem e contagem maior não convergem; contagem menor e métrica que passou convergem); a regra 5 não age com `K = 2` (nem lê a tentativa anterior), encerra com `nao_convergencia` com `K = 3` e, quando a tentativa melhorou, devolve o relatório sem gravar estado; scorecard de outra tentativa é bug (`ValueError`).
+
+## Juiz (M6)
+
+`test_juiz.py` (regras em `docs/metricas.md`, M6) usa os claims e os chunks das três referências (`<fonte>.claims.json` e `<fonte>.documento.json`, com o texto do chunk tirado das páginas) e o glossário de `config/`:
+
+- **Provider por nó:** o `judge` usa a sua cadeia e os outros nós a padrão; chave do OpenRouter recusada é terminal, sem reserva.
+- **OpenRouter (HTTP simulado):** o pedido leva o modelo, o prompt, o `json_schema` com `strict`, o `require_parameters`, o `max_tokens` e o raciocínio com `exclude` (e não leva o raciocínio quando a chamada não pede); os tokens de saída são os `completion_tokens`, com o raciocínio dentro; 408, 429, 500, 502 e 503 são retriáveis, 401 é chave recusada, 402, 400 e 403 sem motivo de moderação são terminais; 403 de moderação e `content_filter` são bloqueio; erro com HTTP 200 (no corpo ou no `finish_reason`), timeout e conexão são retriáveis; a resposta vazia por `length` volta como fora do schema e os tokens são cobrados. `schema_estrito` põe todas as propriedades em `required`, fecha os objetos e tira os `default`.
+- **Contexto:** as palavras sem acento, sem maiúscula e sem as vazias; o BM25 ordena pela sobreposição; o chunk da âncora é o que contém o início dela; cada unidade recebe a âncora e os vizinhos e 3 chunks lexicais fora deles; a unidade sem claim recebe todos os da peça; cada chunk vai uma vez, na ordem do documento; o documento de um chunk só (CVM) não tem vizinho nem lexical.
+- **Juiz:** só as analogias do plano usadas na peça vão ao juiz, com a definição técnica; o prompt traz os claims com o `literal_fonte`, os trechos, as unidades e a definição, sem o nível pedido, com raciocínio `low`; tudo implicado aprova com o `nivel_percebido` e o span da célula; cada `false` vira violação, com o intervalo do trecho (no texto ou no gancho visual da cena) e, sem o trecho na unidade, sem intervalo; unidade faltando, repetida ou inexistente e analogia faltando ou não pedida são `FalhaTerminal`; `criar_juiz` tem a assinatura que a E6 chama.
+- **Matriz de níveis:** `montar`, `acerto` e `formatar`, e o comando com a consulta simulada.
+- **Peças de calibração:** todas são `Peca` válidas, com claims da referência e a unidade do erro dentro da peça, toda analogia dada é usada na peça, metade tem erro, os quatro tipos de erro aparecem e as peças cobrem os 9 pares de nível e formato e as três fontes.
+
+`test_calibracao_do_juiz` (marker `judge`) julga as 20 peças de `tests/fixtures/juiz/calibracao.yaml` com o OpenRouter de verdade, 2 em paralelo, e exige acerto de pelo menos 80% em cada grupo: peças fiéis aprovadas e peças com erro reprovadas. Uma falha do juiz (o `ERRO_INFRA` do pipeline) conta como erro da peça. Imprime, com `-s`, o resultado de cada peça (as unidades apontadas e a plantada), as justificativas, os tokens, o custo e a matriz de confusão de níveis. Custa da ordem de R$ 0,60 nas 20 peças e leva de 3 a 5 minutos.
 
 ## Fan-out das 9 células
 
@@ -398,7 +416,7 @@ Cobre o manifest, o grafo e o `__main__`, com repositório em memória. A fixtur
 
 ## test_app.py
 
-Cobre o dashboard sem rodar o pipeline e sem banco: o processo é trocado por um script Python que escreve as mesmas linhas do `__main__.py`, e a `ConsultaSupabase` por uma `ConsultaFalsa` que devolve runs prontos ou levanta a falha pedida. As consultas de verdade são testadas em `test_persistencia_supabase.py`.
+Cobre o dashboard sem rodar o pipeline e sem banco: o processo é trocado por um script Python que escreve as mesmas linhas do `__main__.py`, a `ConsultaSupabase` por uma `ConsultaFalsa` que devolve runs e peças prontos ou levanta a falha pedida, e o `RepositorioSupabase` da revisão pelo `RepositorioMemoria`. As consultas de verdade são testadas em `test_persistencia_supabase.py`.
 
 - `test_classifica_as_linhas_do_main`: `run`, `etapa`, `concluído`, `abortado` e `erro` viram eventos com os campos extraídos; o resto é `log`.
 - `test_comando_do_pipeline`: o comando é `python -m sunontent [fonte] [--dev]`; fonte desconhecida é recusada.
@@ -407,6 +425,11 @@ Cobre o dashboard sem rodar o pipeline e sem banco: o processo é trocado por um
 - `test_fonte_desconhecida_e_recusada`, `test_parar_sem_execucao_e_recusado` e `test_run_inexistente_responde_404`: respostas 422, 409 e 404.
 - `test_runs_vem_da_consulta`: `/api/runs` e `/api/runs/<run_id>` devolvem o que a consulta devolve.
 - `test_supabase_fora_do_ar_responde_503_com_a_mensagem`: uma `Falha` do banco vira 503 com a mensagem, nas duas rotas.
+- `test_quebra_de_linha_nao_muda_o_texto_e_cabe_na_largura`, `test_palavra_maior_que_a_caixa_fica_sozinha_na_linha` e `test_espacos_repetidos_e_quebras_de_linha_valem_um_espaco`: em cada papel (gancho, corpo e conclusão), juntar as linhas com um espaço devolve exatamente o `Slide.texto`, nenhuma linha de mais de uma palavra passa da largura da caixa (medida com o `.ttf` pelo Pillow), a palavra maior que a caixa fica sozinha e a sequência de espaços vale um espaço.
+- `test_svg_tem_o_texto_em_tspans_e_os_metadados`, `test_svg_escapa_o_texto_sem_mudar_as_palavras`, `test_texto_que_nao_cabe_na_altura_da_caixa_sai_com_aviso` e `test_nome_do_arquivo_do_slide`: o SVG tem 1080 x 1350, o texto em `<tspan>` dentro de `<text>`, `celula_id`, tentativa, posição, papel e `claim_ids` no `<metadata>`, `&` e `<` escapados sem mudar as palavras, e o aviso de estouro de altura.
+- `test_rota_devolve_o_svg_do_slide_da_ultima_tentativa`, `test_rota_baixa_com_o_nome_do_arquivo_e_aceita_a_tentativa`, `test_rota_responde_404_para_o_que_nao_existe` e `test_rota_do_slide_responde_503_com_o_banco_fora_do_ar`: a rota do slide usa a última tentativa ou a pedida, `baixar=true` devolve o mesmo arquivo com o nome `<celula_id>_t<tentativa>_slide<n>.svg` como anexo, slide fora do carrossel, célula sem peça ou de outro formato é 404, e falha do banco é 503.
+- `test_pagina_carrega_a_fonte_e_as_abas_novas`: a página tem as abas Matriz e Quarentena e serve a Inter e a licença.
+- `test_revisao_sugere_o_numero_e_aceita_o_claim`, `test_revisao_recusa_valor_incompleto_e_aceita_o_informado` e `test_revisao_descarta_e_recusa_o_que_nao_esta_na_quarentena`: com um run de verdade com claim em quarentena no repositório em memória, a sugestão de número vem do código, aceitar e descartar gravam com o autor `dashboard` (e a cópia em `data/runs/<run_id>/revisoes/`), valor sem unidade ou número a mais é 422, claim fora da quarentena ou já revisado é 409 e claim que não passa na E3 é 422 sem gravar nada.
 
 ## test_persistencia_supabase.py
 
@@ -419,6 +442,7 @@ Integração com o Supabase local do CLI (`supabase start`, que roda o Postgres,
 - `test_run_abortado_com_a_etapa_do_erro`: o aborto grava `etapa_erro`, o banco recusa `etapa_erro` em run que não está abortado, e a `ConsultaSupabase` devolve a etapa.
 - `test_documento_que_nao_e_o_do_run_e_recusado`: a FK composta de `documentos_processados` recusa a saída da E1 de um documento que não é o vinculado ao run.
 - `test_consulta_le_o_run_completo_do_dashboard`: grava um run `--dev` completo (documento de referência, saída da E1, dois spans, duas rodadas de validação, FactSheet assinado) e confere o que a `ConsultaSupabase` devolve ao dashboard: o resumo com claims e tokens, o documento resumido, o claim com números e âncora, as rodadas em ordem e os spans em ordem de gravação. Roda as consultas contra o schema das migrations: uma coluna renomeada ou removida quebra aqui.
+- `test_peca_unidades_numeros_e_celula_numa_transacao`: além da gravação da peça e do scorecard, confere a leitura do dashboard (`detalhar_run` com as 9 células, e na do artigo a peça, os números usados em ordem e o scorecard com as violações e a posição; `peca` com a última tentativa e com uma tentativa que não existe).
 - `test_consulta_nao_grava`: a conexão da consulta recusa um `delete` (transação só de leitura).
 
 ## Como rodar
@@ -428,4 +452,5 @@ pytest                      # tudo; os testes do Supabase local são pulados se 
 pytest -m "not supabase"    # só os testes simulados
 pytest -m supabase          # só a integração com o Supabase local
 pytest -m gemini            # só a cobertura com a Gemini API de verdade (gasta tokens)
+pytest -m judge -s          # só a calibração do juiz com o OpenRouter de verdade (gasta tokens)
 ```

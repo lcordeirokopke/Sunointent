@@ -11,3 +11,4 @@ pymupdf
 google-genai
 fastapi
 uvicorn
+pillow

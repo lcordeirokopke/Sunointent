@@ -619,16 +619,19 @@ class PlanContractDetalhes(BaseModel):
 
 
 class VeredictoAnalogia(BaseModel):
-    termo: str
-    justificativa: str  # antes do booleano, na ordem em que o juiz escreve
-    correta: bool
+    termo: str = Field(description="o termo da analogia, exatamente como na lista")
+    # Antes do booleano, na ordem em que o juiz escreve.
+    justificativa: str = Field(description="por que a analogia explica ou não o conceito, comparada à definição técnica")
+    correta: bool = Field(description="true se a analogia explica o conceito corretamente; false se é enganosa ou decorativa")
 
 
 class VeredictoUnidade(BaseModel):
-    unidade_indice: int = Field(ge=0)
-    justificativa: str
-    implicada: bool
-    trecho_problematico: str | None = None
+    unidade_indice: int = Field(ge=0, description="o índice da unidade, como na peça")
+    justificativa: str = Field(description="o que a unidade afirma e se os claims e trechos dados sustentam cada afirmação")
+    implicada: bool = Field(description="true se tudo o que a unidade afirma é implicado pelos claims; false se não")
+    trecho_problematico: str | None = Field(
+        default=None, description="o trecho exato da unidade que não é implicado; null quando implicada é true"
+    )
 
 
 class LlmJudgeDetalhes(BaseModel):
@@ -636,6 +639,17 @@ class LlmJudgeDetalhes(BaseModel):
     analogias: list[VeredictoAnalogia]
     unidades: list[VeredictoUnidade]
     nivel_percebido: Nivel  # só informativo: alimenta a matriz de confusão de níveis
+
+
+class SaidaJuiz(BaseModel):
+    """Schema da resposta do juiz (M6): uma resposta por analogia e por unidade, com a justificativa antes do
+    booleano, e o nível que a peça parece ter. O nó confere a completude (sunontent/metrics/llm_judge.py)."""
+
+    analogias: list[VeredictoAnalogia] = Field(
+        description="uma resposta para cada analogia pedida, com o termo escrito como na lista; vazia se não há analogia"
+    )
+    unidades: list[VeredictoUnidade] = Field(description="uma resposta para cada unidade da peça, pelo índice")
+    nivel_percebido: Nivel = Field(description="o nível de leitor para o qual a peça parece escrita")
 
 
 Detalhes = Annotated[

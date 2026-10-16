@@ -2,8 +2,8 @@
 
 Sem a fonte, roda as três em sequência (copom, cvm e b3), um run por fonte.
 
-Lê os parâmetros, confere as credenciais do Supabase e do Gemini, gera o run_id, registra o run e escolhe a
-entrada do grafo (E0 no modo normal, nó de referência no --dev). Ver docs/fluxos/ingestao.md.
+Lê os parâmetros, confere as credenciais do Supabase, do Gemini e do OpenRouter, gera o run_id, registra o run
+e escolhe a entrada do grafo (E0 no modo normal, nó de referência no --dev). Ver docs/fluxos/ingestao.md.
 """
 
 import argparse
@@ -16,6 +16,7 @@ from pathlib import Path
 
 from sunontent import graph, llm, manifesto, persistencia
 from sunontent.ingestao import comum
+from sunontent.metrics import llm_judge
 from sunontent.retentativa import Falha
 from sunontent.schemas import Fonte, PipelineState, RunManifest
 
@@ -132,8 +133,10 @@ def executar(
     raiz: Path = RAIZ,
     cliente_http=None,
     relogio: Callable[[], datetime] = comum.agora_utc,
+    juiz=None,
 ) -> int:
-    """Roda um run. Devolve o código de saída: 0 concluído, 1 abortado ou concluído com célula em ERRO_INFRA."""
+    """Roda um run. Devolve o código de saída: 0 concluído, 1 abortado ou concluído com célula em ERRO_INFRA.
+    Sem `juiz` (metrics.llm_judge.criar_juiz), a E6 roda só as verificações determinísticas."""
     momento = relogio()
     run_id = gerar_run_id(fonte, momento)
     raiz_dados = raiz / "data"
@@ -159,6 +162,8 @@ def executar(
     }
     if cliente_http is not None:
         configuravel["cliente_http"] = cliente_http
+    if juiz is not None:
+        configuravel["juiz"] = juiz
 
     progresso: dict = {}
     try:
@@ -219,15 +224,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         repositorio = persistencia.criar_repositorio_supabase(os.environ)
         llm.conferir_credenciais(os.environ)
         # Um cliente por run, para que o custo acumulado seja só daquele run.
-        codigos = [
-            executar(
+        codigos = []
+        for fonte in [parametros.fonte] if parametros.fonte else FONTES:
+            cliente_llm = llm.criar_cliente(RAIZ, os.environ)
+            codigos.append(executar(
                 fonte,
                 dev=parametros.dev,
                 repositorio=repositorio,
-                cliente_llm=llm.criar_cliente(RAIZ, os.environ),
-            )
-            for fonte in ([parametros.fonte] if parametros.fonte else FONTES)
-        ]
+                cliente_llm=cliente_llm,
+                juiz=llm_judge.criar_juiz(cliente_llm, RAIZ),
+            ))
         return int(any(codigos))
     except Falha as falha:
         # Antes de existir a linha em runs: credencial, conexão ou config inválida.

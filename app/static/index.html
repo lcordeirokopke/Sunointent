@@ -47,6 +47,8 @@
   <nav class="abas" role="tablist" aria-label="Seções">
     <button type="button" role="tab" class="aba" data-aba="fluxo" aria-selected="true">Fluxo</button>
     <button type="button" role="tab" class="aba" data-aba="resultado" aria-selected="false">Resultado</button>
+    <button type="button" role="tab" class="aba" data-aba="matriz" aria-selected="false">Matriz</button>
+    <button type="button" role="tab" class="aba" data-aba="quarentena" aria-selected="false">Quarentena</button>
     <button type="button" role="tab" class="aba" data-aba="historico" aria-selected="false">Histórico</button>
   </nav>
 
@@ -75,6 +77,24 @@
       <div id="resultado"></div>
     </section>
 
+    <!-- Matriz 3x3 -->
+    <section class="painel" id="painel-matriz" role="tabpanel" hidden>
+      <div class="barra-resultado">
+        <label for="sel-run-matriz" class="rotulo">Run</label>
+        <select id="sel-run-matriz"></select>
+      </div>
+      <div id="matriz"></div>
+    </section>
+
+    <!-- Quarentena -->
+    <section class="painel" id="painel-quarentena" role="tabpanel" hidden>
+      <div class="barra-resultado">
+        <label for="sel-run-quarentena" class="rotulo">Run</label>
+        <select id="sel-run-quarentena"></select>
+      </div>
+      <div id="quarentena"></div>
+    </section>
+
     <!-- Histórico -->
     <section class="painel" id="painel-historico" role="tabpanel" hidden>
       <div class="barra-resultado">
@@ -87,6 +107,8 @@
 
   <div class="aviso" id="aviso" role="status" aria-live="polite" hidden></div>
 
+  <script src="/static/matriz.js"></script>
+  <script src="/static/revisao.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

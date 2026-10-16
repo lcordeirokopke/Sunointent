@@ -3,12 +3,15 @@
 import json
 import sys
 import time
+import xml.etree.ElementTree as ET
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app import execucao, servidor
+from app import execucao, servidor, slide_svg
 from sunontent.retentativa import FalhaRetriavel
+from test_main_graph import DECISAO, ERRADO, raiz, repo  # noqa: F401 (fixtures raiz e repo)
+from test_quarentena import e1_sem_selic, rodar_com_quarentena  # noqa: F401 (fixture e função auxiliar)
 
 RUN_ID = "copom_20261006T150000Z_aaaaaa"
 
@@ -80,9 +83,20 @@ def processo_simulado(monkeypatch):
 class ConsultaFalsa:
     """No lugar da ConsultaSupabase: devolve os runs prontos ou levanta a falha pedida."""
 
-    def __init__(self, runs=(), falha=None):
+    def __init__(self, runs=(), falha=None, pecas=()):
         self.runs = {r["run_id"]: r for r in runs}
         self.falha = falha
+        self.pecas = [dict(p) for p in pecas]
+        self.pedidos_de_peca = []
+
+    def peca(self, run_id, celula_id, tentativa=None):
+        self.pedidos_de_peca.append((run_id, celula_id, tentativa))
+        if self.falha:
+            raise self.falha
+        gravadas = [p for p in self.pecas if (p["run_id"], p["celula_id"]) == (run_id, celula_id)]
+        if tentativa is not None:
+            gravadas = [p for p in gravadas if p["tentativa"] == tentativa]
+        return max(gravadas, key=lambda p: p["tentativa"], default=None)
 
     def listar_runs(self):
         if self.falha:
@@ -186,3 +200,194 @@ def test_supabase_fora_do_ar_responde_503_com_a_mensagem(tmp_path):
         resposta = http.get(rota)
         assert resposta.status_code == 503
         assert "conexão recusada" in resposta.json()["detail"]
+
+
+# Slide do carrossel em SVG
+
+CELULA = "iniciante__carrossel"
+SLIDES = [
+    {"papel": "gancho", "texto": "O Copom manteve a Selic em 15% ao ano & surpreendeu quem esperava um corte de juros",
+     "claim_ids": []},
+    {"papel": "corpo", "texto": "A decisão foi unânime entre os nove membros do comitê, que citaram a inflação ainda "
+     "acima da meta e o mercado de trabalho aquecido como motivos para a cautela nas próximas reuniões.",
+     "claim_ids": ["C01", "C02"]},
+    {"papel": "conclusao", "texto": "Para quem tem dívida, o juro alto segue pesando no orçamento <por mais tempo>.",
+     "claim_ids": []},
+]
+NS_SVG = "{http://www.w3.org/2000/svg}"
+
+
+def peca_carrossel(tentativa=1, slides=SLIDES):
+    return {"run_id": RUN_ID, "celula_id": CELULA, "tentativa": tentativa, "formato": "carrossel",
+            "payload": {"slides": slides}, "claim_ids": ["C01", "C02"]}
+
+
+def linhas_do_svg(svg: str) -> list[str]:
+    texto = ET.fromstring(svg).find(f".//{NS_SVG}text[@id='texto']")
+    return ["".join(t.itertext()) for t in texto.findall(f"{NS_SVG}tspan")]
+
+
+@pytest.mark.parametrize("papel", sorted(slide_svg.CAIXAS))
+def test_quebra_de_linha_nao_muda_o_texto_e_cabe_na_largura(papel):
+    caixa = slide_svg.CAIXAS[papel]
+    for slide in SLIDES:
+        linhas = slide_svg.quebrar_linhas(slide["texto"], caixa)
+        assert len(linhas) > 1
+        assert " ".join(linhas) == slide["texto"]
+        for linha in linhas:
+            assert " " not in linha or slide_svg.largura_da_linha(linha, caixa) <= caixa.largura
+
+
+def test_palavra_maior_que_a_caixa_fica_sozinha_na_linha():
+    caixa = slide_svg.CAIXAS["corpo"]
+    longa = "A" * 80
+    assert slide_svg.quebrar_linhas(f"antes {longa} depois", caixa) == ["antes", longa, "depois"]
+    assert slide_svg.largura_da_linha(longa, caixa) > caixa.largura
+
+
+def test_espacos_repetidos_e_quebras_de_linha_valem_um_espaco():
+    assert slide_svg.quebrar_linhas("a  b\nc", slide_svg.CAIXAS["corpo"]) == ["a b c"]
+    assert slide_svg.quebrar_linhas("   ", slide_svg.CAIXAS["corpo"]) == []
+
+
+def montar(slide, posicao=2):
+    return slide_svg.montar_slide(
+        texto=slide["texto"], papel=slide["papel"], claim_ids=slide["claim_ids"], celula_id=CELULA, tentativa=3,
+        posicao=posicao, total=len(SLIDES),
+    )
+
+
+def test_svg_tem_o_texto_em_tspans_e_os_metadados():
+    slide = SLIDES[1]
+    desenho = montar(slide)
+    raiz_svg = ET.fromstring(desenho.svg)
+    assert (raiz_svg.get("width"), raiz_svg.get("height"), raiz_svg.get("viewBox")) == ("1080", "1350", "0 0 1080 1350")
+    assert linhas_do_svg(desenho.svg) == desenho.linhas
+    assert " ".join(linhas_do_svg(desenho.svg)) == slide["texto"]
+    assert raiz_svg.find(f"{NS_SVG}metadata")[0].attrib == {
+        "celula_id": CELULA, "tentativa": "3", "posicao": "2", "total": "3", "papel": "corpo",
+        "claim_ids": "C01 C02", "estouro_altura": "false",
+    }
+    assert not desenho.estouro_altura
+
+
+def test_svg_escapa_o_texto_sem_mudar_as_palavras():
+    for slide in (SLIDES[0], SLIDES[2]):
+        assert " ".join(linhas_do_svg(montar(slide).svg)) == slide["texto"]
+
+
+def test_texto_que_nao_cabe_na_altura_da_caixa_sai_com_aviso():
+    desenho = montar({"papel": "gancho", "texto": " ".join(["palavra"] * 200), "claim_ids": []}, 1)
+    assert desenho.estouro_altura
+    assert ET.fromstring(desenho.svg).find(f"{NS_SVG}metadata")[0].get("estouro_altura") == "true"
+
+
+def test_nome_do_arquivo_do_slide():
+    assert slide_svg.nome_do_arquivo(CELULA, 2, 4) == "iniciante__carrossel_t2_slide4.svg"
+
+
+def cliente_com_pecas(tmp_path, *pecas):
+    consulta = ConsultaFalsa(pecas=pecas)
+    http, _ = montar_cliente(tmp_path, consulta)
+    return http, consulta
+
+
+def test_rota_devolve_o_svg_do_slide_da_ultima_tentativa(tmp_path):
+    http, consulta = cliente_com_pecas(tmp_path, peca_carrossel(1), peca_carrossel(2))
+    resposta = http.get(f"/api/runs/{RUN_ID}/carrossel/{CELULA}/2.svg")
+    assert resposta.status_code == 200 and resposta.headers["content-type"].startswith("image/svg+xml")
+    assert resposta.headers["x-estouro-altura"] == "false"
+    assert resposta.headers["content-disposition"] == 'inline; filename="iniciante__carrossel_t2_slide2.svg"'
+    assert " ".join(linhas_do_svg(resposta.text)) == SLIDES[1]["texto"]
+    meta = ET.fromstring(resposta.text).find(f"{NS_SVG}metadata")[0]
+    assert (meta.get("celula_id"), meta.get("tentativa"), meta.get("posicao"), meta.get("claim_ids")) == (
+        CELULA, "2", "2", "C01 C02")
+    assert consulta.pedidos_de_peca == [(RUN_ID, CELULA, None)]
+
+
+def test_rota_baixa_com_o_nome_do_arquivo_e_aceita_a_tentativa(tmp_path):
+    http, consulta = cliente_com_pecas(tmp_path, peca_carrossel(1), peca_carrossel(2))
+    baixado = http.get(f"/api/runs/{RUN_ID}/carrossel/{CELULA}/3.svg?tentativa=1&baixar=true")
+    assert baixado.headers["content-disposition"] == 'attachment; filename="iniciante__carrossel_t1_slide3.svg"'
+    assert consulta.pedidos_de_peca == [(RUN_ID, CELULA, 1)]
+    assert baixado.text == http.get(f"/api/runs/{RUN_ID}/carrossel/{CELULA}/3.svg?tentativa=1").text
+
+
+def test_rota_responde_404_para_o_que_nao_existe(tmp_path):
+    artigo = {**peca_carrossel(), "celula_id": "iniciante__artigo", "formato": "artigo"}
+    http, _ = cliente_com_pecas(tmp_path, peca_carrossel(), artigo)
+    for caminho in (
+        f"{CELULA}/4.svg",  # o carrossel tem 3 slides
+        f"{CELULA}/0.svg",
+        f"{CELULA}/um.svg",
+        f"{CELULA}/2.png",
+        "avancado__carrossel/1.svg",  # célula sem peça
+        "iniciante__artigo/1.svg",  # não é carrossel
+        f"{CELULA}/1.svg?tentativa=9",
+    ):
+        assert http.get(f"/api/runs/{RUN_ID}/carrossel/{caminho}").status_code == 404, caminho
+
+
+def test_rota_do_slide_responde_503_com_o_banco_fora_do_ar(tmp_path):
+    http, _ = montar_cliente(tmp_path, ConsultaFalsa(falha=FalhaRetriavel("conexão recusada")))
+    resposta = http.get(f"/api/runs/{RUN_ID}/carrossel/{CELULA}/1.svg")
+    assert resposta.status_code == 503 and "conexão recusada" in resposta.json()["detail"]
+
+
+def test_pagina_carrega_a_fonte_e_as_abas_novas(cliente):
+    http, _ = cliente
+    assert "Inter-Regular.ttf" in http.get("/static/estilo.css").text
+    for arquivo in ("Inter-Regular.ttf", "Inter-Bold.ttf", "Inter-OFL.txt"):
+        assert http.get(f"/static/fontes/{arquivo}").status_code == 200
+    pagina = http.get("/").text
+    for trecho in ('data-aba="matriz"', 'data-aba="quarentena"', "/static/matriz.js", "/static/revisao.js"):
+        assert trecho in pagina
+
+
+# Revisão da quarentena
+
+
+def cliente_de_revisao(raiz, repo):
+    return TestClient(servidor.criar_app(raiz, execucao.Gerenciador(raiz), ConsultaFalsa(), repo))
+
+
+@pytest.mark.usefixtures("celulas_aprovadas")
+def test_revisao_sugere_o_numero_e_aceita_o_claim(raiz, repo, e1_sem_selic):
+    run_id = rodar_com_quarentena(raiz, repo, DECISAO, DECISAO)
+    http = cliente_de_revisao(raiz, repo)
+    preparo = http.get(f"/api/runs/{run_id}/quarentena/C01/preparo").json()
+    (numero,) = preparo["numeros"]
+    assert numero["novo"] and numero["numero"] == {"valor": "13.75", "unidade": "pct"}
+    assert preparo["literal_fonte"] == DECISAO["literal_fonte"]
+    resposta = http.post(f"/api/runs/{run_id}/quarentena/C01/aceitar", json={})
+    assert resposta.status_code == 200 and resposta.json() == {"claim_id": "C01", "decisao": "aceitar"}
+    assert repo.decisoes_quarentena[(run_id, "C01")] == {"decisao": "aceitar", "autor": "dashboard"}
+    assert repo.claims_humanos[(run_id, "C01")].id == "C01"
+    assert (raiz / "data" / "runs" / run_id / "revisoes" / "C01.json").exists()
+    assert http.post(f"/api/runs/{run_id}/quarentena/C01/descartar").status_code == 409
+
+
+@pytest.mark.usefixtures("celulas_aprovadas")
+def test_revisao_recusa_valor_incompleto_e_aceita_o_informado(raiz, repo, e1_sem_selic):
+    run_id = rodar_com_quarentena(raiz, repo, DECISAO, DECISAO)
+    http = cliente_de_revisao(raiz, repo)
+    caminho = f"/api/runs/{run_id}/quarentena/C01/aceitar"
+    assert http.post(caminho, json={"numeros": [{"valor": "13,75"}]}).status_code == 422  # falta a unidade
+    assert http.post(caminho, json={"numeros": [{"valor": "x", "unidade": "pct"}]}).status_code == 422
+    assert http.post(caminho, json={"numeros": [{}, {}]}).status_code == 422  # um número só no claim
+    assert not repo.decisoes_quarentena
+    assert http.post(caminho, json={"numeros": [{"valor": "13,75", "unidade": "pct"}]}).status_code == 200
+    assert repo.decisoes_quarentena[(run_id, "C01")]["autor"] == "dashboard"
+
+
+@pytest.mark.usefixtures("celulas_aprovadas")
+def test_revisao_descarta_e_recusa_o_que_nao_esta_na_quarentena(raiz, repo):
+    run_id = rodar_com_quarentena(raiz, repo, ERRADO, ERRADO)
+    http = cliente_de_revisao(raiz, repo)
+    assert http.post(f"/api/runs/{run_id}/quarentena/C02/descartar").status_code == 409
+    assert http.post(f"/api/runs/{run_id}/quarentena/C01/aceitar", json={}).status_code == 422
+    assert not repo.decisoes_quarentena
+    descartado = http.post(f"/api/runs/{run_id}/quarentena/C01/descartar")
+    assert descartado.json() == {"claim_id": "C01", "decisao": "descartar"}
+    assert repo.decisoes_quarentena[(run_id, "C01")] == {"decisao": "descartar", "autor": "dashboard"}
+    assert http.get(f"/api/runs/{run_id}/quarentena/C01/preparo").status_code == 409

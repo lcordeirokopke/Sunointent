@@ -4,7 +4,7 @@ Os testes comuns usam o ProviderFalso (conftest.py): sem rede e sem custo. A anc
 validação rodam sobre a saída real da E1 dos documentos de tests/fixtures/referencia/.
 
 O teste de cobertura com a Gemini API de verdade tem o marker `gemini` e só roda com
-`pytest -m gemini`; ele lê só a GOOGLE_API_KEY_PRINC e a GOOGLE_API_KEY_SEC do .env.
+`pytest -m gemini`; ele lê só a GOOGLE_API_KEY_PRINC, a GOOGLE_API_KEY_SEC e a API_KEY_ROUTER do .env.
 """
 
 import json
@@ -472,7 +472,7 @@ def test_config_do_repositorio_tem_preco_para_cada_modelo():
     assert cliente.custo_brl("gemini-3.8-flash", 1_000_000, 0) == Decimal("4.050000")
     assert cliente.custo_brl("nvidia/nemotron-3-ultra-550b-a55b", 1_000_000, 1_000_000) == Decimal("14.580000")
     assert cliente._raciocinio == {
-        "extractor_correcao": "low", "adapter_correcao": "low", "synthesizer_correcao": "low"}
+        "extractor_correcao": "low", "adapter_correcao": "low", "synthesizer_correcao": "low", "judge": "low"}
 
 
 def test_nivel_de_raciocinio_invalido_e_terminal():
@@ -483,16 +483,24 @@ def test_nivel_de_raciocinio_invalido_e_terminal():
 
 def test_sem_chave_do_gemini_e_terminal():
     with pytest.raises(FalhaTerminal, match="GOOGLE_API_KEY_PRINC"):
-        llm.conferir_credenciais({})
+        llm.conferir_credenciais({"API_KEY_ROUTER": "r"})
     with pytest.raises(FalhaTerminal, match="GOOGLE_API_KEY_PRINC"):
-        llm.conferir_credenciais({"GOOGLE_API_KEY_SEC": "reserva"})
+        llm.conferir_credenciais({"GOOGLE_API_KEY_SEC": "reserva", "API_KEY_ROUTER": "r"})
+
+
+def test_sem_chave_do_openrouter_e_terminal():
+    with pytest.raises(FalhaTerminal, match="API_KEY_ROUTER"):
+        llm.conferir_credenciais({"GOOGLE_API_KEY_PRINC": "a"})
 
 
 def test_chaves_na_ordem_int_e_pes_com_a_reserva_opcional():
-    so_princ = llm.criar_cliente(RAIZ, {"GOOGLE_API_KEY_PRINC": "a"})
+    so_princ = llm.criar_cliente(RAIZ, {"GOOGLE_API_KEY_PRINC": "a", "API_KEY_ROUTER": "r"})
     assert [chave for chave, _ in so_princ._providers] == ["GOOGLE_API_KEY_PRINC"]
-    as_duas = llm.criar_cliente(RAIZ, {"GOOGLE_API_KEY_SEC": "b", "GOOGLE_API_KEY_PRINC": "a"})
+    as_duas = llm.criar_cliente(RAIZ, {"GOOGLE_API_KEY_SEC": "b", "GOOGLE_API_KEY_PRINC": "a", "API_KEY_ROUTER": "r"})
     assert [chave for chave, _ in as_duas._providers] == ["GOOGLE_API_KEY_PRINC", "GOOGLE_API_KEY_SEC"]
+    # O juiz vai só ao OpenRouter, sem reserva.
+    (juiz,) = as_duas._por_no["judge"]
+    assert juiz[0] == "API_KEY_ROUTER" and isinstance(juiz[1], llm.ProviderOpenRouter)
 
 
 def cliente_com_reserva(principal, reserva):
@@ -614,9 +622,9 @@ def test_gemini_cobre_os_fatos_anotados(documentos, raiz_completa, fonte, celula
     from dotenv import dotenv_values
 
     valores = dotenv_values(RAIZ / ".env")
-    chaves = {c: valores[c] for c in (llm.CHAVE_PRINCIPAL, llm.CHAVE_RESERVA) if valores.get(c)}
-    if llm.CHAVE_PRINCIPAL not in chaves:
-        pytest.skip(f"{llm.CHAVE_PRINCIPAL} ausente no .env")
+    chaves = {c: valores[c] for c in (llm.CHAVE_PRINCIPAL, llm.CHAVE_RESERVA, llm.CHAVE_ROUTER) if valores.get(c)}
+    if llm.CHAVE_PRINCIPAL not in chaves or llm.CHAVE_ROUTER not in chaves:
+        pytest.skip(f"{llm.CHAVE_PRINCIPAL} ou {llm.CHAVE_ROUTER} ausente no .env")
     repo = RepositorioMemoria()
     cliente = llm.criar_cliente(raiz_completa, chaves)
     codigo = principal.executar(

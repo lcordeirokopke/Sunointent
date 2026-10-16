@@ -690,7 +690,7 @@ O `nivel_percebido` de cada peça é só informativo: a matriz de confusão de n
 
 O carrossel sai do pipeline como dado estruturado, como o artigo e o roteiro. A única forma visual é a prévia do dashboard: cada slide é um SVG de 1080 x 1350, com o texto em `<text>` e `<tspan>`, gerado na hora pelo servidor a partir da peça lida do Supabase, com a quebra de linha medida pela fonte do template e sem mudar nenhuma palavra do `Slide.texto`. O botão de baixar salva esse mesmo SVG, e nada é gravado.
 
-O dashboard fica em `app/` (FastAPI, com HTML, CSS e JS sem build) e escuta só em `127.0.0.1`. Hoje ele inicia o pipeline, mostra as etapas ao vivo e lê os runs do Supabase pela `ConsultaSupabase` de `sunontent/persistencia.py`, em conexão só de leitura; a aba da matriz entra quando existirem as células. Detalhado em `docs/fluxos/dashboard.md`.
+O dashboard fica em `app/` (FastAPI, com HTML, CSS e JS sem build) e escuta só em `127.0.0.1`. Ele inicia o pipeline, mostra as etapas ao vivo, lê os runs do Supabase pela `ConsultaSupabase` de `sunontent/persistencia.py`, em conexão só de leitura, mostra a matriz 3x3 com o scorecard, as violações por posição, a rastreabilidade e o carrossel em SVG, e tem a aba da revisão humana da quarentena, a única que grava. Detalhado em `docs/fluxos/dashboard.md`.
 
 **Natureza:** leitura, sem LLM e sem decisão.
 
@@ -895,7 +895,7 @@ E manter `ERRO_INFRA` como estado final de célula, distinto de `REPROVADA`: `ER
 
 Versão de prompt, versão de LevelSpec, pin de modelo com snapshot, e um **run manifest** que amarra tudo isso ao resultado. Sem isso, reprodutibilidade é aspiracional: o mesmo documento com o mesmo código gera outro resultado porque o provider atualizou o modelo por baixo. As instruções de reprodutibilidade do Entregável 6 são, na prática, este componente.
 
-As credenciais ficam no `.env`, fora do git. O `.env.example` versionado lista as variáveis sem valores: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_DB_URL` (conexão das transações pelo session pooler ou pela conexão direta, nunca pelo pooler de transação, que não aceita prepared statements) e as chaves da Gemini API, na ordem de chamada: `GOOGLE_API_KEY_PRINC` (principal, obrigatória) e `GOOGLE_API_KEY_SEC` (reserva, opcional, chamada quando a principal falha; regra em `docs/fluxos/extracao.md`, Cliente LLM).
+As credenciais ficam no `.env`, fora do git. O `.env.example` versionado lista as variáveis sem valores: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_DB_URL` (conexão das transações pelo session pooler ou pela conexão direta, nunca pelo pooler de transação, que não aceita prepared statements) as chaves da Gemini API, na ordem de chamada: `GOOGLE_API_KEY_PRINC` (principal, obrigatória) e `GOOGLE_API_KEY_SEC` (reserva, opcional, chamada quando a principal falha; regra em `docs/fluxos/extracao.md`, Cliente LLM), e a `API_KEY_ROUTER`, do OpenRouter, usada só pelo juiz (M6), obrigatória e sem reserva.
 
 ---
 

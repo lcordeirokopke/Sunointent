@@ -23,7 +23,7 @@ def _tem_marcador(texto: str, marcadores: list[str]) -> bool:
     return False
 
 
-def _analogias_do_plano(plano: PlanoNivel, glossario: Glossario) -> dict:
+def analogias_do_plano(plano: PlanoNivel, glossario: Glossario) -> dict:
     """Id do termo do glossário -> Analogia do plano. A analogia do glossário traz a referência `<id>#<n>`; a nova
     é ligada ao termo pela forma escrita."""
     achadas = {}
@@ -42,7 +42,7 @@ def avaliar(peca: Peca, spec: LevelSpec, plano: PlanoNivel, glossario: Glossario
     expressoes = ", ".join(f'"{m}"' for m in marcadores)
     unidade = campos.nome_da_unidade(peca.payload)
     em = "no" if unidade == "slide" else "na"
-    analogias = _analogias_do_plano(plano, glossario)
+    analogias = analogias_do_plano(plano, glossario)
     primeiras: dict[str, tuple[int, str, int, int]] = {}  # id -> (unidade, texto, inicio, fim) da primeira ocorrência
     textos = {c.unidade_indice: c.texto for c in campos.campos_da_peca(peca.payload) if c.campo == "texto"}
     for indice, texto in textos.items():

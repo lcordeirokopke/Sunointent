@@ -16,6 +16,7 @@ from sunontent.schemas import (
     NIVEIS,
     CelulaGrafoState,
     CelulaState,
+    Chunk,
     LlmJudgeDetalhes,
     PlanContractDetalhes,
     SaidaCarrossel,
@@ -50,6 +51,14 @@ REPROVADA_1 = carrossel(c01="O Copom reduziu a Selic para 13,75%.", c04=LONGO)
 @pytest.fixture
 def com_plano(repositorio, run_id, tmp_path):
     repositorio.factsheets[run_id] = FACTSHEET.model_dump(mode="json", exclude={"tabela_numeros"})
+    # Documento processado mínimo: o juiz recebe os chunks dele.
+    repositorio.documentos_processados[run_id] = {
+        "doc_id": FACTSHEET.doc_id, "doc_sha256": "0" * 64, "tipo_documento": FACTSHEET.tipo_documento,
+        "emissor": FACTSHEET.emissor, "data_documento": FACTSHEET.data_documento,
+    }
+    repositorio.paginas[(run_id, 1)] = {"texto_limpo": "Copom", "ocr": False}
+    repositorio.chunks[(run_id, "K01")] = Chunk(
+        chunk_id="K01", pagina_inicio=1, offset_inicio=0, pagina_fim=1, offset_fim=5, texto="Copom").model_dump()
     celulas = [CelulaState(celula_id=celula_id(n, f), nivel=n, formato=f) for n in NIVEIS for f in FORMATOS]
     persistencia.gravar_plano(repositorio, tmp_path, run_id, PLANO, celulas)
     return repositorio
@@ -169,7 +178,8 @@ def m6(*implicadas: bool):
 def test_juiz_so_roda_quando_as_deterministicas_passam_e_pode_reprovar(com_plano, run_id, tmp_path):
     chamadas = []
 
-    def juiz(peca, plano_nivel, factsheet, glossario, *, run_id, registrar_span):
+    def juiz(peca, plano_nivel, factsheet, chunks, glossario, *, run_id, registrar_span):
+        assert [c.chunk_id for c in chunks] == ["K01"]
         chamadas.append(peca.tentativa)
         return m6(True, False) if peca.tentativa == 1 else m6(True, True)
 

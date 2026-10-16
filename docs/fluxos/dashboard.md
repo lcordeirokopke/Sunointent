@@ -21,8 +21,10 @@ Cada run chama o Gemini na E2, na E4 e, por célula, na E5 (redator), e grava no
 | `app/__main__.py` | Sobe o servidor (uvicorn) em `127.0.0.1`. |
 | `app/servidor.py` | API FastAPI e arquivos estáticos. |
 | `app/execucao.py` | Inicia `python -m sunontent [fonte] [--dev]` como processo filho, lê stdout e stderr linha a linha e classifica cada linha. Uma execução por vez. |
-| `sunontent/persistencia.py` | `ConsultaSupabase`: lê os runs do Supabase para o dashboard (`listar_runs` e `detalhar_run`), em conexão só de leitura. |
-| `app/static/` | `index.html`, `estilo.css` e `app.js`: HTML, CSS e JS sem build e sem dependências externas. |
+| `app/slide_svg.py` | O slide do carrossel em SVG: o template (caixas por papel), a quebra de linha medida pela fonte (Pillow) e a montagem do SVG. |
+| `sunontent/persistencia.py` | `ConsultaSupabase`: lê os runs do Supabase para o dashboard (`listar_runs`, `detalhar_run`, com as células, e `peca`), em conexão só de leitura. A revisão da quarentena grava pelo `RepositorioSupabase`, criado na primeira revisão. |
+| `app/static/` | `index.html`, `estilo.css` e os scripts `app.js` (fluxo, resultado e histórico), `matriz.js` (aba Matriz) e `revisao.js` (aba Quarentena): HTML, CSS e JS sem build e sem dependências externas. |
+| `app/static/fontes/` | `Inter-Regular.ttf`, `Inter-Bold.ttf` e `Inter-OFL.txt`: a fonte do slide (Inter, licença SIL OFL 1.1), carregada por `@font-face` na página e lida pelo Pillow no servidor. |
 
 ## Botões
 
@@ -61,7 +63,9 @@ Quando o processo termina, o servidor acrescenta o evento `fim` com o código de
 ## Abas
 
 - **Fluxo**: os cartões E0 a E7 com estado e duração, o contador de rodadas do loop E2/E3, a miniatura das 9 células nos cartões da E5 à E7 e as arestas do grafo. As subabas mostram o terminal completo ou uma etapa: descrição, estado, duração, os dados do run gravados por ela e as linhas do terminal daquela etapa. O cartão da E3 cobre os nós `validate` e `quarentena`: soma as durações, junta as linhas e mostra o estado do último que rodou. Cada etapa com agente mostra só as chamadas de LLM do seu nó: a E2, as do `extractor`; a E4, as do `adapter`. A subaba da E4 mostra as rodadas do plano, se ele tem aviso e o plano gravado (ver Plano editorial abaixo). As subabas da E5, da E6 e da E7 mostram a grade das células (abaixo).
-- **Resultado**: um run lido do Supabase: resumo (no run abortado, o erro com a classe e a etapa em que o run abortou), documento processado, claims do FactSheet com o trecho da fonte (os aceitos na revisão da quarentena marcados como `humano`), validações por rodada, a quarentena com o motivo e a decisão de cada claim, o plano editorial da E4 e os problemas do gate por rodada, chamadas de LLM e as versões do manifest. A quarentena é só leitura: a revisão é feita pelas funções de `sunontent/extracao/quarentena.py` (`docs/fluxos/extracao.md`, Quarentena).
+- **Matriz**: as 9 células de um run lidas do Supabase (abaixo, Matriz 3x3).
+- **Quarentena**: a revisão humana dos claims reprovados depois da última rodada do loop E2/E3 (abaixo, Revisão da quarentena).
+- **Resultado**: um run lido do Supabase: resumo (no run abortado, o erro com a classe e a etapa em que o run abortou), documento processado, claims do FactSheet com o trecho da fonte (os aceitos na revisão da quarentena marcados como `humano`), validações por rodada, a quarentena com o motivo e a decisão de cada claim, o plano editorial da E4 e os problemas do gate por rodada, chamadas de LLM e as versões do manifest. A quarentena aparece aqui só para leitura: a revisão é feita na aba Quarentena.
 - **Histórico**: os runs da tabela `runs`, do mais recente ao mais antigo, com os claims e os claims em quarentena ainda sem decisão; um clique abre o resultado.
 
 ### Plano editorial
@@ -84,7 +88,49 @@ As etapas E5, E6 e E7 rodam uma vez por célula, e as 9 células andam em parale
 
 Uma etapa é mostrada como implementada quando o seu nó existe no grafo devolvido por `/api/grafo`. A rota abre o subgrafo da célula (`get_graph(xray=True)`), então `synth`, `evaluate` e `router` aparecem como nós do grafo, ligados à `adapt` e ao `fechamento`.
 
-A URL guarda a aba: `#fluxo/E3`, `#resultado/<run_id>`, `#historico`.
+A URL guarda a aba: `#fluxo/E3`, `#resultado/<run_id>`, `#matriz/<run_id>/<celula_id>`, `#quarentena/<run_id>`, `#historico`.
+
+### Matriz 3x3
+
+A aba Matriz lê as células do run (`detalhar_run`, chave `celulas`) e mostra, num quadro 3x3 (níveis nas linhas, formatos nas colunas), o estado de cada célula, o veredito da última tentativa e um selo por métrica (M1, M2, M5, contrato do plano e M6; a M6 só tem selo se o juiz rodou). Um clique na célula abre:
+
+- **Estado:** `APROVADA`, `REPROVADA` (com o `motivo_reprovacao`) ou `ERRO_INFRA` (com a classe e a mensagem da falha), e um botão por tentativa gravada.
+- **Scorecard da tentativa:** valor, faixa esperada e resultado de cada métrica, e a lista das violações com o trecho, o esperado, o obtido, a instrução corretiva e a posição (unidade, campo e intervalo).
+- **Peça:** o texto final por unidade (título, linha fina e seções do artigo; slides; cenas com a fala e o gancho visual). Cada violação com posição é destacada no trecho exato, e cada número vindo de um marcador é sublinhado, com o claim e a página do PDF no balão.
+- **Rastreabilidade:** em cada seção, slide ou cena, os claims que ela usa, com a página da âncora no PDF; quando o run tem a URL de origem, o claim abre o PDF naquela página. O texto do claim vem do FactSheet do run.
+- **Plano do nível:** o plano editorial do nível da célula (tese, claims em ordem de leitura, analogias e descartes), o mesmo da aba Resultado.
+
+### Slide em SVG
+
+Na célula de um carrossel, cada slide é desenhado como um `<svg>` dentro da página, e o botão "baixar SVG" salva o mesmo arquivo. O servidor gera o SVG a cada pedido, a partir da peça lida do Supabase: o pipeline não gera arquivo, nada vai para o Storage e não há tabela para isso.
+
+- **Formato:** 1080 x 1350 (retrato 4:5), com uma caixa de texto por papel (`CAIXAS` em `app/slide_svg.py`: posição, largura, altura, tamanho da fonte, entrelinha, peso e cores):
+
+  | Papel | Caixa (x, y, largura x altura) | Fonte |
+  | ----- | ------------------------------ | ----- |
+  | `gancho` | 96, 330, 888 x 690 | Inter Bold, 76 px, fundo escuro |
+  | `corpo` | 96, 240, 888 x 870 | Inter Regular, 52 px, fundo claro |
+  | `conclusao` | 96, 330, 888 x 690 | Inter Bold, 64 px, fundo escuro |
+
+- **Texto editável:** o texto fica em `<text id="texto">`, uma linha por `<tspan>` com `x` e `y` próprios, e a posição do slide ("n / total") em `<text id="posicao">`. A fonte não vai dentro do arquivo: quem edita no Inkscape ou no Illustrator precisa ter a Inter instalada (os `.ttf` estão em `app/static/fontes/`). SVG não quebra linha sozinho, então quem edita uma frase depois reajusta as linhas à mão.
+- **Quebra de linha:** `slide_svg.quebrar_linhas` junta palavra por palavra e mede cada candidata com o mesmo `.ttf` que a página carrega (`ImageFont.getlength`, Pillow); a linha que passaria da largura da caixa vai para a seguinte. O código só troca o espaço entre duas palavras por uma quebra: juntar as linhas com um espaço devolve o `Slide.texto`, palavra por palavra (espaços repetidos e quebras de linha do texto valem um espaço). Uma palavra maior que a caixa fica sozinha na linha e passa da largura. Como o texto é o `Slide.texto` final, com os números já no lugar dos marcadores, a regra de todo número vir de um marcador continua valendo.
+- **Aviso de estouro:** se as linhas não cabem na altura da caixa do papel, a prévia mostra o aviso (cabeçalho `X-Estouro-Altura: true` e `estouro_altura="true"` no `<metadata>`): é sinal de que o limite de caracteres do LevelSpec e a caixa do template não batem.
+- **`<metadata>`:** um elemento `sunontent:slide` com `celula_id`, `tentativa`, `posicao`, `total`, `papel`, `claim_ids` (separados por espaço) e `estouro_altura`.
+- **Nome do arquivo baixado:** `<celula_id>_t<tentativa>_slide<n>.svg`, por exemplo `iniciante__carrossel_t2_slide3.svg`.
+
+Para conferir um arquivo baixado, abra o SVG no Inkscape, clique no texto e confirme que cada linha é um trecho editável e que o desenho é o da tela.
+
+### Revisão da quarentena
+
+A aba Quarentena lista os claims em quarentena do run (os runs com claims aguardando aparecem com a contagem no seletor) e, para o que ainda não tem decisão, o botão Revisar. A revisão usa as funções de `sunontent/extracao/quarentena.py`; a âncora e os números vêm sempre do código, e quem revisa nunca escreve posição:
+
+- **Sugestão:** o trecho citado (com a página) e, para cada número do claim, o que o código leu: a entrada da tabela de números da E1, ou o número interpretado na posição do bruto (marcado como novo, a confirmar). Se o `numeros.py` não interpreta o formato, a tela pede valor e unidade.
+- **Correção:** o trecho citado e a lista de números (separados por `;`) podem ser corrigidos, e "Recalcular a sugestão" ancora de novo.
+- **Aceitar:** confirma os números sugeridos ou os informados (valor com vírgula ou ponto e unidade `pct`, `pp`, `BRL`, `BRL_mi`, `x`, `contagem` ou `data`) e grava o claim no FactSheet do run com origem `humano`. O claim passa pelas mesmas regras da E3: se não passa, a tela mostra o motivo e nada é gravado.
+- **Descartar:** grava a decisão sem claim, depois de uma confirmação.
+- **Decisão final:** cada claim tem uma decisão só, com o `autor` `dashboard`. Decidir de novo é recusado.
+
+As decisões são as únicas gravações do dashboard, no Supabase e na cópia local (`data/runs/<run_id>/revisoes/<claim_id>.json`), pelas funções de `quarentena.py`.
 
 ## API
 
@@ -96,6 +142,10 @@ A URL guarda a aba: `#fluxo/E3`, `#resultado/<run_id>`, `#historico`.
 | `GET /api/execucao/eventos?desde=N` | SSE com os eventos a partir de `N`; termina depois do `fim`. |
 | `POST /api/execucao/parar` | Encerra o processo. |
 | `GET /api/runs` | Resumo dos runs (`ConsultaSupabase.listar_runs`). |
-| `GET /api/runs/<run_id>` | Run (com `etapa_erro` e `max_concorrencia`), documento resumido, FactSheet, validações, quarentena, spans (com a `rodada` do gate no `adapter`), plano editorial e rodadas do gate do plano (`ConsultaSupabase.detalhar_run`). 404 se o run não existe. |
+| `GET /api/runs/<run_id>` | Run (com `etapa_erro` e `max_concorrencia`), documento resumido, FactSheet, validações, quarentena, spans (com a `rodada` do gate no `adapter`), plano editorial, rodadas do gate do plano e as células com as peças, os números usados e os scorecards por tentativa (`ConsultaSupabase.detalhar_run`). 404 se o run não existe. |
+| `GET /api/runs/<run_id>/carrossel/<celula_id>/<n>.svg` | O SVG do slide `n` (a partir de 1) do carrossel da célula, na última tentativa ou na de `?tentativa=<t>`; `?baixar=true` devolve o mesmo arquivo como anexo com o nome do download. 404 para peça inexistente, célula que não é carrossel ou slide fora do carrossel. |
+| `GET /api/runs/<run_id>/quarentena/<claim_id>/preparo` | A sugestão do código para a revisão (trecho, âncora e números); `?literal_fonte=` e `?brutos=` (repetido) corrigem o trecho e a lista de números. 422 se o trecho ou um número não é encontrado; 409 se o claim não está na quarentena ou já foi revisado. |
+| `POST /api/runs/<run_id>/quarentena/<claim_id>/aceitar` | Corpo `{"literal_fonte": texto ou null, "brutos": lista ou null, "numeros": [{"valor": texto ou null, "unidade": unidade ou null}]}`, um item por número sugerido, na ordem; sem `numeros`, vale a sugestão. 422 se o claim não passa na E3 ou falta valor ou unidade. |
+| `POST /api/runs/<run_id>/quarentena/<claim_id>/descartar` | Descarta o claim. |
 
-As duas rotas de runs respondem 503 com a mensagem quando o banco recusa a conexão ou a consulta.
+As rotas de runs, do slide e da quarentena respondem 503 com a mensagem quando o banco recusa a conexão ou a consulta.

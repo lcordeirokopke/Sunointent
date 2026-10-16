@@ -10,14 +10,16 @@ Este documento descreve as métricas que avaliam uma peça: o que cada uma confe
 | `text_size` | M2 | determinística | `sunontent/metrics/text_size.py` |
 | `analogy_rule` | M5 | determinística | `sunontent/metrics/analogy_rule.py` |
 | `plan_contract` | sem número | determinística | calculada na montagem da E5.3 |
-| `llm_judge` | M6 | juiz LLM | ainda não implementada |
+| `llm_judge` | M6 | juiz LLM | `sunontent/metrics/llm_judge.py` |
 
-O nível é medido pela regra de analogia (M5), pelo tamanho do artigo por nível (M2) e pelo nível percebido pelo juiz (M6). As métricas determinísticas não importam o cliente LLM: rodam sem pipeline, sem banco e sem rede.
+O nível é medido pela regra de analogia (M5), pelo tamanho do artigo por nível (M2) e pelo nível percebido pelo juiz (M6). As métricas determinísticas não importam o cliente LLM: rodam sem pipeline, sem banco e sem rede. Só o juiz (`llm_judge.py`) chama o modelo, pelo `llm.py`.
 
 Arquivos de apoio em `sunontent/metrics/`:
 
 - `resultado.py`: `montar(detalhes, violacoes, faixa_esperada="0")` devolve o `MetricaResultado` de qualquer métrica;
-- `campos.py`: `campos_da_peca(payload)` devolve os textos da peça, um por campo, e `nome_da_unidade(payload)` devolve `seção`, `slide` ou `cena`.
+- `campos.py`: `campos_da_peca(payload)` devolve os textos da peça, um por campo, e `nome_da_unidade(payload)` devolve `seção`, `slide` ou `cena`;
+- `contexto.py`: a recuperação de contexto do juiz, com o BM25 simples (seção M6);
+- `matriz_niveis.py`: a matriz de confusão de níveis e o comando que a imprime (seção M6).
 
 Fora da pasta, as métricas usam `sunontent/texto.py` (contagem de palavras e de caracteres), `sunontent/numeros.py` (leitura de número e de data), `sunontent/glossario.py` (casamento de termos) e `sunontent/levelspec.py` (limites e marcadores do nível).
 
@@ -152,7 +154,55 @@ As regras que valem para qualquer célula (um gancho no início e uma conclusão
 
 ## M6. `llm_judge`
 
-O juiz roda uma vez por célula, só depois de M1, M2, M5 e `plan_contract` passarem, e só pode reprovar. Responde se cada `Analogia` explica o conceito corretamente e se cada unidade é implicada pelos claims que cita, e devolve o `nivel_percebido` da peça. O `LlmJudgeDetalhes` já existe em `sunontent/schemas.py`: `analogias` (termo, justificativa e `correta`), `unidades` (índice, justificativa, `implicada` e trecho problemático) e `nivel_percebido`. O desenho está em `docs/arquiteturas.md`, E6.
+Código: `sunontent/metrics/llm_judge.py` (prompt em `prompts/judge.j2`, recuperação de contexto em `sunontent/metrics/contexto.py`). Modelo `nvidia/nemotron-3-ultra-550b-a55b` pelo OpenRouter (`docs/fluxos/extracao.md`, Cliente LLM), de família diferente do extractor.
+
+O juiz roda uma vez por tentativa da célula, só depois de M1, M2, M5 e `plan_contract` passarem, e só pode reprovar: não existe caminho em que ele aprove o que uma determinística reprovou. O `juiz` chega à E6 por `config["configurable"]`, montado por `llm_judge.criar_juiz(llm, raiz)` no `__main__.py`, e é chamado como `juiz(peca, plano_nivel, factsheet, chunks, glossario, run_id=..., registrar_span=...)`.
+
+### O que o juiz recebe
+
+- **Claims:** os citados pelas unidades, com o tipo, o texto e o `literal_fonte`; o prompt avisa que projeção, condicionante e risco só aparecem atribuídos à fonte.
+- **Trechos do documento (`contexto.montar`):** para cada unidade, o chunk da âncora de cada claim citado (o que contém o início da âncora), o anterior e o seguinte, e os 3 chunks de maior sobreposição lexical com o texto da unidade entre os que ainda não entraram, por BM25 simples (k1 1,5, b 0,75, idf `ln(1 + (N - df + 0,5) / (df + 0,5))`), sobre palavras sem maiúscula, sem acento, sem as de uma letra e sem uma lista curta de palavras vazias; só chunk com nota acima de zero entra. Cada chunk vai uma vez ao prompt, na ordem do documento, e cada unidade cita os seus pelo `chunk_id`. Sem embedding.
+- **Unidades:** o texto de cada seção, slide ou cena (no roteiro, a fala e o gancho visual), com o papel do slide ou a abertura e o fechamento do roteiro, e os claims que cita. A unidade sem `claim_ids` (gancho, conclusão, abertura e fechamento) é julgada contra todos os claims da peça. O título e a linha fina do artigo vão como contexto e não são julgados.
+- **Analogias:** as do plano do nível cujo termo aparece no texto das unidades (ligadas ao termo do glossário como na M5), com a explicação do plano, a `definicao_tecnica` do glossário e a unidade da primeira ocorrência.
+
+O nível pedido não vai ao prompt, para não influenciar o `nivel_percebido`.
+
+### As perguntas e a resposta
+
+1. Cada analogia explica o conceito corretamente, ou é enganosa ou decorativa?
+2. Cada unidade é implicada pelos claims que cita? Não é quando apresenta projeção, condicionante ou risco como fato consumado ou sem atribuição, cria causa, consequência ou comparação que os claims não dizem, acrescenta fato, tendência ou recomendação, escreve por extenso um número diferente do claim (ou troca grandeza, período ou sujeito) ou contradiz um dos trechos. Explicação geral de conceito, analogia, pergunta retórica, convite à leitura e transição não reprovam.
+3. Para qual nível a peça parece escrita, pelo vocabulário e pela profundidade, sem considerar o tamanho?
+
+A resposta segue o schema `SaidaJuiz` (`sunontent/schemas.py`): `analogias` (`termo`, `justificativa` e `correta`), `unidades` (`unidade_indice`, `justificativa`, `implicada` e `trecho_problematico`) e `nivel_percebido`, com a justificativa antes do booleano.
+
+### Completude
+
+`conferir_completude` exige uma resposta para cada unidade (índices de 0 ao total menos 1, sem repetir e sem índice inexistente) e para cada analogia pedida (termo comparado sem maiúscula e sem acento, sem repetir e sem termo não pedido). Resposta incompleta é `FalhaTerminal`, e a E6 grava o scorecard com veredito `ERRO_INFRA`. Falha esgotada do juiz (infraestrutura, chave, crédito, bloqueio ou resposta fora do schema) também é `ERRO_INFRA`, nunca aprovação.
+
+### Valor, violações e detalhes
+
+`llm_judge` vale `true` quando o juiz não reprova nada e `false` quando reprova, com faixa `"true"`. Cada `false` vira uma `Violacao`, ordenada pela unidade:
+
+| Caso | `trecho` | Posição | `instrucao_corretiva` |
+| ---- | -------- | ------- | --------------------- |
+| analogia incorreta | o termo como está escrito na unidade | a primeira ocorrência do termo (`campo` `texto`) | reescrever a analogia daquela unidade de modo que respeite a `definicao_tecnica` do glossário, com a justificativa do juiz |
+| unidade não implicada | o `trecho_problematico`, quando ele está na unidade; senão, o trecho dado ou o texto da unidade | o intervalo do trecho no texto da unidade ou no gancho visual da cena; sem intervalo quando o trecho não está na unidade | reescrever a unidade dizendo só o que os claims citados afirmam, sem causa, consequência ou fato novo e com a atribuição nas projeções, condicionantes e riscos, com a justificativa do juiz |
+
+`esperado` diz o que a unidade ou a analogia deveria cumprir, e `obtido` traz a justificativa do juiz. `LlmJudgeDetalhes`: `analogias` (na ordem das analogias pedidas), `unidades` (na ordem dos índices) e `nivel_percebido`.
+
+### Matriz de confusão de níveis
+
+O `nivel_percebido` é só informativo. `sunontent/metrics/matriz_niveis.py` cruza o nível pedido e o percebido, por formato (`montar`, `acerto` e `formatar`). O comando lê a última tentativa julgada de cada célula no Supabase, pela `ConsultaSupabase.niveis_percebidos` (só leitura):
+
+```
+python -m sunontent.metrics.matriz_niveis [run_id ...]
+```
+
+Sem `run_id`, usa todos os runs. A calibração do juiz imprime a mesma matriz para as suas peças (`docs/testes.md`, Juiz).
+
+### Calibração
+
+`tests/fixtures/juiz/calibracao.yaml` tem 20 peças escritas sobre os claims das três referências, cobrindo os 3 níveis e os 3 formatos: 10 fiéis aos claims e 10 com um erro plantado numa unidade (analogia errada, causa inventada, projeção como fato e número por extenso trocado). `pytest -m judge` julga as 20 com o OpenRouter de verdade e exige acerto de pelo menos 80% em cada grupo: peças fiéis aprovadas e peças com erro reprovadas.
 
 ## Limites conhecidos
 

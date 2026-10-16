@@ -386,6 +386,25 @@ def test_peca_unidades_numeros_e_celula_numa_transacao(repositorio, ambiente, tm
     assert persistencia.carregar_scorecard(repositorio, run_id, "iniciante__artigo", 2) is None
     assert (tmp_path / "runs" / run_id / "celulas" / "iniciante__artigo" / "scorecard_1.json").exists()
 
+    # Leitura do dashboard: as 9 células, e na do artigo a peça, os números usados e o scorecard com a violação.
+    consulta = persistencia.ConsultaSupabase(ambiente["SUPABASE_DB_URL"])
+    lidas = consulta.detalhar_run(run_id)["celulas"]
+    assert len(lidas) == 9
+    artigo = next(c for c in lidas if c["celula_id"] == "iniciante__artigo")
+    assert artigo["estado"] == "AVALIANDO" and artigo["formato"] == "artigo"
+    (tentativa,) = artigo["tentativas"]
+    assert tentativa["payload"] == payload.model_dump(mode="json") and tentativa["claim_ids"] == ["C01", "C77"]
+    assert [(n["campo"], n["unidade_indice"], n["inicio"]) for n in tentativa["numeros_usados"]] == [
+        ("texto", 0, 15), ("titulo", None, 6)]
+    assert tentativa["scorecard"]["veredito"] == "REPROVADA"
+    assert [m["nome"] for m in tentativa["scorecard"]["metricas"]] == ["plan_contract", "llm_judge"]
+    violacoes = tentativa["scorecard"]["metricas"][0]["violacoes"]
+    assert [(v["trecho"], v["unidade_indice"], v["campo"], v["inicio"], v["fim"]) for v in violacoes] == [
+        ("C77", 0, "texto", 0, 3)] * 2
+    assert all(not c["tentativas"] for c in lidas if c["celula_id"] != "iniciante__artigo")
+    assert consulta.peca(run_id, "iniciante__artigo")["tentativa"] == 1
+    assert consulta.peca(run_id, "iniciante__artigo", 2) is None
+
     reprovada = avaliando.model_copy(update={"estado": "REPROVADA", "motivo_reprovacao": "k_esgotado"})
     persistencia.atualizar_celula(repositorio, tmp_path, run_id, reprovada)
     erro = avaliando.model_copy(update={"estado": "ERRO_INFRA", "erro_classe": "terminal", "erro_mensagem": "HTTP 400"})

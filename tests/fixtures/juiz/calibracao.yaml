@@ -1,0 +1,542 @@
+# Calibração do juiz (M6): peças escritas à mão sobre os claims de tests/fixtures/referencia/<fonte>.claims.json,
+# com o texto final (números já no lugar dos marcadores). Metade é fiel aos claims; a outra metade tem um erro
+# plantado numa unidade (`unidade_erro`), de um destes tipos:
+# - analogia_errada: a analogia explica o conceito de forma errada;
+# - causa_inventada: relação de causa que os claims não dizem, ou que contradiz o documento;
+# - projecao_como_fato: projeção ou previsão escrita como fato consumado, sem atribuição à fonte;
+# - numero_por_extenso: número escrito por extenso diferente do número do claim.
+# O plano do nível de cada peça usa os claims citados nas unidades e as `analogias` dadas.
+versao: 1
+pecas:
+  - id: copom-iniciante-artigo-ok
+    fonte: copom
+    nivel: iniciante
+    formato: artigo
+    erro: null
+    analogias:
+      - termo: Selic
+        explicacao: "É como o juro de referência que o Banco Central define para os empréstimos entre bancos: quando ele sobe, os juros cobrados de pessoas e empresas tendem a subir junto."
+    payload:
+      titulo: "Banco Central corta os juros, mas a inflação segue no radar"
+      linha_fina: "O que a decisão desta semana muda no seu bolso"
+      secoes:
+        - texto: "O Banco Central reduziu a Selic para 13,75% ao ano. A Selic é como o juro de referência que o Banco Central define para os empréstimos entre bancos: quando ela cai, os juros cobrados de pessoas e empresas tendem a cair junto."
+          claim_ids: [C27]
+        - texto: "A inflação, que é a alta dos preços, perdeu força nas divulgações mais recentes. Ela ficou abaixo do limite superior do intervalo de tolerância, mas ainda acima da meta."
+          claim_ids: [C03]
+        - texto: "Para frente, o Banco Central projeta que a inflação acumulada em 2026 fique em 5,2%. Na prática, é uma estimativa do próprio Banco Central, e não um resultado garantido."
+          claim_ids: [C18]
+
+  - id: copom-iniciante-artigo-analogia
+    fonte: copom
+    nivel: iniciante
+    formato: artigo
+    erro: analogia_errada
+    unidade_erro: 0
+    analogias:
+      - termo: Selic
+        explicacao: "É como o preço do dólar: quando ela cai, o dólar fica mais barato para quem vai viajar."
+    payload:
+      titulo: "Banco Central corta os juros, mas a inflação segue no radar"
+      linha_fina: "O que a decisão desta semana muda no seu bolso"
+      secoes:
+        - texto: "O Banco Central reduziu a Selic para 13,75% ao ano. A Selic é como o preço do dólar: quando ela cai, o dólar fica mais barato para quem vai viajar."
+          claim_ids: [C27]
+        - texto: "A inflação, que é a alta dos preços, perdeu força nas divulgações mais recentes. Ela ficou abaixo do limite superior do intervalo de tolerância, mas ainda acima da meta."
+          claim_ids: [C03]
+        - texto: "Para frente, o Banco Central projeta que a inflação acumulada em 2026 fique em 5,2%. Na prática, é uma estimativa do próprio Banco Central, e não um resultado garantido."
+          claim_ids: [C18]
+
+  - id: b3-iniciante-carrossel-ok
+    fonte: b3
+    nivel: iniciante
+    formato: carrossel
+    erro: null
+    analogias:
+      - termo: juros sobre capital próprio
+        explicacao: "É como um primo do dividendo: também distribui lucro aos sócios, mas por outra porta, com efeito diferente no imposto."
+    payload:
+      slides:
+        - papel: gancho
+          texto: "A empresa dona da bolsa de valores do Brasil lucrou mais neste trimestre. Veja o que isso significa."
+          claim_ids: []
+        - papel: corpo
+          texto: "A B3 teve lucro de R$1.701,2 milhões no segundo trimestre de 2026, 28,2% a mais do que no mesmo período de 2025."
+          claim_ids: [C35]
+        - papel: corpo
+          texto: "A empresa vai dividir R$1.106,0 milhões com quem tem ações dela, em juros sobre capital próprio. É como um primo do dividendo: também reparte o lucro com os sócios, mas por outra porta, com efeito diferente no imposto."
+          claim_ids: [C86]
+        - papel: corpo
+          texto: "No mesmo trimestre, a B3 comprou de volta R$196,9 milhões das próprias ações."
+          claim_ids: [C33]
+        - papel: conclusao
+          texto: "Na prática: a empresa lucrou mais e repartiu parte do dinheiro com quem tem ações dela."
+          claim_ids: []
+
+  - id: b3-iniciante-carrossel-analogia
+    fonte: b3
+    nivel: iniciante
+    formato: carrossel
+    erro: analogia_errada
+    unidade_erro: 2
+    analogias:
+      - termo: juros sobre capital próprio
+        explicacao: "É como um empréstimo que a empresa pega com os acionistas e depois devolve com juros."
+    payload:
+      slides:
+        - papel: gancho
+          texto: "A empresa dona da bolsa de valores do Brasil lucrou mais neste trimestre. Veja o que isso significa."
+          claim_ids: []
+        - papel: corpo
+          texto: "A B3 teve lucro de R$1.701,2 milhões no segundo trimestre de 2026, 28,2% a mais do que no mesmo período de 2025."
+          claim_ids: [C35]
+        - papel: corpo
+          texto: "A empresa vai pagar R$1.106,0 milhões em juros sobre capital próprio. É como um empréstimo que a empresa pegou com os acionistas e agora devolve com juros."
+          claim_ids: [C86]
+        - papel: corpo
+          texto: "No mesmo trimestre, a B3 comprou de volta R$196,9 milhões das próprias ações."
+          claim_ids: [C33]
+        - papel: conclusao
+          texto: "Na prática: a empresa lucrou mais e repartiu parte do dinheiro com quem tem ações dela."
+          claim_ids: []
+
+  - id: cvm-iniciante-roteiro-ok
+    fonte: cvm
+    nivel: iniciante
+    formato: roteiro
+    erro: null
+    analogias:
+      - termo: direito de retirada
+        explicacao: "É como a porta de saída de um condomínio que decidiu uma grande reforma: quem não concorda pode vender a sua parte de volta pelo valor definido, em vez de ser obrigado a ficar."
+    payload:
+      cenas:
+        - inicio_s: 0
+          fim_s: 6
+          fala: "A Sabesp vai ficar com todas as ações da EMAE. Entenda o que muda para quem tem essas ações."
+          gancho_visual: "Logos da Sabesp e da EMAE lado a lado"
+          claim_ids: []
+        - inicio_s: 6
+          fim_s: 22
+          fala: "A Sabesp vai ficar com todas as ações da EMAE que ainda não tem. Em troca, quem tem ações da EMAE vai receber ações ordinárias da Sabesp."
+          gancho_visual: "Seta trocando ações da EMAE por ações da Sabesp"
+          claim_ids: [C01]
+        - inicio_s: 22
+          fim_s: 42
+          fala: "Quem tem ações da EMAE pode usar o direito de retirada. É como a porta de saída de um condomínio que decidiu uma grande reforma: quem não concorda pode vender a sua parte de volta. O prazo para isso deve terminar em 19/10, e o reembolso está previsto para 21/10."
+          gancho_visual: "Porta de saída com um calendário ao lado"
+          claim_ids: [C02, C03]
+        - inicio_s: 42
+          fim_s: 54
+          fala: "Se o calendário for mantido, as novas ações da Sabesp devem cair na conta dos acionistas da EMAE em 27/10."
+          gancho_visual: "Extrato de corretora com ações novas"
+          claim_ids: [C05]
+        - inicio_s: 54
+          fim_s: 60
+          fala: "Na prática: se você tem ações da EMAE, fique de olho nessas datas."
+          gancho_visual: "Calendário com as datas marcadas"
+          claim_ids: []
+
+  - id: cvm-iniciante-roteiro-causa
+    fonte: cvm
+    nivel: iniciante
+    formato: roteiro
+    erro: causa_inventada
+    unidade_erro: 1
+    analogias:
+      - termo: direito de retirada
+        explicacao: "É como a porta de saída de um condomínio que decidiu uma grande reforma: quem não concorda pode vender a sua parte de volta pelo valor definido, em vez de ser obrigado a ficar."
+    payload:
+      cenas:
+        - inicio_s: 0
+          fim_s: 6
+          fala: "A Sabesp vai ficar com todas as ações da EMAE. Entenda o que muda para quem tem essas ações."
+          gancho_visual: "Logos da Sabesp e da EMAE lado a lado"
+          claim_ids: []
+        - inicio_s: 6
+          fim_s: 22
+          fala: "A Sabesp vai ficar com todas as ações da EMAE que ainda não tem, porque a EMAE estava com as contas no vermelho. Em troca, quem tem ações da EMAE vai receber ações ordinárias da Sabesp."
+          gancho_visual: "Seta trocando ações da EMAE por ações da Sabesp"
+          claim_ids: [C01]
+        - inicio_s: 22
+          fim_s: 42
+          fala: "Quem tem ações da EMAE pode usar o direito de retirada. É como a porta de saída de um condomínio que decidiu uma grande reforma: quem não concorda pode vender a sua parte de volta. O prazo para isso deve terminar em 19/10, e o reembolso está previsto para 21/10."
+          gancho_visual: "Porta de saída com um calendário ao lado"
+          claim_ids: [C02, C03]
+        - inicio_s: 42
+          fim_s: 54
+          fala: "Se o calendário for mantido, as novas ações da Sabesp devem cair na conta dos acionistas da EMAE em 27/10."
+          gancho_visual: "Extrato de corretora com ações novas"
+          claim_ids: [C05]
+        - inicio_s: 54
+          fim_s: 60
+          fala: "Na prática: se você tem ações da EMAE, fique de olho nessas datas."
+          gancho_visual: "Calendário com as datas marcadas"
+          claim_ids: []
+
+  - id: b3-intermediario-artigo-ok
+    fonte: b3
+    nivel: intermediario
+    formato: artigo
+    erro: null
+    analogias: []
+    payload:
+      titulo: "B3 tem lucro 28,2% maior no 2T26 e anuncia JCP de R$1.106,0 milhões"
+      linha_fina: "Receita, EBITDA e proventos do segundo trimestre"
+      secoes:
+        - texto: "A receita líquida da B3 somou R$ 2.765,7 milhões no segundo trimestre de 2026, alta de 8,8% sobre o mesmo trimestre de 2025."
+          claim_ids: [C04]
+        - texto: "O EBITDA recorrente chegou a R$1.938,6 milhões, 13,0% acima do 2T25, com margem EBITDA recorrente de 70,2%, avanço de 47 bps na comparação anual."
+          claim_ids: [C68]
+        - texto: "Na última linha, o lucro líquido societário consolidado foi de R$1.701,2 milhões, expansão de 28,2% em relação ao segundo trimestre de 2025."
+          claim_ids: [C35]
+        - texto: "Para o acionista, o Conselho de Administração deliberou em 18 de junho de 2026 a distribuição de R$1.106,0 milhões em JCP, sendo R$356,0 milhões ordinários e R$750,0 milhões extraordinários."
+          claim_ids: [C86]
+
+  - id: b3-intermediario-artigo-numero
+    fonte: b3
+    nivel: intermediario
+    formato: artigo
+    erro: numero_por_extenso
+    unidade_erro: 0
+    analogias: []
+    payload:
+      titulo: "B3 tem lucro 28,2% maior no 2T26 e anuncia JCP de R$1.106,0 milhões"
+      linha_fina: "Receita, EBITDA e proventos do segundo trimestre"
+      secoes:
+        - texto: "A receita líquida da B3 somou R$ 2.765,7 milhões no segundo trimestre de 2026, uma alta de dezoito por cento sobre o mesmo trimestre de 2025."
+          claim_ids: [C04]
+        - texto: "O EBITDA recorrente chegou a R$1.938,6 milhões, 13,0% acima do 2T25, com margem EBITDA recorrente de 70,2%, avanço de 47 bps na comparação anual."
+          claim_ids: [C68]
+        - texto: "Na última linha, o lucro líquido societário consolidado foi de R$1.701,2 milhões, expansão de 28,2% em relação ao segundo trimestre de 2025."
+          claim_ids: [C35]
+        - texto: "Para o acionista, o Conselho de Administração deliberou em 18 de junho de 2026 a distribuição de R$1.106,0 milhões em JCP, sendo R$356,0 milhões ordinários e R$750,0 milhões extraordinários."
+          claim_ids: [C86]
+
+  - id: copom-intermediario-carrossel-ok
+    fonte: copom
+    nivel: intermediario
+    formato: carrossel
+    erro: null
+    analogias: []
+    payload:
+      slides:
+        - papel: gancho
+          texto: "Selic em 13,75%: o que o Copom sinalizou nesta reunião"
+          claim_ids: []
+        - papel: corpo
+          texto: "O Copom decidiu reduzir a Selic para 13,75% ao ano."
+          claim_ids: [C27]
+        - papel: corpo
+          texto: "Para o Copom, com expectativas desancoradas como as atuais, é preciso uma restrição monetária maior e por mais tempo do que outrora seria apropriado."
+          claim_ids: [C14]
+        - papel: corpo
+          texto: "No cenário de referência do Copom, a inflação projetada é de 5,2% em 2026 e de 3,9% em 2027."
+          claim_ids: [C18, C19]
+        - papel: conclusao
+          texto: "Acompanhe as próximas atas do Copom para ver o ritmo dos próximos passos."
+          claim_ids: []
+
+  - id: copom-intermediario-carrossel-projecao
+    fonte: copom
+    nivel: intermediario
+    formato: carrossel
+    erro: projecao_como_fato
+    unidade_erro: 3
+    analogias: []
+    payload:
+      slides:
+        - papel: gancho
+          texto: "Selic em 13,75%: o que o Copom sinalizou nesta reunião"
+          claim_ids: []
+        - papel: corpo
+          texto: "O Copom decidiu reduzir a Selic para 13,75% ao ano."
+          claim_ids: [C27]
+        - papel: corpo
+          texto: "Para o Copom, com expectativas desancoradas como as atuais, é preciso uma restrição monetária maior e por mais tempo do que outrora seria apropriado."
+          claim_ids: [C14]
+        - papel: corpo
+          texto: "A inflação vai fechar 2026 em 5,2% e 2027 em 3,9%. Esses são os números do IPCA para os próximos dois anos."
+          claim_ids: [C18, C19]
+        - papel: conclusao
+          texto: "Acompanhe as próximas atas do Copom para ver o ritmo dos próximos passos."
+          claim_ids: []
+
+  - id: b3-intermediario-roteiro-ok
+    fonte: b3
+    nivel: intermediario
+    formato: roteiro
+    erro: null
+    analogias: []
+    payload:
+      cenas:
+        - inicio_s: 0
+          fim_s: 5
+          fala: "Ações em alta e derivativos em queda: o trimestre da B3 em números."
+          gancho_visual: "Painel da bolsa com setas para cima e para baixo"
+          claim_ids: []
+        - inicio_s: 5
+          fim_s: 22
+          fala: "O volume médio diário negociado no mercado à vista de renda variável chegou a R$31,3 bilhões no segundo trimestre de 2026, alta de 20,1% sobre o mesmo trimestre de 2025."
+          gancho_visual: "Painel da bolsa com volume em alta"
+          claim_ids: [C12]
+        - inicio_s: 22
+          fim_s: 38
+          fala: "Já nos derivativos, o volume médio diário foi de 11,1 milhões de contratos, retração de 8,3% contra o segundo trimestre de 2025."
+          gancho_visual: "Seta para baixo sobre contratos"
+          claim_ids: [C08]
+        - inicio_s: 38
+          fim_s: 54
+          fala: "Segundo a B3, a queda veio principalmente da redução do volume em criptoativos, por mudanças nas margens exigidas e menor atividade de mercado."
+          gancho_visual: "Ícone de criptoativo com volume encolhendo"
+          claim_ids: [C09]
+        - inicio_s: 54
+          fim_s: 60
+          fala: "Vale acompanhar os dois mercados nos próximos resultados da B3."
+          gancho_visual: "Logo da B3"
+          claim_ids: []
+
+  - id: b3-intermediario-roteiro-causa
+    fonte: b3
+    nivel: intermediario
+    formato: roteiro
+    erro: causa_inventada
+    unidade_erro: 3
+    analogias: []
+    payload:
+      cenas:
+        - inicio_s: 0
+          fim_s: 5
+          fala: "Ações em alta e derivativos em queda: o trimestre da B3 em números."
+          gancho_visual: "Painel da bolsa com setas para cima e para baixo"
+          claim_ids: []
+        - inicio_s: 5
+          fim_s: 22
+          fala: "O volume médio diário negociado no mercado à vista de renda variável chegou a R$31,3 bilhões no segundo trimestre de 2026, alta de 20,1% sobre o mesmo trimestre de 2025."
+          gancho_visual: "Painel da bolsa com volume em alta"
+          claim_ids: [C12]
+        - inicio_s: 22
+          fim_s: 38
+          fala: "Já nos derivativos, o volume médio diário foi de 11,1 milhões de contratos, retração de 8,3% contra o segundo trimestre de 2025."
+          gancho_visual: "Seta para baixo sobre contratos"
+          claim_ids: [C08]
+        - inicio_s: 38
+          fim_s: 54
+          fala: "A queda veio da alta dos juros, que afastou os investidores dos contratos de derivativos."
+          gancho_visual: "Gráfico de juros subindo"
+          claim_ids: [C09]
+        - inicio_s: 54
+          fim_s: 60
+          fala: "Vale acompanhar os dois mercados nos próximos resultados da B3."
+          gancho_visual: "Logo da B3"
+          claim_ids: []
+
+  - id: copom-avancado-artigo-ok
+    fonte: copom
+    nivel: avancado
+    formato: artigo
+    erro: null
+    analogias: []
+    payload:
+      titulo: "Copom reduz a Selic para 13,75% e preserva o caráter restritivo"
+      linha_fina: "Expectativas desancoradas e balanço de riscos assimétrico sustentam a calibragem"
+      secoes:
+        - texto: "O Copom decidiu reduzir a meta para a taxa Selic para 13,75% a.a. e reiterou que a magnitude do ciclo de calibração será ajustada à luz da evolução do cenário, de forma a manter a restrição adequada para assegurar a convergência da inflação à meta."
+          claim_ids: [C27, C26]
+        - texto: "Na avaliação do Comitê, a inflação permanece pressionada pela demanda, o que exige que a política monetária mantenha caráter restritivo. Em um ambiente de expectativas desancoradas, exige-se restrição monetária maior e por mais tempo do que outrora seria apropriado."
+          claim_ids: [C24, C14]
+        - texto: "O Copom avalia que os riscos para a inflação permanecem mais elevados que o usual, com assimetria altista. No cenário de referência, a projeção para o primeiro trimestre de 2028, horizonte relevante de política monetária, é de 3,2%."
+          claim_ids: [C21, C20]
+
+  - id: copom-avancado-artigo-causa
+    fonte: copom
+    nivel: avancado
+    formato: artigo
+    erro: causa_inventada
+    unidade_erro: 1
+    analogias: []
+    payload:
+      titulo: "Copom reduz a Selic para 13,75% e preserva o caráter restritivo"
+      linha_fina: "Expectativas desancoradas e balanço de riscos assimétrico sustentam a calibragem"
+      secoes:
+        - texto: "O Copom decidiu reduzir a meta para a taxa Selic para 13,75% a.a. e reiterou que a magnitude do ciclo de calibração será ajustada à luz da evolução do cenário, de forma a manter a restrição adequada para assegurar a convergência da inflação à meta."
+          claim_ids: [C27, C26]
+        - texto: "Segundo o Comitê, o corte reflete a reancoragem das expectativas de inflação, que abriu espaço para afrouxar a política monetária mais rapidamente do que outrora seria apropriado."
+          claim_ids: [C14]
+        - texto: "O Copom avalia que os riscos para a inflação permanecem mais elevados que o usual, com assimetria altista. No cenário de referência, a projeção para o primeiro trimestre de 2028, horizonte relevante de política monetária, é de 3,2%."
+          claim_ids: [C21, C20]
+
+  - id: b3-avancado-carrossel-ok
+    fonte: b3
+    nivel: avancado
+    formato: carrossel
+    erro: null
+    analogias: []
+    payload:
+      slides:
+        - papel: gancho
+          texto: "B3 no 2T26: margem EBITDA recorrente de 70,2% e alavancagem de 2,0x"
+          claim_ids: []
+        - papel: corpo
+          texto: "EBITDA recorrente de R$1.938,6 milhões (+13,0% a/a), com margem de 70,2% e expansão de 47 bps."
+          claim_ids: [C68]
+        - papel: corpo
+          texto: "Lucro líquido recorrente de R$1.376,6 milhões, 8,0% acima do 2T25."
+          claim_ids: [C77]
+        - papel: corpo
+          texto: "Alíquota efetiva sobre o LAIR ajustado, ex-hedge, de 16,8% ante 26,3% no 2T25: variação de -951 bps."
+          claim_ids: [C73]
+        - papel: corpo
+          texto: "Endividamento bruto de R$14,9 bilhões, 83% no longo prazo, equivalente a 2,0x o EBITDA recorrente dos últimos 12 meses."
+          claim_ids: [C83]
+        - papel: conclusao
+          texto: "Os números completos estão no release de resultados do 2T26 da B3."
+          claim_ids: []
+
+  - id: b3-avancado-carrossel-numero
+    fonte: b3
+    nivel: avancado
+    formato: carrossel
+    erro: numero_por_extenso
+    unidade_erro: 1
+    analogias: []
+    payload:
+      slides:
+        - papel: gancho
+          texto: "B3 no 2T26: EBITDA recorrente em alta e alavancagem de 2,0x"
+          claim_ids: []
+        - papel: corpo
+          texto: "EBITDA recorrente de R$1.938,6 milhões (+13,0% a/a), com margem de setenta e dois por cento e expansão de 47 bps."
+          claim_ids: [C68]
+        - papel: corpo
+          texto: "Lucro líquido recorrente de R$1.376,6 milhões, 8,0% acima do 2T25."
+          claim_ids: [C77]
+        - papel: corpo
+          texto: "Alíquota efetiva sobre o LAIR ajustado, ex-hedge, de 16,8% ante 26,3% no 2T25: variação de -951 bps."
+          claim_ids: [C73]
+        - papel: corpo
+          texto: "Endividamento bruto de R$14,9 bilhões, 83% no longo prazo, equivalente a 2,0x o EBITDA recorrente dos últimos 12 meses."
+          claim_ids: [C83]
+        - papel: conclusao
+          texto: "Os números completos estão no release de resultados do 2T26 da B3."
+          claim_ids: []
+
+  - id: copom-avancado-roteiro-ok
+    fonte: copom
+    nivel: avancado
+    formato: roteiro
+    erro: null
+    analogias: []
+    payload:
+      cenas:
+        - inicio_s: 0
+          fim_s: 6
+          fala: "Copom corta a Selic: o que o Comitê diz sobre choques de oferta e balanço de riscos."
+          gancho_visual: "Trecho do comunicado do Copom em destaque"
+          claim_ids: []
+        - inicio_s: 6
+          fim_s: 18
+          fala: "O Comitê reduziu a meta para a taxa Selic para 13,75% a.a."
+          gancho_visual: "Gráfico da trajetória da Selic"
+          claim_ids: [C27]
+        - inicio_s: 18
+          fim_s: 34
+          fala: "Sobre choques de oferta, o Copom avalia que não deve reagir aos efeitos primários, mas que é necessário monitorar e reagir com firmeza caso efeitos de segunda ordem se materializem."
+          gancho_visual: "Diagrama de efeitos primários e de segunda ordem"
+          claim_ids: [C25]
+        - inicio_s: 34
+          fim_s: 46
+          fala: "No cenário de referência, a projeção de inflação para o primeiro trimestre de 2028, horizonte relevante, é de 3,2%."
+          gancho_visual: "Tabela de projeções do cenário de referência"
+          claim_ids: [C20]
+        - inicio_s: 46
+          fim_s: 56
+          fala: "Entre os riscos de baixa citados pelo Comitê estão uma desaceleração doméstica mais acentuada que a projetada e a redução nos preços das commodities."
+          gancho_visual: "Balanço de riscos com os fatores de baixa"
+          claim_ids: [C23]
+        - inicio_s: 56
+          fim_s: 60
+          fala: "Os detalhes estão na ata completa do Copom."
+          gancho_visual: "Capa da ata"
+          claim_ids: []
+
+  - id: copom-avancado-roteiro-projecao
+    fonte: copom
+    nivel: avancado
+    formato: roteiro
+    erro: projecao_como_fato
+    unidade_erro: 3
+    analogias: []
+    payload:
+      cenas:
+        - inicio_s: 0
+          fim_s: 6
+          fala: "Copom corta a Selic: o que o Comitê diz sobre choques de oferta e balanço de riscos."
+          gancho_visual: "Trecho do comunicado do Copom em destaque"
+          claim_ids: []
+        - inicio_s: 6
+          fim_s: 18
+          fala: "O Comitê reduziu a meta para a taxa Selic para 13,75% a.a."
+          gancho_visual: "Gráfico da trajetória da Selic"
+          claim_ids: [C27]
+        - inicio_s: 18
+          fim_s: 34
+          fala: "Sobre choques de oferta, o Copom avalia que não deve reagir aos efeitos primários, mas que é necessário monitorar e reagir com firmeza caso efeitos de segunda ordem se materializem."
+          gancho_visual: "Diagrama de efeitos primários e de segunda ordem"
+          claim_ids: [C25]
+        - inicio_s: 34
+          fim_s: 46
+          fala: "A inflação vai convergir para 3,2% no primeiro trimestre de 2028, o horizonte relevante: a desinflação já está garantida."
+          gancho_visual: "Tabela de projeções do cenário de referência"
+          claim_ids: [C20]
+        - inicio_s: 46
+          fim_s: 56
+          fala: "Entre os riscos de baixa citados pelo Comitê estão uma desaceleração doméstica mais acentuada que a projetada e a redução nos preços das commodities."
+          gancho_visual: "Balanço de riscos com os fatores de baixa"
+          claim_ids: [C23]
+        - inicio_s: 56
+          fim_s: 60
+          fala: "Os detalhes estão na ata completa do Copom."
+          gancho_visual: "Capa da ata"
+          claim_ids: []
+
+  - id: cvm-intermediario-artigo-ok
+    fonte: cvm
+    nivel: intermediario
+    formato: artigo
+    erro: null
+    analogias: []
+    payload:
+      titulo: "Sabesp incorpora as ações da EMAE: veja o calendário"
+      linha_fina: "Datas previstas para o direito de retirada, o reembolso e o crédito das novas ações"
+      secoes:
+        - texto: "A Sabesp fará a incorporação da totalidade das ações de emissão da EMAE que ainda não detém. Em contrapartida, os acionistas da EMAE receberão ações ordinárias de emissão da Sabesp."
+          claim_ids: [C01]
+        - texto: "Pelo cronograma divulgado, o prazo para o exercício do direito de retirada pelos acionistas da EMAE está previsto para se encerrar em 19/10, com o pagamento do reembolso previsto para 21/10."
+          claim_ids: [C02, C03]
+        - texto: "O último dia de negociação das ações da EMAE na B3 está previsto para 23/10, e o crédito das ações da Sabesp aos acionistas da EMAE, para 27/10. A confirmação sobre eventuais frações está prevista para 04/11."
+          claim_ids: [C04, C05, C06]
+
+  - id: cvm-avancado-carrossel-projecao
+    fonte: cvm
+    nivel: avancado
+    formato: carrossel
+    erro: projecao_como_fato
+    unidade_erro: 3
+    analogias: []
+    payload:
+      slides:
+        - papel: gancho
+          texto: "Incorporação de ações da EMAE pela Sabesp: o cronograma"
+          claim_ids: []
+        - papel: corpo
+          texto: "A Sabesp incorporará a totalidade das ações de emissão da EMAE que não detém, com a entrega de ações ordinárias da Sabesp aos acionistas da EMAE."
+          claim_ids: [C01]
+        - papel: corpo
+          texto: "Direito de retirada: prazo de exercício previsto até 19/10; reembolso previsto para 21/10."
+          claim_ids: [C02, C03]
+        - papel: corpo
+          texto: "As ações da EMAE já deixaram de ser negociadas na B3 em 23/10, e as ações da Sabesp já foram creditadas aos acionistas da EMAE em 27/10."
+          claim_ids: [C04, C05]
+        - papel: conclusao
+          texto: "Frações: confirmação da B3 e do Novo Escriturador prevista para 04/11."
+          claim_ids: [C06]

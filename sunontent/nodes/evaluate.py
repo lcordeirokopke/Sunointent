@@ -3,9 +3,9 @@
 As 4 verificações determinísticas rodam sempre, todas: M1 (`numeric_fidelity`), M2 (`text_size`), M5
 (`analogy_rule`) e o `plan_contract` que a montagem da E5.3 deixou na célula. O juiz (M6) só roda se as 4 passarem
 e se config["configurable"] traz um `juiz`; sem ele, o scorecard tem as 4. Os claims do plano do nível e a
-`tabela_numeros` vêm do FactSheet assinado. O veredito é da tentativa: APROVADA se tudo passou, REPROVADA se algo
-falhou, ERRO_INFRA se o juiz falhou com a peça existente. Scorecard, métricas e violações vão numa transação
-(docs/fluxos/avaliacao.md).
+`tabela_numeros` vêm do FactSheet assinado; os chunks do juiz, do documento processado da E1. O veredito é da
+tentativa: APROVADA se tudo passou, REPROVADA se algo falhou, ERRO_INFRA se o juiz (ou a leitura dos chunks)
+falhou com a peça existente. Scorecard, métricas e violações vão numa transação (docs/fluxos/avaliacao.md).
 
 Uma `Falha` (leitura, juiz ou gravação) não sobe: vai para `falha` no estado, e a E7 grava a célula em ERRO_INFRA.
 O nó não grava estado de célula. Dependências vêm de config["configurable"]: repositorio, raiz_dados, raiz e,
@@ -59,7 +59,8 @@ def evaluate(state: CelulaGrafoState, config) -> dict:
         juiz = configuravel.get("juiz")
         if veredito == "APROVADA" and juiz is not None:
             try:
-                m6 = juiz(peca, plano_nivel, factsheet, glossario, run_id=run_id, registrar_span=registrar_span)
+                chunks = persistencia.carregar_documento_processado(repositorio, run_id).chunks
+                m6 = juiz(peca, plano_nivel, factsheet, chunks, glossario, run_id=run_id, registrar_span=registrar_span)
             except Falha as erro:
                 falha, veredito = erro, "ERRO_INFRA"
             else:

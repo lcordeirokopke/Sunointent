@@ -1,3 +1,15 @@
+/* Fonte do slide em SVG (Inter, licença OFL): o mesmo .ttf que o servidor usa para medir as linhas. */
+@font-face {
+  font-family: "Inter";
+  font-weight: 400;
+  src: url("/static/fontes/Inter-Regular.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Inter";
+  font-weight: 700;
+  src: url("/static/fontes/Inter-Bold.ttf") format("truetype");
+}
+
 :root {
   --fundo: #0d1117;
   --superficie: #151b23;
@@ -465,3 +477,46 @@ details.descartes .tabela-rolagem { margin-top: 8px; }
 .minigrade i[data-estado="ERRO_INFRA"] { background: var(--erro); border-color: var(--erro); }
 .grade-celulas td { min-width: 130px; }
 .grade-celulas td .final { display: block; margin-top: 4px; }
+
+/* Matriz 3x3 */
+.matriz-grade { width: 100%; border-collapse: separate; border-spacing: 8px; table-layout: fixed; }
+.matriz-grade th { color: var(--texto-suave); font-weight: 600; text-align: left; padding: 4px 8px; }
+.matriz-celula {
+  width: 100%; text-align: left; cursor: pointer; font: inherit; color: inherit;
+  background: var(--superficie-2); border: 1px solid var(--borda); border-radius: var(--raio); padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.matriz-celula[aria-pressed="true"] { border-color: var(--acento); box-shadow: 0 0 0 2px var(--acento-fundo); }
+.matriz-celula .linha-metricas { display: flex; flex-wrap: wrap; gap: 4px; }
+.matriz-celula .tentativa { color: var(--texto-suave); font-size: 12px; }
+.metrica-chip { font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--ok-fundo); color: var(--ok); }
+.metrica-chip.reprovou { background: var(--erro-fundo); color: var(--erro); }
+.metrica-chip.ausente { background: var(--superficie); color: var(--texto-fraco); }
+.barra-tentativas { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+.peca-unidade { border-top: 1px solid var(--borda); padding: 10px 0; }
+.peca-unidade .rotulo-unidade { color: var(--texto-suave); font-size: 12px; margin-bottom: 4px; }
+.peca-texto { white-space: pre-wrap; line-height: 1.6; }
+.peca-texto mark.numero { background: none; color: inherit; border-bottom: 2px solid var(--acento); }
+.peca-texto mark.violacao { background: var(--erro-fundo); color: var(--erro); border-radius: 3px; padding: 0 2px; }
+.rastro { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; font-size: 12px; color: var(--texto-suave); }
+.rastro .item { border: 1px solid var(--borda); border-radius: 6px; padding: 2px 8px; background: var(--superficie-2); }
+.violacao-item { border-left: 3px solid var(--erro); padding: 4px 10px; margin: 6px 0; background: var(--erro-fundo); border-radius: 0 6px 6px 0; }
+.violacao-item .instrucao { color: var(--texto-suave); font-size: 12px; }
+
+/* Slide em SVG */
+.slide-bloco { display: inline-block; vertical-align: top; width: 270px; margin: 0 12px 16px 0; }
+.slide-bloco .quadro { border: 1px solid var(--borda); border-radius: 8px; overflow: hidden; line-height: 0; }
+.slide-bloco svg { width: 100%; height: auto; display: block; }
+.slide-bloco .acoes { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; font-size: 12px; }
+.slide-bloco .estouro { color: var(--erro); font-size: 12px; margin-top: 4px; }
+.slide-bloco a.botao { text-decoration: none; }
+
+/* Revisão da quarentena */
+.revisao { display: grid; gap: 10px; margin-top: 10px; }
+.revisao textarea, .revisao input[type="text"] {
+  width: 100%; font: inherit; color: inherit; background: var(--superficie-2);
+  border: 1px solid var(--borda); border-radius: 6px; padding: 6px 8px;
+}
+.revisao .linha-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
+.revisao .numero-revisao { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; align-items: center; }
+

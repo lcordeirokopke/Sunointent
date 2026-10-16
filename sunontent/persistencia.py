@@ -35,7 +35,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Mapping, Protocol
+from typing import Mapping, Protocol, Sequence
 
 from sunontent.retentativa import Falha, FalhaRetriavel, FalhaTerminal, com_retentativa
 from sunontent.schemas import (
@@ -1452,9 +1452,27 @@ class ConsultaSupabase:
 
         return self._executar(consulta)
 
+    def niveis_percebidos(self, run_ids: Sequence[str] | None = None) -> list[dict]:
+        """Para a matriz de confusão de níveis: o `nivel_percebido` da última tentativa julgada de cada célula,
+        com o nível pedido e o formato (`run_id`, `celula_id`, `nivel`, `formato`, `tentativa` e
+        `nivel_percebido`). Sem `run_ids`, todos os runs."""
+
+        def consulta(conexao):
+            filtro, parametros = ("and m.run_id = any(%s)", (list(run_ids),)) if run_ids else ("", ())
+            return conexao.execute(
+                "select distinct on (m.run_id, m.celula_id) m.run_id, m.celula_id, c.nivel::text as nivel,"
+                " c.formato::text as formato, m.tentativa, m.detalhes->>'nivel_percebido' as nivel_percebido"
+                " from metricas m join celulas c on c.run_id = m.run_id and c.celula_id = m.celula_id"
+                f" where m.nome = 'llm_judge' {filtro}"
+                " order by m.run_id, m.celula_id, m.tentativa desc",
+                parametros,
+            ).fetchall()
+
+        return self._executar(consulta)
+
     def detalhar_run(self, run_id: str) -> dict | None:
         """Run, documento processado (resumido), FactSheet, validações por rodada, quarentena, spans, plano
-        editorial e rodadas do gate do plano.
+        editorial, rodadas do gate do plano e as células (peças, números usados e scorecards por tentativa).
 
         None se o run não existe.
         """
@@ -1483,9 +1501,81 @@ class ConsultaSupabase:
                 ).fetchall(),
                 "plano": self._plano(conexao, run_id),
                 "validacoes_plano": self._validacoes_plano(conexao, run_id),
+                "celulas": self._celulas(conexao, run_id),
             }
 
         return self._executar(consulta)
+
+    def peca(self, run_id: str, celula_id: str, tentativa: int | None = None) -> dict | None:
+        """Peça de uma célula (`celula_id`, `tentativa`, `formato`, `payload` e `claim_ids`); sem `tentativa`, a
+        última gravada. None se a célula não tem essa peça."""
+
+        def consulta(conexao):
+            filtro, parametros = ("and tentativa = %s", (tentativa,)) if tentativa is not None else ("", ())
+            return conexao.execute(
+                "select celula_id, tentativa, formato::text as formato, payload, claim_ids from pecas"
+                f" where run_id = %s and celula_id = %s {filtro} order by tentativa desc limit 1",
+                (run_id, celula_id, *parametros),
+            ).fetchone()
+
+        return self._executar(consulta)
+
+    @staticmethod
+    def _celulas(conexao, run_id: str) -> list[dict]:
+        """As células do run com o estado e, por tentativa, a peça, os números usados e o scorecard (métricas e
+        violações com a posição). Vazio antes de a E4 gravar o plano."""
+        celulas = conexao.execute(
+            "select celula_id, nivel::text as nivel, formato::text as formato, estado::text as estado, tentativa,"
+            " motivo_reprovacao::text as motivo_reprovacao, erro_classe::text as erro_classe, erro_mensagem"
+            " from celulas where run_id = %s order by celula_id",
+            (run_id,),
+        ).fetchall()
+        tentativas: dict[str, dict[int, dict]] = {}
+        for p in conexao.execute(
+            "select celula_id, tentativa, payload, claim_ids from pecas where run_id = %s order by tentativa",
+            (run_id,),
+        ):
+            tentativas.setdefault(p["celula_id"], {})[p["tentativa"]] = {
+                "tentativa": p["tentativa"], "payload": p["payload"], "claim_ids": p["claim_ids"],
+                "numeros_usados": [], "scorecard": None,
+            }
+        for n in conexao.execute(
+            "select celula_id, tentativa, campo::text as campo, unidade_indice, inicio, fim, claim_id, ordem"
+            " from peca_unidade_numeros where run_id = %s order by celula_id, tentativa, unidade_indice, inicio",
+            (run_id,),
+        ):
+            tentativas[n["celula_id"]][n["tentativa"]]["numeros_usados"].append(
+                {k: n[k] for k in ("campo", "unidade_indice", "inicio", "fim", "claim_id", "ordem")}
+            )
+        violacoes: dict[int, list[dict]] = {}
+        for v in conexao.execute(
+            "select v.metrica_id, v.metrica::text as metrica, v.trecho, v.esperado, v.obtido, v.instrucao_corretiva,"
+            " v.unidade_indice, v.campo::text as campo, v.inicio, v.fim from violacoes v join metricas m"
+            " on m.id = v.metrica_id where m.run_id = %s order by v.id",
+            (run_id,),
+        ):
+            violacoes.setdefault(v.pop("metrica_id"), []).append(v)
+        for s in conexao.execute(
+            "select celula_id, tentativa, veredito::text as veredito, custo_tokens, duracao_ms from scorecards"
+            " where run_id = %s",
+            (run_id,),
+        ):
+            tentativas[s["celula_id"]][s["tentativa"]]["scorecard"] = {
+                "veredito": s["veredito"], "custo_tokens": s["custo_tokens"], "duracao_ms": s["duracao_ms"],
+                "metricas": [],
+            }
+        for m in conexao.execute(
+            "select id, celula_id, tentativa, nome::text as nome, valor_num, valor_bool, faixa_esperada, passou,"
+            " detalhes from metricas where run_id = %s order by id",
+            (run_id,),
+        ):
+            tentativas[m["celula_id"]][m["tentativa"]]["scorecard"]["metricas"].append({
+                "nome": m["nome"],
+                "valor": m["valor_bool"] if m["valor_bool"] is not None else m["valor_num"],
+                "faixa_esperada": m["faixa_esperada"], "passou": m["passou"], "detalhes": m["detalhes"],
+                "violacoes": violacoes.get(m["id"], []),
+            })
+        return [{**c, "tentativas": list(tentativas.get(c["celula_id"], {}).values())} for c in celulas]
 
     @staticmethod
     def _documento(conexao, run_id: str) -> dict | None:

@@ -82,14 +82,13 @@ def test_manifest_le_versoes_e_hashes_da_config(raiz):
         for n in ("iniciante", "intermediario", "avancado")}
     glossario = yaml.safe_load((raiz / "config" / "glossario.yaml").read_text(encoding="utf-8"))
     assert m.glossario_versao == glossario["versao"]
-    # templates vazios ficam de fora
     assert m.prompts == {
         "adapter": versao_prompt(raiz, "adapter"), "extractor": versao_prompt(raiz, "extractor"),
-        "synthesizer": versao_prompt(raiz, "synthesizer"),
+        "synthesizer": versao_prompt(raiz, "synthesizer"), "judge": versao_prompt(raiz, "judge"),
     }
     assert set(m.arquivos_sha256) == {
         "config/models.yaml", "config/glossario.yaml", "prompts/extractor.j2", "prompts/adapter.j2",
-        "prompts/synthesizer.j2", "config/levels/iniciante.yaml", "config/levels/intermediario.yaml", "config/levels/avancado.yaml",
+        "prompts/synthesizer.j2", "prompts/judge.j2", "config/levels/iniciante.yaml", "config/levels/intermediario.yaml", "config/levels/avancado.yaml",
     }
 
 
@@ -114,6 +113,7 @@ def test_template_com_cabecalho_entra_no_manifest(raiz):
     m = manifesto.montar(raiz, run_id="x", timestamp=MOMENTO, modo="normal", fonte="copom", k=2, max_concorrencia=3)
     assert m.prompts == {
         "adapter": 3, "extractor": versao_prompt(raiz, "extractor"), "synthesizer": versao_prompt(raiz, "synthesizer"),
+        "judge": versao_prompt(raiz, "judge"),
     }
     assert "prompts/adapter.j2" in m.arquivos_sha256
 
@@ -319,6 +319,7 @@ def test_sem_fonte_o_cli_roda_as_tres(monkeypatch, repo):
     monkeypatch.setattr(principal, "executar", falso)
     monkeypatch.setattr(principal.llm, "criar_cliente", lambda raiz, ambiente: None)
     monkeypatch.setenv("GOOGLE_API_KEY_PRINC", "chave-de-teste")
+    monkeypatch.setenv("API_KEY_ROUTER", "chave-de-teste")
     monkeypatch.setattr(principal.persistencia, "criar_repositorio_supabase", lambda ambiente: repo)
     monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://localhost/x")
     monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **k: None)

@@ -90,7 +90,7 @@ Os termos ficam agrupados por categoria, cada grupo aberto por um comentário (`
 | E4.3, gate | `jargao_sem_analogia`: todo termo acima de iniciante nos claims usados do Iniciante tem analogia no plano. `analogia_invalida`: a analogia `nova` não só repete as formas do termo. `motivo_invalido`: `exige_base_tecnica` só vale para claim com termo de `nivel_minimo` acima do nível, o que nunca acontece no Avançado. `tese_invalida`: a tese do Iniciante não tem termo acima de iniciante, e as formas dos termos ficam fora da busca de números da tese (o 15 de IPCA-15). |
 | E4.3, limpeza | depois da última rodada, o claim do Iniciante com termo sem analogia sai do nível como `exige_base_tecnica`, e as analogias ficam só para os termos dos claims que restaram. |
 | M5 | no Iniciante, todo termo acima de iniciante encontrado no texto precisa de `Analogia` no plano e de um marcador de analogia (`analogia.marcadores` do LevelSpec do Iniciante) na mesma unidade da primeira ocorrência, casando o termo pela [regra de casamento](#casamento-no-texto). |
-| M6 | pode receber a definição do termo como referência ao julgar se a analogia está correta. |
+| M6 | recebe a `definicao_tecnica` do termo de cada analogia do plano usada na peça, como referência para julgar se a analogia está correta (`docs/metricas.md`, M6). |
 
 Na `Analogia` do plano, `origem` é `glossario` ou `nova`, `glossario_ref` guarda a referência `<id>#<n>`, e `revisada` é `true` só para analogia do glossário com `status: aprovada`.
 
