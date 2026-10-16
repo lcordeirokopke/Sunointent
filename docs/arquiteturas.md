@@ -730,7 +730,7 @@ O relatório corretivo tem três partes, nesta ordem:
 
 ## Regras do loop
 
-- `K` é pequeno e rígido. `K=2` é o ponto de partida: uma tentativa de correção. `K` alto mascara prompt ruim e queima orçamento.
+- `K` é pequeno e rígido. `K=3` é o ponto de partida: até duas tentativas de correção. `K` alto mascara prompt ruim e queima orçamento.
 - O contador é **por célula**. 9 células, 9 contadores independentes.
 - Aborto antecipado por não-convergência, só com `K >= 3`: a tentativa que não melhora a anterior (as mesmas métricas reprovadas, ou mais, e nenhuma contagem de violações menor) encerra a célula como `REPROVADA`.
 - Retry é da E5 para a E6, **nunca** volta para a 4 ou a 2. Regerar o plano no retry mudaria a seleção de claims e faria a célula divergir das outras duas do mesmo nível, que compartilham aquele plano.
@@ -990,7 +990,7 @@ A referência de uma analogia é a sua posição na lista do termo (`selic#1`). 
 
 Escolher esta arquitetura não faz os problemas dela desaparecerem. Estes são os que ficam:
 
-- **Custo por documento:** 1 extração + 1 plano + 9 sínteses + até 9 juízes = **20 chamadas** no caminho feliz, mais até 2 correções do plano quando o gate acusa problema. Retry custa 1 síntese mais, no máximo, 1 juiz. Com `K=2` e cerca de 30% de falha na primeira passada, esperar **24 a 32 chamadas**, porque o retry é isolado por célula.
+- **Custo por documento:** 1 extração + 1 plano + 9 sínteses + até 9 juízes = **20 chamadas** no caminho feliz, mais até 2 correções do plano quando o gate acusa problema. Retry custa 1 síntese mais, no máximo, 1 juiz. Com `K=3`, cerca de 30% de falha na primeira passada (3 das 9 células) e metade delas falhando de novo na segunda (1 a 2 células), são 4 a 5 retries de 1 a 2 chamadas cada: esperar **25 a 32 chamadas**, porque o retry é isolado por célula. O teto, com as 9 células usando as 3 tentativas e o juiz em todas, é de 1 extração + 1 plano + 27 sínteses + 27 juízes = **56 chamadas**, mais até 2 correções do plano.
 - **Latência:** caminho crítico de 4 chamadas sequenciais (extração, plano, síntese, juiz), porque as 9 sínteses são paralelas. Estimativa de 30 a 60s por documento, mais retries.
 - **Duplicação de prompt** entre os níveis e entre as 9 células do synthesizer é o risco de manutenção mais concreto. Mitigação: um template por etapa, parametrizado por LevelSpec e por contrato de formato. Se aparecerem arquivos de prompt por nível ou por célula, a arquitetura já degradou.
 - **Nove sínteses parecidas** são gasto real. A alternativa (um synthesizer que gera os 3 formatos numa chamada) economiza chamadas e destrói o isolamento de retry por célula: uma violação no roteiro obrigaria a reescrever o artigo. O isolamento vale o gasto.

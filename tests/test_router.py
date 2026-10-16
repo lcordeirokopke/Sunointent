@@ -109,13 +109,14 @@ def test_correcao_acontece_na_tentativa_2(com_plano, run_id, tmp_path):
     assert (pasta / "scorecard_1.json").exists() and (pasta / "peca_2.json").exists()
 
 
-def test_k_esgotado_reprova_com_o_relatorio_da_ultima_tentativa(com_plano, run_id, tmp_path):
+def test_sem_melhora_na_tentativa_2_reprova_por_nao_convergencia(com_plano, run_id, tmp_path):
     final, provider = rodar(com_plano, run_id, tmp_path, [REPROVADA_1, REPROVADA_1])
 
-    assert (final.celula.estado, final.celula.motivo_reprovacao, final.celula.tentativa) == ("REPROVADA", "k_esgotado", 2)
+    assert (final.celula.estado, final.celula.motivo_reprovacao, final.celula.tentativa) == (
+        "REPROVADA", "nao_convergencia", 2)
     assert len(provider.prompts) == 2
     gravada = com_plano.celulas[(run_id, CELULA)]
-    assert (gravada.estado, gravada.motivo_reprovacao) == ("REPROVADA", "k_esgotado")
+    assert (gravada.estado, gravada.motivo_reprovacao) == ("REPROVADA", "nao_convergencia")
     assert final.celula.scorecard.veredito == "REPROVADA"
 
 
@@ -272,6 +273,14 @@ def test_regra_5_so_age_com_k_maior_ou_igual_a_3(com_plano, run_id, tmp_path):
     saida = router(estado_avaliado(2, scorecard(2, contrato(1))), configuracao, K=3)
     assert "celula" not in saida and saida["relatorio"].violacoes[0].trecho == "t0"
     assert com_plano.chamadas.get("atualizar_celula", 0) == gravacoes
+
+
+def test_k_esgotado_na_tentativa_3_mesmo_com_melhora(com_plano, run_id, tmp_path):
+    configuracao = {"configurable": {"repositorio": com_plano, "raiz_dados": tmp_path}}
+    com_plano.carregar_scorecard = lambda r, c, t: scorecard(2, contrato(2))
+
+    saida = router(estado_avaliado(3, scorecard(3, contrato(1))), configuracao, K=3)
+    assert (saida["celula"].estado, saida["celula"].motivo_reprovacao) == ("REPROVADA", "k_esgotado")
 
 
 def test_router_sem_scorecard_da_tentativa_e_bug(com_plano, tmp_path):

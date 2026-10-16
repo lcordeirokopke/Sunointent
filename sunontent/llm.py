@@ -209,8 +209,10 @@ class ClienteLLM:
                     span(inicio, classe=falha.classe, mensagem=mensagem)
                     falhas.append((falha, mensagem))
                     if posicao + 1 < len(providers):
+                        print(_cor(f"{no} ({modelo}): {mensagem}", "31"), file=sys.stderr, flush=True)
+                        proxima = providers[posicao + 1][0]
                         print(
-                            f"{no} ({modelo}): {mensagem}; chamando {providers[posicao + 1][0]}",
+                            _cor(f"{no} ({modelo}): testando chave {_rotulo_chave(proxima)}", "32"),
                             file=sys.stderr,
                             flush=True,
                         )
@@ -263,6 +265,15 @@ class ClienteLLM:
 
 def _com_chave(chave: str, mensagem: str) -> str:
     return f"{chave}: {mensagem}" if chave else mensagem
+
+
+def _cor(texto: str, codigo: str) -> str:
+    """Cor ANSI só quando o stderr é um terminal; o dashboard lê o stderr por pipe e recebe o texto puro."""
+    return f"\033[{codigo}m{texto}\033[0m" if sys.stderr.isatty() else texto
+
+
+def _rotulo_chave(chave: str) -> str:
+    return chave.rsplit("_", 1)[-1].lower()
 
 
 def _resumo_validacao(erro: ValidationError, limite: int = 10) -> str:

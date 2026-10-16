@@ -131,10 +131,12 @@ function htmlBiblioteca() {
     const aberto = biblioteca.abertos.has(chave);
     return `<div class="cartao biblioteca-item">
       <button type="button" class="biblioteca-cabecalho" data-peca="${esc(chave)}" aria-expanded="${aberto}">
-        <span class="biblioteca-titulo">${esc(i.titulo ?? `${nomeFormato[i.formato] ?? i.formato} · ${nomeNivel[i.nivel] ?? i.nivel}`)}</span>
-        <span class="biblioteca-meta">${esc(nomeFormato[i.formato] ?? i.formato)} · ${esc(nomeNivel[i.nivel] ?? i.nivel)} ·
-          ${esc(String(i.fonte).toUpperCase())} · ${esc(fmtData(i.timestamp))} · <span class="mono">${esc(i.run_id)}</span></span>
-        ${selo(i.estado)}
+        <span class="biblioteca-titulo">${esc(i.titulo ?? "Sem texto")}</span>
+        <span class="biblioteca-tags">
+          <span class="tag">${esc(nomeFormato[i.formato] ?? i.formato)} ${esc((nomeNivel[i.nivel] ?? i.nivel).toLowerCase())}</span>
+          ${selo(i.estado)}</span>
+        <span class="biblioteca-meta">${esc(String(i.fonte).toUpperCase())} · ${esc(fmtData(i.timestamp))} ·
+          <span class="mono">${esc(i.run_id)}</span></span>
       </button>
       ${aberto ? `<div class="biblioteca-corpo">${corpoDaPeca(i)}</div>` : ""}</div>`;
   }).join("");

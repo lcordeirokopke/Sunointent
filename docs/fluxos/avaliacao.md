@@ -19,7 +19,7 @@ router -> synth       (retry: o relatório corretivo volta à E5)
 router -> END         (APROVADA, REPROVADA ou ERRO_INFRA)
 ```
 
-O `K` (2) é a constante de `sunontent/graph.py`, a mesma que entra no `RunManifest`, e chega ao nó por `partial(router, K=K)`. As dependências vêm de `config["configurable"]`: `repositorio`, `raiz_dados`, `raiz` e `llm`, como na E5, e, opcional, `juiz`.
+O `K` (3) é a constante de `sunontent/graph.py`, a mesma que entra no `RunManifest`, e chega ao nó por `partial(router, K=K)`. As dependências vêm de `config["configurable"]`: `repositorio`, `raiz_dados`, `raiz` e `llm`, como na E5, e, opcional, `juiz`.
 
 O `CelulaGrafoState` leva, além do `run_id`, da `CelulaState` e do `relatorio` do retry:
 
@@ -55,7 +55,7 @@ O juiz é chamado como `juiz(peca, plano_nivel, factsheet, chunks, glossario, ru
 | 3 | tentativa < `K` | relatório corretivo e volta à E5, sem gravar nada |
 | 4 | tentativa == `K` | `REPROVADA`, motivo `k_esgotado` |
 
-A regra 5 é avaliada antes das regras 3 e 4 e só com `K >= 3`; com o `K` de hoje (2), não age. "Não melhorou" é: as métricas reprovadas na anterior continuam reprovadas (podem aparecer mais) e nenhuma contagem de violações diminuiu. O scorecard da tentativa anterior é lido por `persistencia.carregar_scorecard`.
+A regra 5 é avaliada antes das regras 3 e 4 e só com `K >= 3`; com `K = 3`, age a partir da tentativa 2. "Não melhorou" é: as métricas reprovadas na anterior continuam reprovadas (podem aparecer mais) e nenhuma contagem de violações diminuiu. O scorecard da tentativa anterior é lido por `persistencia.carregar_scorecard`.
 
 O estado final (`APROVADA`, `REPROVADA` ou `ERRO_INFRA`) é gravado por `persistencia.atualizar_celula`, com a tentativa da última peça gerada (0 quando a E5 falhou antes da primeira peça). A E7 é o único nó que grava estado final de célula. No retry, a E7 não grava nada: a E5 grava `GERANDO` ao começar a tentativa seguinte.
 

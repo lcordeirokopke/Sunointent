@@ -30,7 +30,7 @@ from sunontent.nodes.synth import synth
 from sunontent.nodes.validate import validate
 from sunontent.schemas import ESTADOS_FINAIS, CelulaGrafoState, PipelineState
 
-K = 2  # orçamento de retry por célula; o valor lido no início do run entra no RunManifest
+K = 3  # orçamento de tentativas por célula (a primeira e até 2 correções); o valor lido no início do run entra no RunManifest
 RODADAS_EXTRACAO = 3  # loop E2/E3: a extração e até 2 correções; depois disso os reprovados vão para a quarentena
 RODADAS_PLANO = 3  # gate da E4, dentro do nó adapt: o plano e até 2 correções; depois disso o plano segue com aviso
 MAX_CONCORRENCIA = 3  # células em paralelo no fan-out; o valor lido no início do run entra no RunManifest

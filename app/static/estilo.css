@@ -646,6 +646,8 @@ details.descartes .tabela-rolagem { margin-top: 8px; }
 .cena .gancho { margin-top: 4px; color: var(--texto-suave); font-size: 12px; font-style: italic; }
 /* Início: balanço geral e peças salvas */
 #painel-inicio .secao-titulo { margin: 32px 0 12px; font-size: 24px; line-height: 1.2; font-weight: 800; }
+#inicio-balanco { display: grid; gap: 16px; }
+#inicio-balanco .secao-titulo { margin-bottom: 0; }
 .balanco-linha { margin: 12px 0 0; color: var(--texto-suave); }
 .biblioteca-filtros { display: flex; flex-wrap: wrap; gap: 16px 28px; align-items: flex-end; margin-bottom: 12px; }
 .biblioteca-filtros .campo { display: flex; flex-direction: column; gap: 6px; }
@@ -655,8 +657,13 @@ details.descartes .tabela-rolagem { margin-top: 8px; }
   width: 100%; padding: 14px 20px; border: 0; background: transparent; text-align: left; cursor: pointer; font: inherit; color: inherit;
 }
 .biblioteca-cabecalho:hover { background: var(--superficie-2); }
-.biblioteca-titulo { flex: 1 1 280px; font-weight: 700; font-size: 16px; color: #0f172a; overflow-wrap: anywhere; }
-.biblioteca-meta { flex: 1 1 100%; order: 3; color: var(--texto-suave); font-size: 13px; }
+.biblioteca-tags { flex: 1 1 100%; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.biblioteca-tags .tag {
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 3px 10px; border-radius: 999px; background: rgba(225, 25, 39, 0.1); color: var(--marca);
+}
+.biblioteca-titulo { flex: 1 1 100%; font-weight: 700; font-size: 16px; color: #0f172a; overflow-wrap: anywhere; }
+.biblioteca-meta { flex: 1 1 100%; color: var(--texto-suave); font-size: 13px; }
 .biblioteca-corpo { padding: 4px 20px 20px; border-top: 1px solid var(--borda); }
 .biblioteca-item .leitura h4 { font-size: 20px; }
 

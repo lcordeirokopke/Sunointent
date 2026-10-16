@@ -1513,13 +1513,15 @@ class ConsultaSupabase:
 
     def biblioteca(self) -> list[dict]:
         """Uma linha por célula com peça gravada, em todos os runs, na última tentativa e sem o conteúdo (`run_id`,
-        `celula_id`, `nivel`, `formato`, `estado`, `tentativa`, `titulo`, `fonte`, `timestamp`). Do run mais recente
+        `celula_id`, `nivel`, `formato`, `estado`, `tentativa`, `titulo`, `fonte`, `timestamp`). O `titulo` é o título do
+        artigo, o texto do primeiro slide do carrossel ou a fala da primeira cena do roteiro. Do run mais recente
         ao mais antigo."""
 
         def consulta(conexao):
             return conexao.execute(
                 'select p.run_id, p.celula_id, c.nivel::text as nivel, c.formato::text as formato,'
-                ' c.estado::text as estado, p.tentativa, p.payload->>\'titulo\' as titulo, r.fonte::text as fonte,'
+                " c.estado::text as estado, p.tentativa, coalesce(p.payload->>'titulo', p.payload->'slides'->0->>'texto',"
+                " p.payload->'cenas'->0->>'fala') as titulo, r.fonte::text as fonte,"
                 ' r."timestamp" from (select distinct on (run_id, celula_id) run_id, celula_id, tentativa, payload'
                 " from pecas order by run_id, celula_id, tentativa desc) p"
                 " join celulas c on c.run_id = p.run_id and c.celula_id = p.celula_id"
