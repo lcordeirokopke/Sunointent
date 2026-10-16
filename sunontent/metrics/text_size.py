@@ -5,7 +5,7 @@ Aritmética sobre o payload, com o contrato de formato do LevelSpec e a contagem
 - carrossel: caracteres de cada slide até o limite do papel;
 - roteiro: palavras de cada cena até a duração da cena vezes `palavras_por_segundo`, e o total até
   `duracao_s` vezes `palavras_por_segundo`.
-O valor é o número de unidades fora do limite. A quantidade de slides e a soma das cenas são do `plan_contract`.
+O valor é o número de unidades fora do limite. A quantidade de slides e a soma das cenas são do M7 (`plan_contract`).
 """
 
 import math

@@ -8,30 +8,34 @@ Este documento descreve as métricas que avaliam uma peça: o que cada uma confe
 | ---- | ------ | ---- | ------ |
 | `numeric_fidelity` | M1 | determinística | `sunontent/metrics/numeric_fidelity.py` |
 | `text_size` | M2 | determinística | `sunontent/metrics/text_size.py` |
+| `readability` | M3 | determinística | `sunontent/metrics/readability.py` |
+| `term_density` | M4 | determinística, só mede | `sunontent/metrics/term_density.py` |
 | `analogy_rule` | M5 | determinística | `sunontent/metrics/analogy_rule.py` |
-| `plan_contract` | sem número | determinística | calculada na montagem da E5.3 |
 | `llm_judge` | M6 | juiz LLM | `sunontent/metrics/llm_judge.py` |
+| `plan_contract` | M7 | determinística | calculada na montagem da E5.3 |
 
-O nível é medido pela regra de analogia (M5), pelo tamanho do artigo por nível (M2) e pelo nível percebido pelo juiz (M6). As métricas determinísticas não importam o cliente LLM: rodam sem pipeline, sem banco e sem rede. Só o juiz (`llm_judge.py`) chama o modelo, pelo `llm.py`.
+O nível é medido pela regra de analogia (M5), pelo tamanho do artigo por nível (M2), pela legibilidade (M3), pela densidade de termos (M4, que só mede) e pelo nível percebido pelo juiz (M6). A M7 (`plan_contract`) confere a estrutura da peça contra o plano. As métricas determinísticas não importam o cliente LLM: rodam sem pipeline, sem banco e sem rede. Só o juiz (`llm_judge.py`) chama o modelo, pelo `llm.py`.
 
 Arquivos de apoio em `sunontent/metrics/`:
 
-- `resultado.py`: `montar(detalhes, violacoes, faixa_esperada="0")` devolve o `MetricaResultado` de qualquer métrica;
+- `resultado.py`: `montar(detalhes, violacoes, faixa_esperada="0", valor=None)` devolve o `MetricaResultado` de qualquer métrica; o `valor` só é passado pelas métricas que medem uma grandeza (M3 e M4), e as outras valem o número de violações;
 - `campos.py`: `campos_da_peca(payload)` devolve os textos da peça, um por campo, e `nome_da_unidade(payload)` devolve `seção`, `slide` ou `cena`;
 - `contexto.py`: a recuperação de contexto do juiz, com o BM25 simples (seção M6);
-- `matriz_niveis.py`: a matriz de confusão de níveis e o comando que a imprime (seção M6).
+- `matriz_niveis.py`: as matrizes de confusão de níveis, a do juiz e a estatística, e o comando que as imprime (seção M6, Matriz de confusão de níveis).
 
-Fora da pasta, as métricas usam `sunontent/texto.py` (contagem de palavras e de caracteres), `sunontent/numeros.py` (leitura de número e de data), `sunontent/glossario.py` (casamento de termos) e `sunontent/levelspec.py` (limites e marcadores do nível).
+Fora da pasta, as métricas usam `sunontent/texto.py` (contagem de palavras, de caracteres, de sílabas e de frases), `sunontent/numeros.py` (leitura de número e de data), `sunontent/glossario.py` (casamento de termos) e `sunontent/levelspec.py` (limites e marcadores do nível).
 
 ## Chamadas
 
 ```python
 numeric_fidelity.avaliar(peca, claims_do_plano, tabela_numeros, data_documento, glossario) -> MetricaResultado
 text_size.avaliar(peca, spec) -> MetricaResultado
+readability.avaliar(peca, spec, spec_iniciante) -> MetricaResultado
+term_density.avaliar(peca, glossario) -> MetricaResultado
 analogy_rule.avaliar(peca, spec, plano_nivel, glossario) -> MetricaResultado
 ```
 
-`claims_do_plano` são os claims do `PlanoNivel` da célula, lidos do FactSheet assinado, com os números na ordem de `Claim.numeros`; `tabela_numeros` é a do FactSheet; `data_documento` é a do FactSheet; `spec` é o LevelSpec do nível da célula.
+`claims_do_plano` são os claims do `PlanoNivel` da célula, lidos do FactSheet assinado, com os números na ordem de `Claim.numeros`; `tabela_numeros` é a do FactSheet; `data_documento` é a do FactSheet; `spec` é o LevelSpec do nível da célula e `spec_iniciante` é o do Iniciante (a M3 mede de que lado do piso dele a peça cai).
 
 ## Resultado, valor e faixa
 
@@ -41,6 +45,8 @@ Toda métrica devolve um `MetricaResultado` (`nome`, `valor`, `faixa_esperada`, 
 | ------- | ------- | ---------------- |
 | `numeric_fidelity`, `analogy_rule`, `plan_contract` | número de violações | `"0"` |
 | `text_size` | número de unidades fora do limite | `"0 unidades fora do limite (<limite do LevelSpec>)"` |
+| `readability` | o IFL da peça | `"IFL de pelo menos <piso>"`, ou `"sem limite (só mede)"` no nível sem piso |
+| `term_density` | a densidade, por 100 palavras | `"sem limite (só mede)"` |
 | `llm_judge` | `true` se o juiz não reprova nada, `false` se reprova | `"true"` |
 
 Cada `Violacao` tem `metrica`, `trecho` (o texto exato), `esperado`, `obtido`, `instrucao_corretiva` e a posição: `unidade_indice` (a seção, o slide ou a cena, a partir de 0), `campo` (`titulo`, `linha_fina`, `texto` ou `gancho_visual`; `texto` é o texto da seção, do slide ou a fala da cena), `inicio` e `fim` (o intervalo do trecho no campo, fim exclusivo). A posição é opcional: a violação do total do artigo não tem.
@@ -51,6 +57,12 @@ Cada `Violacao` tem `metrica`, `trecho` (o texto exato), `esperado`, `obtido`, `
 
 - palavra é a sequência sem espaço que tem pelo menos uma letra ou um dígito: `R$ 1,2 bi` tem 3 palavras, `IPCA-15` tem 1, o travessão solto não conta, e um marcador que ficou no texto vale 1;
 - caractere é o do texto sem os espaços das pontas, contando os espaços do meio e a letra acentuada como 1.
+
+A M3 lê o texto de outro modo, com as funções `palavras_de_leitura`, `contar_silabas` e `segmentar_frases`:
+
+- palavra de leitura é o token com letra, sem dígito e sem a pontuação das pontas; número e marcador de número ficam de fora, porque vêm dos claims;
+- sílaba é contada por regra: cada grupo de vogais vale uma, com hiato entre duas vogais fortes seguidas (`a`, `e`, `o`) e entre uma vogal e `í` ou `ú`, o `u` mudo de `que`, `qui`, `gue` e `gui` fora da conta, e o ditongo crescente (`série`, `história`) como uma sílaba; a palavra com hífen soma as partes e a sigla sem vogal vale uma;
+- frase termina em `.`, `!`, `?` ou `…` seguido de espaço ou do fim do texto, e a seguinte começa em maiúscula, dígito ou abertura; não quebra em abreviação (`p.p.`, `S.A.`), em inicial de nome nem antes de letra minúscula, e `;` e `:` não quebram. Trecho sem letra nem dígito não é frase.
 
 ## M1. `numeric_fidelity`
 
@@ -105,7 +117,7 @@ Aritmética sobre o payload, com o contrato de formato do LevelSpec e a contagem
 | Carrossel | os caracteres de cada slide | `formatos.carrossel.caracteres` do papel (gancho, corpo ou conclusão), no máximo |
 | Roteiro | as palavras da fala de cada cena, e o total | duração da cena vezes `palavras_por_segundo`, e `duracao_s` vezes `palavras_por_segundo` no total, ambos arredondados para baixo |
 
-Cada unidade fora do limite é uma violação, e o `valor` é a contagem delas. A quantidade de slides e a soma das cenas até `duracao_s` não são da M2: são do `plan_contract`.
+Cada unidade fora do limite é uma violação, e o `valor` é a contagem delas. A quantidade de slides e a soma das cenas até `duracao_s` não são da M2: são do M7 (`plan_contract`).
 
 | Violação | Instrução |
 | -------- | --------- |
@@ -116,6 +128,61 @@ Cada unidade fora do limite é uma violação, e o `valor` é a contagem delas. 
 | total do roteiro | "Reduza o roteiro de 180 para no máximo 150 palavras no total, cortando as falas mais longas." |
 
 `TextSizeDetalhes`: `grandeza` (`palavras` ou `caracteres`), `limite` (o texto renderizado) e `unidades`, uma `MedidaUnidade` por unidade medida (`unidade_indice`, `papel`, `medida`, `limite_min`, `limite_max` e `dentro`). No artigo há uma só, a do total; no roteiro, a última é o total, sem `unidade_indice`.
+
+## M3. `readability`
+
+Índice de Facilidade de Leitura de Flesch adaptado ao português (Martins et al., 1996), sobre o texto das unidades da peça (seção, slide ou fala da cena). O título, a linha fina e o gancho visual não entram, como na M2 e na M5.
+
+```
+IFL = 248,835 - 1,015 x (palavras / frases) - 84,6 x (sílabas / palavras)
+```
+
+Palavras, sílabas e frases são as de leitura (seção Contagem de texto), somadas em todas as unidades; a frase que fica sem palavra de leitura não conta. O fim de uma unidade fecha a frase. O `valor` é o IFL, com uma casa decimal. Quanto maior, mais fácil.
+
+### Piso e meta de frase
+
+O LevelSpec pode ter o bloco `legibilidade`, hoje só no Iniciante:
+
+```yaml
+legibilidade:
+  ifl_minimo: {artigo: 30, carrossel: 45, roteiro: 45}
+  frase_max_palavras: 18
+```
+
+- `ifl_minimo` é o piso por formato: abaixo dele a métrica reprova. O nível sem o bloco só mede, com `faixa_esperada` `"sem limite (só mede)"`;
+- `frase_max_palavras` é a meta de tamanho de frase. Não reprova nada: `instrucoes_redator` a escreve no prompt do redator ("Escreva frases de até 18 palavras e prefira palavras curtas e comuns"), e a instrução corretiva a cita.
+
+### Violação
+
+Uma violação por frase, até 3, quando o IFL fica abaixo do piso: as frases mais longas entre as que passam da meta, ou só a mais longa se nenhuma passa. O `trecho` é a frase, com a posição (unidade, `campo` `texto`, intervalo na unidade).
+
+| Violação | Instrução |
+| -------- | --------- |
+| IFL abaixo do piso | "O índice de legibilidade da peça é 33,8 e o mínimo do nível é 45: reescreva a frase no slide 2 (31 palavras) em frases mais curtas de até 18 palavras e troque as palavras longas por equivalentes simples, sem mudar os números nem os claims." |
+
+### Detalhes
+
+`ReadabilityDetalhes`: `palavras`, `silabas`, `frases`, `ifl`, `ifl_minimo` e `frase_max_palavras` (os do nível, quando existem), `analogia_na_peca` e `nivel_estatistico`.
+
+`analogia_na_peca` é verdadeiro quando o texto de alguma unidade tem um marcador de analogia do Iniciante (`analogia.marcadores`, buscado como na M5).
+
+`nivel_estatistico` é o estilo da peça: `iniciante` quando o IFL é igual ou maior que o piso do Iniciante no formato e `analogia_na_peca` é verdadeiro, `acima_de_iniciante` nos outros casos. O IFL sozinho confunde frase curta com texto de Iniciante (o limite de caracteres do slide encurta as frases do carrossel de qualquer nível), e a analogia é o que o Iniciante tem e os outros níveis não têm. Alimenta a matriz de confusão estatística (M6, Matriz de confusão de níveis). É `None` quando o Iniciante não tem piso no formato ou marcadores.
+
+### O que a medida mostra
+
+Nas três fontes medidas, o IFL separa o Iniciante dos outros dois níveis no artigo, e no carrossel e no roteiro as faixas se encostam, porque o limite de caracteres encurta as frases de qualquer nível. Não separa o Intermediário do Avançado em formato nenhum. Por isso só o Iniciante tem piso e o `nivel_estatistico` junta o IFL e a analogia.
+
+## M4. `term_density`
+
+Densidade de termos do glossário no texto das unidades da peça (seção, slide ou fala da cena). Só mede: não tem limite e nunca gera violação.
+
+- Conta as ocorrências dos termos com `nivel_minimo` acima de iniciante, casados pela regra da M5 (`docs/glossario.md`, Casamento no texto).
+- O `valor` é a densidade: ocorrências por 100 palavras (a contagem de palavras da M2), com uma casa decimal.
+- O resultado traz também a densidade só dos termos de `nivel_minimo` avancado.
+
+`TermDensityDetalhes`: `palavras`, `ocorrencias`, `densidade`, `ocorrencias_avancado`, `densidade_avancado` e `termos`, uma `TermoContado` por termo encontrado (`glossario_id`, `termo`, `nivel_minimo` e `ocorrencias`).
+
+A densidade varia mais entre as fontes que entre os níveis (a ata do Copom tem muito mais termos que o release da B3), por isso não há faixa por nível.
 
 ## M5. `analogy_rule`
 
@@ -137,26 +204,11 @@ A unidade é nomeada `seção`, `slide` ou `cena` conforme o formato, contada a 
 
 `AnalogyRuleDetalhes`: `aplicavel` e `termos`, uma `TermoAnalogia` por termo encontrado (`termo`, `glossario_id`, `unidade_indice`, `analogia_no_plano` e `marcador_na_unidade`).
 
-## `plan_contract`
-
-As regras de estrutura que dependem do LevelSpec ou do plano. A montagem da E5.3 as calcula e monta o resultado com `resultado.montar(PlanContractDetalhes(...), violacoes)`:
-
-| Checagem (`nome`) | Confere |
-| ----------------- | ------- |
-| `quantidade_de_slides` | a quantidade de slides do carrossel dentro de `slides.min` e `slides.max` |
-| `soma_das_cenas` | o fim da última cena até `duracao_s` |
-| `claim_ids_no_plano` | os `claim_ids` de cada unidade dentro do plano do nível |
-| `cobertura_do_formato` | todo claim do formato aparece em alguma unidade |
-
-As regras que valem para qualquer célula (um gancho no início e uma conclusão no fim, cenas contíguas a partir de 0 s, `claim_ids` não vazio onde exigido, nenhum marcador na linha fina nem no gancho visual) são validadores do schema do redator, em `sunontent/schemas.py`. A resposta que as quebra volta ao modelo sem consumir o `K`; uma violação do `plan_contract` consome.
-
-`PlanContractDetalhes`: `checagens`, cada uma com `nome`, `esperado`, `obtido` e `passou`.
-
 ## M6. `llm_judge`
 
-Código: `sunontent/metrics/llm_judge.py` (prompt em `prompts/judge.j2`, recuperação de contexto em `sunontent/metrics/contexto.py`). Modelo `nvidia/nemotron-3-ultra-550b-a55b` pelo OpenRouter (`docs/fluxos/extracao.md`, Cliente LLM), de família diferente do extractor.
+Código: `sunontent/metrics/llm_judge.py` (prompt em `prompts/judge.j2`, recuperação de contexto em `sunontent/metrics/contexto.py`). Modelo `openai/gpt-oss-120b` pelo Groq (`docs/fluxos/extracao.md`, Cliente LLM), de família diferente do extractor.
 
-O juiz roda uma vez por tentativa da célula, só depois de M1, M2, M5 e `plan_contract` passarem, e só pode reprovar: não existe caminho em que ele aprove o que uma determinística reprovou. O `juiz` chega à E6 por `config["configurable"]`, montado por `llm_judge.criar_juiz(llm, raiz)` no `__main__.py`, e é chamado como `juiz(peca, plano_nivel, factsheet, chunks, glossario, run_id=..., registrar_span=...)`.
+O juiz roda uma vez por tentativa da célula, só depois de M1, M2, M3, M5 e M7 (`plan_contract`) passarem (a M4 só mede), e só pode reprovar: não existe caminho em que ele aprove o que uma determinística reprovou. O `juiz` chega à E6 por `config["configurable"]`, montado por `llm_judge.criar_juiz(llm, raiz)` no `__main__.py`, e é chamado como `juiz(peca, plano_nivel, factsheet, chunks, glossario, run_id=..., registrar_span=...)`.
 
 ### O que o juiz recebe
 
@@ -164,6 +216,7 @@ O juiz roda uma vez por tentativa da célula, só depois de M1, M2, M5 e `plan_c
 - **Trechos do documento (`contexto.montar`):** para cada unidade, o chunk da âncora de cada claim citado (o que contém o início da âncora), o anterior e o seguinte, e os 3 chunks de maior sobreposição lexical com o texto da unidade entre os que ainda não entraram, por BM25 simples (k1 1,5, b 0,75, idf `ln(1 + (N - df + 0,5) / (df + 0,5))`), sobre palavras sem maiúscula, sem acento, sem as de uma letra e sem uma lista curta de palavras vazias; só chunk com nota acima de zero entra. Cada chunk vai uma vez ao prompt, na ordem do documento, e cada unidade cita os seus pelo `chunk_id`. Sem embedding.
 - **Unidades:** o texto de cada seção, slide ou cena (no roteiro, a fala e o gancho visual), com o papel do slide ou a abertura e o fechamento do roteiro, e os claims que cita. A unidade sem `claim_ids` (gancho, conclusão, abertura e fechamento) é julgada contra todos os claims da peça. O título e a linha fina do artigo vão como contexto e não são julgados.
 - **Analogias:** as do plano do nível cujo termo aparece no texto das unidades (ligadas ao termo do glossário como na M5), com a explicação do plano, a `definicao_tecnica` do glossário e a unidade da primeira ocorrência.
+- **Nível:** o `foco` de cada nível, lido do LevelSpec, e os termos do glossário encontrados em qualquer campo da peça, com o `nivel_minimo` de cada um, como evidência para o nível percebido.
 
 O nível pedido não vai ao prompt, para não influenciar o `nivel_percebido`.
 
@@ -171,9 +224,9 @@ O nível pedido não vai ao prompt, para não influenciar o `nivel_percebido`.
 
 1. Cada analogia explica o conceito corretamente, ou é enganosa ou decorativa?
 2. Cada unidade é implicada pelos claims que cita? Não é quando apresenta projeção, condicionante ou risco como fato consumado ou sem atribuição, cria causa, consequência ou comparação que os claims não dizem, acrescenta fato, tendência ou recomendação, escreve por extenso um número diferente do claim (ou troca grandeza, período ou sujeito) ou contradiz um dos trechos. Explicação geral de conceito, analogia, pergunta retórica, convite à leitura e transição não reprovam.
-3. Para qual nível a peça parece escrita, pelo vocabulário e pela profundidade, sem considerar o tamanho?
+3. Para qual nível a peça parece escrita? O juiz examina a peça por quatro critérios, nesta ordem: vocabulário (termos, siglas e métricas, e o nível de cada um pela lista do glossário), explicação (se a peça explica os conceitos ou os usa como conhecidos), pressuposto (quanto conhecimento de mercado o leitor precisa ter) e foco (comparado ao foco de cada nível). O tamanho do texto e as frases curtas não contam como sinal de nível, e a lista do glossário é evidência, não regra.
 
-A resposta segue o schema `SaidaJuiz` (`sunontent/schemas.py`): `analogias` (`termo`, `justificativa` e `correta`), `unidades` (`unidade_indice`, `justificativa`, `implicada` e `trecho_problematico`) e `nivel_percebido`, com a justificativa antes do booleano.
+A resposta segue o schema `SaidaJuiz` (`sunontent/schemas.py`): `analogias` (`termo`, `justificativa` e `correta`), `unidades` (`unidade_indice`, `justificativa`, `implicada` e `trecho_problematico`), `justificativa_nivel` e `nivel_percebido`, com a justificativa antes do booleano e antes do nível.
 
 ### Completude
 
@@ -188,24 +241,46 @@ A resposta segue o schema `SaidaJuiz` (`sunontent/schemas.py`): `analogias` (`te
 | analogia incorreta | o termo como está escrito na unidade | a primeira ocorrência do termo (`campo` `texto`) | reescrever a analogia daquela unidade de modo que respeite a `definicao_tecnica` do glossário, com a justificativa do juiz |
 | unidade não implicada | o `trecho_problematico`, quando ele está na unidade; senão, o trecho dado ou o texto da unidade | o intervalo do trecho no texto da unidade ou no gancho visual da cena; sem intervalo quando o trecho não está na unidade | reescrever a unidade dizendo só o que os claims citados afirmam, sem causa, consequência ou fato novo e com a atribuição nas projeções, condicionantes e riscos, com a justificativa do juiz |
 
-`esperado` diz o que a unidade ou a analogia deveria cumprir, e `obtido` traz a justificativa do juiz. `LlmJudgeDetalhes`: `analogias` (na ordem das analogias pedidas), `unidades` (na ordem dos índices) e `nivel_percebido`.
+`esperado` diz o que a unidade ou a analogia deveria cumprir, e `obtido` traz a justificativa do juiz. `LlmJudgeDetalhes`: `analogias` (na ordem das analogias pedidas), `unidades` (na ordem dos índices), `justificativa_nivel` e `nivel_percebido`.
 
 ### Matriz de confusão de níveis
 
-O `nivel_percebido` é só informativo. `sunontent/metrics/matriz_niveis.py` cruza o nível pedido e o percebido, por formato (`montar`, `acerto` e `formatar`). O comando lê a última tentativa julgada de cada célula no Supabase, pela `ConsultaSupabase.niveis_percebidos` (só leitura):
+São duas matrizes, as duas só informativas. `sunontent/metrics/matriz_niveis.py` as monta e as formata, por formato:
+
+- **A do juiz** cruza o nível pedido e o `nivel_percebido` (`montar`, `acerto` e `formatar`). Lê a última tentativa julgada de cada célula, pela `ConsultaSupabase.niveis_percebidos`.
+- **A estatística** cruza o nível pedido e o `nivel_estatistico` da M3, o estilo da peça (IFL no piso do Iniciante e analogia na peça) (`montar_estatistica`, `acerto_estatistico` e `formatar_estatistica`). Conta como acerto o Iniciante em `iniciante` e os outros dois níveis em `acima_de_iniciante`. Lê a última tentativa de cada célula, pela `ConsultaSupabase.niveis_estatisticos`; como a M3 roda em toda tentativa, a matriz não depende de o juiz ter rodado.
+
+O comando lê o Supabase (só leitura) e imprime as duas:
 
 ```
 python -m sunontent.metrics.matriz_niveis [run_id ...]
 ```
 
-Sem `run_id`, usa todos os runs. A calibração do juiz imprime a mesma matriz para as suas peças (`docs/testes.md`, Juiz).
+Sem `run_id`, usa todos os runs. A calibração do juiz imprime a matriz do juiz para as suas peças (`docs/testes.md`, Juiz). O dashboard mostra as duas na seção de avaliação por célula, calculadas da última tentativa de cada célula do run aberto (`docs/fluxos/dashboard.md`).
 
 ### Calibração
 
-`tests/fixtures/juiz/calibracao.yaml` tem 20 peças escritas sobre os claims das três referências, cobrindo os 3 níveis e os 3 formatos: 10 fiéis aos claims e 10 com um erro plantado numa unidade (analogia errada, causa inventada, projeção como fato e número por extenso trocado). `pytest -m judge` julga as 20 com o OpenRouter de verdade e exige acerto de pelo menos 80% em cada grupo: peças fiéis aprovadas e peças com erro reprovadas.
+`tests/fixtures/juiz/calibracao.yaml` tem 20 peças escritas sobre os claims das três referências, cobrindo os 3 níveis e os 3 formatos: 10 fiéis aos claims e 10 com um erro plantado numa unidade (analogia errada, causa inventada, projeção como fato e número por extenso trocado). `pytest -m judge` julga as 20 com o Groq de verdade e exige acerto de pelo menos 80% em cada grupo: peças fiéis aprovadas e peças com erro reprovadas.
+
+## M7. `plan_contract`
+
+As regras de estrutura que dependem do LevelSpec ou do plano. A montagem da E5.3 as calcula e monta o resultado com `resultado.montar(PlanContractDetalhes(...), violacoes)`:
+
+| Checagem (`nome`) | Confere |
+| ----------------- | ------- |
+| `quantidade_de_slides` | a quantidade de slides do carrossel dentro de `slides.min` e `slides.max` |
+| `soma_das_cenas` | o fim da última cena até `duracao_s` |
+| `claim_ids_no_plano` | os `claim_ids` de cada unidade dentro do plano do nível |
+| `cobertura_do_formato` | todo claim do formato aparece em alguma unidade |
+
+As regras que valem para qualquer célula (um gancho no início e uma conclusão no fim, cenas contíguas a partir de 0 s, `claim_ids` não vazio onde exigido, nenhum marcador na linha fina nem no gancho visual) são validadores do schema do redator, em `sunontent/schemas.py`. A resposta que as quebra volta ao modelo sem consumir o `K`; uma violação do M7 (`plan_contract`) consome.
+
+`PlanContractDetalhes`: `checagens`, cada uma com `nome`, `esperado`, `obtido` e `passou`.
 
 ## Limites conhecidos
 
+- O contador de sílabas é por regra e não é exato em todos os casos: o ditongo crescente conta uma sílaba (`história`, `ordinárias`), a sigla vale uma sílaba por mais que se leia soletrada, e o ditongo e o hiato de palavras raras podem sair trocados. No IFL de um texto inteiro o erro é de poucos décimos de ponto.
+- O IFL mede o texto, não o assunto: um texto com muito nome próprio e termo técnico longo pontua baixo mesmo com frases curtas.
 - O número por extenso não é lido pela M1.
 - A data é conferida por valor para ano, trimestre e reunião (regra leve da seção Datas).
 - O parser lê todo número solto entre 1900 e 2099 como ano; uma contagem nessa faixa escrita à mão sai como data sem lastro. A pendência está em `pendentes/pendencias-futuras.md`.

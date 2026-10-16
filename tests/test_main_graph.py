@@ -319,7 +319,7 @@ def test_sem_fonte_o_cli_roda_as_tres(monkeypatch, repo):
     monkeypatch.setattr(principal, "executar", falso)
     monkeypatch.setattr(principal.llm, "criar_cliente", lambda raiz, ambiente: None)
     monkeypatch.setenv("GOOGLE_API_KEY_PRINC", "chave-de-teste")
-    monkeypatch.setenv("API_KEY_ROUTER", "chave-de-teste")
+    monkeypatch.setenv("GROQ_API_KEY", "chave-de-teste")
     monkeypatch.setattr(principal.persistencia, "criar_repositorio_supabase", lambda ambiente: repo)
     monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://localhost/x")
     monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **k: None)

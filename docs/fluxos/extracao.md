@@ -130,7 +130,7 @@ A pessoa nunca informa posição: aponta o trecho e o bruto, e a âncora vem do 
 
 ## Cliente LLM
 
-`llm.ClienteLLM.chamar(no, prompt, schema)` lê o snapshot do nó em `config/models.yaml`, pede ao provider saída JSON no schema Pydantic e devolve o objeto validado, nunca texto. O provider é escolhido por nó: o juiz (`judge`) chama o OpenRouter (seção OpenRouter); os outros nós chamam a Gemini API, pelas chaves da seção Ordem das chaves. Duas contagens separadas, nenhuma ligada ao `K`:
+`llm.ClienteLLM.chamar(no, prompt, schema)` lê o snapshot do nó em `config/models.yaml`, pede ao provider saída JSON no schema Pydantic e devolve o objeto validado, nunca texto. O provider é escolhido por nó: o juiz (`judge`) chama o Groq (seção Groq); os outros nós chamam a Gemini API, pelas chaves da seção Ordem das chaves. Duas contagens separadas, nenhuma ligada ao `K`:
 
 - **Falha de infraestrutura** (HTTP 408, 429, 5xx, timeout, erro de conexão) em todas as chaves: repete com o backoff de `retentativa.py`, até 4 tentativas; depois, erro terminal.
 - **Resposta fora do schema:** repete até 3 vezes, acrescentando ao prompt o erro de validação; depois, erro terminal.
@@ -150,27 +150,27 @@ Cada chamada a uma chave vira um span; o span de falha leva o nome da chave no c
 
 A retentativa interna do SDK fica desligada, para que cada tentativa passe pelo cliente e vire um span. O timeout por chamada é de 300 s.
 
-### OpenRouter
+### Groq
 
-O juiz chama `https://openrouter.ai/api/v1/chat/completions` por `httpx`, sem SDK, com `Authorization: Bearer <API_KEY_ROUTER>`. A `API_KEY_ROUTER` é obrigatória (conferida pelo `__main__.py` antes de o run ser criado) e não tem reserva. O pedido leva:
+O juiz chama `https://api.groq.com/openai/v1/chat/completions` (API compatível com a da OpenAI) por `httpx`, sem SDK, com `Authorization: Bearer <GROQ_API_KEY>`. A `GROQ_API_KEY` é obrigatória (conferida pelo `__main__.py` antes de o run ser criado) e não tem reserva. O pedido leva:
 
 - `response_format` com `json_schema` e `strict: true`; o schema Pydantic vai no formato do modo estrito (`llm.schema_estrito`: todas as propriedades em `required`, `additionalProperties` falso e sem `default`);
-- `provider: {"require_parameters": true}`, para o OpenRouter só mandar a chamada a endpoints que aceitam o schema (hoje, só a DeepInfra);
-- `max_tokens` 16.384, a saída máxima da DeepInfra, dentro da qual conta o raciocínio;
-- `reasoning: {"effort": <nível>, "exclude": true}` quando a chamada pede um nível de raciocínio (o juiz usa a chave `judge` de `config/models.yaml`).
+- `max_completion_tokens` 8.192, dentro do qual conta o raciocínio;
+- `include_reasoning: false`, para o raciocínio não voltar na resposta;
+- `reasoning_effort` (`low`, `medium` ou `high`) quando a chamada pede um nível de raciocínio (o juiz usa a chave `judge` de `config/models.yaml`).
 
 Classificação das respostas:
 
 | Resposta | Classe |
 | -------- | ------ |
-| HTTP 408, 429 e 5xx (502 provedor fora, 503 nenhum provedor atende ao roteamento), timeout e erro de conexão | falha de infraestrutura, com o backoff |
+| HTTP 408, 422, 429, 498 (tier flex sem capacidade) e 5xx, timeout e erro de conexão | falha de infraestrutura, com o backoff |
 | HTTP 401 | chave recusada; sem reserva, terminal |
-| HTTP 402 (sem crédito), HTTP 403 sem motivo de moderação (como o teto de gasto da chave) e os demais 4xx | terminal, com a mensagem do OpenRouter |
-| HTTP 403 com motivos de moderação (`error.metadata.reasons`) e `finish_reason` `content_filter` | conteúdo recusado, terminal |
-| HTTP 200 com `error` no corpo e sem `choices`, ou `finish_reason` `error` | falha de infraestrutura (a classe do código do erro, quando ele vem) |
+| HTTP 400 com `code` `json_validate_failed` | resposta fora do schema: o `failed_generation` volta ao cliente, que repete com o erro de validação |
+| HTTP 403, 404, 413 (pedido acima do limite de tokens por minuto da organização) e os demais 4xx | terminal, com a mensagem do Groq |
+| `finish_reason` `content_filter` | conteúdo recusado, terminal |
 | `finish_reason` `length` com o conteúdo vazio (o raciocínio esgotou a saída) | resposta fora do schema, repetida com o erro de validação |
 
-Os tokens de raciocínio já vêm dentro de `completion_tokens`, que é o que o span registra como saída. O OpenRouter reserva, para cada chamada em andamento, o custo do `max_tokens`: com pouco crédito, chamadas em paralelo podem receber 402 mesmo com saldo para uma só.
+Os tokens de raciocínio já vêm dentro de `completion_tokens` (com o detalhe em `completion_tokens_details.reasoning_tokens`), que é o que o span registra como saída. O Groq limita tokens e requisições por minuto e por dia por organização e por modelo; os limites da conta aparecem nos cabeçalhos `x-ratelimit-*` de cada resposta. Um pedido maior que o limite de tokens por minuto volta com 413 e não é repetido.
 
 Nível de raciocínio: a chamada pode pedir uma chave de `raciocinio` em `config/models.yaml` (`minimal`, `low`, `medium` ou `high`). Chave ausente usa o padrão do modelo. A extração usa o padrão; a correção usa `extractor_correcao`, porque corrigir um claim com o motivo dado é uma tarefa menor que ler o documento inteiro, e o raciocínio conta como saída, o token mais caro.
 

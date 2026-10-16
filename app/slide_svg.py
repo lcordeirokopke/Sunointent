@@ -36,10 +36,13 @@ class Caixa:
 
 
 CAIXAS: dict[str, Caixa] = {
-    "gancho": Caixa(96, 330, 888, 690, 76, 1.2, "bold", "#FFFFFF", "#0F2A4A"),
-    "corpo": Caixa(96, 240, 888, 870, 52, 1.4, "regular", "#14213D", "#F7F5EF"),
-    "conclusao": Caixa(96, 330, 888, 690, 64, 1.25, "bold", "#FFFFFF", "#0F2A4A"),
+    "gancho": Caixa(96, 330, 888, 690, 76, 1.2, "bold", "#FFFFFF", "#1A1A1A"),
+    "corpo": Caixa(96, 240, 888, 870, 52, 1.4, "regular", "#1A1A1A", "#F5F6F8"),
+    "conclusao": Caixa(96, 330, 888, 690, 64, 1.25, "bold", "#FFFFFF", "#1A1A1A"),
 }
+VERMELHO = "#E11927"
+FAIXA = f'<path id="faixa" d="M0,0 H{LARGURA} V56 Q{LARGURA // 2},92 0,56 Z" fill="{VERMELHO}"/>'
+RODAPE_Y = ALTURA - 112  # topo do rodapé; a caixa de texto mais baixa termina em y = 1110
 ARQUIVO_DO_PESO = {"regular": "Inter-Regular.ttf", "bold": "Inter-Bold.ttf"}
 
 
@@ -81,6 +84,32 @@ class SlideSvg:
     estouro_altura: bool  # o texto não cabe na altura da caixa do papel
 
 
+def _pilulas(posicao: int, total: int) -> str:
+    """Uma pílula por slide, centradas abaixo da faixa; a do slide atual é cheia."""
+    largura, altura, vao = 48, 12, 12
+    x0 = (LARGURA - (total * largura + (total - 1) * vao)) / 2
+    return "".join(
+        f'<rect x="{x0 + i * (largura + vao):.1f}" y="124" width="{largura}" height="{altura}" rx="{altura // 2}"'
+        f' fill="{VERMELHO}" fill-opacity="{1 if i + 1 == posicao else 0.3}"/>'
+        for i in range(total)
+    )
+
+
+def _rodape(caixa: Caixa, posicao: int, total: int) -> str:
+    """Linha fina, posição do slide à esquerda e a marca à direita."""
+    base = RODAPE_Y + 62
+    return (
+        f'<g id="rodape">'
+        f'<line x1="0" y1="{RODAPE_Y}" x2="{LARGURA}" y2="{RODAPE_Y}" stroke="{caixa.cor}" stroke-opacity="0.15" stroke-width="2"/>'
+        f'<text id="posicao" x="96" y="{base}" font-family="{FAMILIA}" font-size="26" font-weight="700"'
+        f' letter-spacing="2" fill="{caixa.cor}" fill-opacity="0.7">{posicao} / {total}</text>'
+        f'<text id="marca" x="{LARGURA - 96}" y="{base}" text-anchor="end" font-family="{FAMILIA}" font-size="26"'
+        f' font-weight="700" letter-spacing="2" fill="{caixa.cor}">'
+        f'<tspan fill="{VERMELHO}">( SUNO </tspan>CONTENT<tspan fill="{VERMELHO}"> )</tspan></text>'
+        "</g>"
+    )
+
+
 def montar_slide(
     *, texto: str, papel: str, claim_ids: list[str], celula_id: str, tentativa: int, posicao: int, total: int
 ) -> SlideSvg:
@@ -106,10 +135,10 @@ def montar_slide(
         f"<title>{escape(celula_id)} · tentativa {tentativa} · slide {posicao}</title>"
         f"<metadata>{metadados}</metadata>"
         f'<rect id="fundo" width="{LARGURA}" height="{ALTURA}" fill="{caixa.fundo}"/>'
+        f"{FAIXA}{_pilulas(posicao, total)}"
         f'<text id="texto" font-family="{FAMILIA}" font-size="{caixa.tamanho}" font-weight="{peso_css}"'
         f' fill="{caixa.cor}" xml:space="preserve">{tspans}</text>'
-        f'<text id="posicao" x="{LARGURA - 96}" y="{ALTURA - 96}" text-anchor="end" font-family="{FAMILIA}"'
-        f' font-size="32" font-weight="400" fill="{caixa.cor}" fill-opacity="0.6">{posicao} / {total}</text>'
+        f"{_rodape(caixa, posicao, total)}"
         "</svg>"
     )
     return SlideSvg(svg, linhas, estouro)

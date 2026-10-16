@@ -3,7 +3,7 @@
 1. Troca cada marcador válido (de um claim do plano do nível, com a ordem que existe) pelo trecho do texto do
    claim que ele cobriu na E5.1 e registra a posição em `numeros_usados`, com o campo (`texto` ou `titulo`). O
    marcador inválido fica no texto: a M1 o encontra e o aponta.
-2. Calcula o `plan_contract`: quantidade de slides do carrossel, fim da última cena do roteiro até `duracao_s`,
+2. Calcula o M7 (`plan_contract`): quantidade de slides do carrossel, fim da última cena do roteiro até `duracao_s`,
    `claim_ids` de cada unidade dentro do plano do nível e cobertura do formato (todo claim do formato em alguma
    unidade). Cada falha é uma violação e consome uma tentativa do `K`.
 

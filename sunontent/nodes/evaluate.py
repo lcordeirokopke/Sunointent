@@ -1,8 +1,9 @@
 """E6. Hybrid Evaluator de uma célula: chama metrics/ e grava o scorecard da tentativa.
 
-As 4 verificações determinísticas rodam sempre, todas: M1 (`numeric_fidelity`), M2 (`text_size`), M5
-(`analogy_rule`) e o `plan_contract` que a montagem da E5.3 deixou na célula. O juiz (M6) só roda se as 4 passarem
-e se config["configurable"] traz um `juiz`; sem ele, o scorecard tem as 4. Os claims do plano do nível e a
+As 6 verificações determinísticas rodam sempre, todas: M1 (`numeric_fidelity`), M2 (`text_size`), M3
+(`readability`), M4 (`term_density`, só mede), M5 (`analogy_rule`) e o M7 (`plan_contract`) que a montagem da E5.3 deixou
+na célula. O juiz (M6) só roda se as 6 passarem e se config["configurable"] traz um `juiz`; sem ele, o scorecard
+tem as 6. Os claims do plano do nível e a
 `tabela_numeros` vêm do FactSheet assinado; os chunks do juiz, do documento processado da E1. O veredito é da
 tentativa: APROVADA se tudo passou, REPROVADA se algo falhou, ERRO_INFRA se o juiz (ou a leitura dos chunks)
 falhou com a peça existente. Scorecard, métricas e violações vão numa transação (docs/fluxos/avaliacao.md).
@@ -17,7 +18,7 @@ from pathlib import Path
 
 from sunontent import glossario as modulo_glossario
 from sunontent import levelspec, persistencia
-from sunontent.metrics import analogy_rule, numeric_fidelity, text_size
+from sunontent.metrics import analogy_rule, numeric_fidelity, readability, term_density, text_size
 from sunontent.retentativa import Falha, FalhaTerminal
 from sunontent.schemas import CelulaGrafoState, FalhaCelula, Scorecard, Span
 
@@ -52,6 +53,8 @@ def evaluate(state: CelulaGrafoState, config) -> dict:
         metricas = [
             numeric_fidelity.avaliar(peca, claims_do_plano, factsheet.tabela_numeros, factsheet.data_documento, glossario),
             text_size.avaliar(peca, spec),
+            readability.avaliar(peca, spec, spec if celula.nivel == "iniciante" else levelspec.carregar(raiz, "iniciante")),
+            term_density.avaliar(peca, glossario),
             analogy_rule.avaliar(peca, spec, plano_nivel, glossario),
             contrato,
         ]

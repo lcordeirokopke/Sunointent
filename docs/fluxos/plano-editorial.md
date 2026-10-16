@@ -165,7 +165,7 @@ O nó troca para `gemini-4-argon` só pelo `config/models.yaml`, com o preço do
 ## Terminal e dashboard
 
 - O terminal ganha as linhas `etapa adapt: iniciada` e `etapa adapt: concluída` (`docs/execucao.md`, Linhas de etapa no terminal). A linha final diz em quantas rodadas o plano ficou pronto e, com `aviso`, que o plano tem aviso: `concluído: <doc> (<hash>), 22 claims, 1 em quarentena, plano em 2 rodadas (com aviso), 10836 tokens, R$ 0.1516`.
-- No dashboard, a E4 entra como etapa da lista do fluxo, com o nó `adapt`. A subaba da E4 e a aba Resultado mostram o plano gravado: o núcleo, o aviso, e, por nível, a tese, os claims usados com a prioridade, as analogias e os descartes, além dos problemas do gate por rodada (`docs/fluxos/dashboard.md`, Plano editorial).
+- No dashboard, a E4 entra como etapa da lista do fluxo, com o nó `adapt`. A subaba da E4 e a aba Info. técnicas mostram o plano gravado (a aba Resultado mostra o plano do nível de cada célula): o núcleo, o aviso, e, por nível, a tese, os claims usados com a prioridade, as analogias e os descartes, além dos problemas do gate por rodada (`docs/fluxos/dashboard.md`, Plano editorial).
 
 ## Como falha
 

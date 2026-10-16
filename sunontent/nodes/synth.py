@@ -1,7 +1,7 @@
 """E5. Format Synthesizer de uma célula: chama sintese/ e devolve a célula com a peça da tentativa.
 
 Lê o plano por `carregar_plano` e o FactSheet assinado por `carregar_factsheet`, marca a célula como GERANDO,
-monta o pacote (E5.1), chama o redator (E5.2) e monta a peça com o `plan_contract` (E5.3). No retry, o redator
+monta o pacote (E5.1), chama o redator (E5.2) e monta a peça com o M7, o `plan_contract` (E5.3). No retry, o redator
 recebe a peça anterior (`celula.peca`) com os marcadores restaurados e o relatório corretivo do estado. Grava a
 peça com a célula em AVALIANDO e a tentativa nova numa transação (docs/fluxos/sintese.md).
 

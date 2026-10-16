@@ -50,7 +50,9 @@ create type motivo_reprovacao as enum ('k_esgotado', 'nao_convergencia');
 create type veredito as enum ('APROVADA', 'REPROVADA', 'ERRO_INFRA');
 
 -- MetricaResultado.nome e Violacao.metrica (docs/arquiteturas.md, Scorecard e violação)
-create type metrica as enum ('numeric_fidelity', 'text_size', 'analogy_rule', 'llm_judge', 'plan_contract');
+create type metrica as enum (
+  'numeric_fidelity', 'text_size', 'readability', 'term_density', 'analogy_rule', 'llm_judge', 'plan_contract'
+);
 
 -- Violacao.campo (docs/arquiteturas.md, Scorecard e violação): o campo da peça onde está o trecho.
 create type campo_peca as enum ('titulo', 'linha_fina', 'texto', 'gancho_visual');

@@ -1470,6 +1470,65 @@ class ConsultaSupabase:
 
         return self._executar(consulta)
 
+    def niveis_estatisticos(self, run_ids: Sequence[str] | None = None) -> list[dict]:
+        """Para a matriz de confusão estatística: o `nivel_estatistico` da M3 (`readability`) na última tentativa de
+        cada célula, com o nível pedido e o formato (`run_id`, `celula_id`, `nivel`, `formato`, `tentativa` e
+        `nivel_estatistico`). Sem `run_ids`, todos os runs. Só entram as tentativas em que o nível tem lado."""
+
+        def consulta(conexao):
+            filtro, parametros = ("and m.run_id = any(%s)", (list(run_ids),)) if run_ids else ("", ())
+            return conexao.execute(
+                "select distinct on (m.run_id, m.celula_id) m.run_id, m.celula_id, c.nivel::text as nivel,"
+                " c.formato::text as formato, m.tentativa, m.detalhes->>'nivel_estatistico' as nivel_estatistico"
+                " from metricas m join celulas c on c.run_id = m.run_id and c.celula_id = m.celula_id"
+                f" where m.nome = 'readability' and m.detalhes->>'nivel_estatistico' is not null {filtro}"
+                " order by m.run_id, m.celula_id, m.tentativa desc",
+                parametros,
+            ).fetchall()
+
+        return self._executar(consulta)
+
+    def balanco(self) -> dict:
+        """Balanço de todos os runs: runs por status e por fonte, custo total, células por estado, tentativas por
+        célula e a taxa de aprovação de cada métrica na última tentativa de cada célula."""
+
+        def consulta(conexao):
+            runs = conexao.execute(
+                "select status::text as status, fonte::text as fonte, count(*) as total,"
+                " coalesce(sum(custo_total_tokens), 0) as tokens, coalesce(sum(custo_total_brl), 0) as brl"
+                " from runs group by status, fonte"
+            ).fetchall()
+            celulas = conexao.execute(
+                "select estado::text as estado, count(*) as total, avg(tentativa) as tentativas"
+                " from celulas group by estado"
+            ).fetchall()
+            metricas = conexao.execute(
+                "select m.nome::text as nome, count(*) as total, count(*) filter (where m.passou) as passou"
+                " from (select distinct on (run_id, celula_id, nome) run_id, celula_id, nome, passou, tentativa"
+                " from metricas order by run_id, celula_id, nome, tentativa desc) m group by m.nome order by m.nome"
+            ).fetchall()
+            return {"runs": runs, "celulas": celulas, "metricas": metricas}
+
+        return self._executar(consulta)
+
+    def biblioteca(self) -> list[dict]:
+        """Uma linha por célula com peça gravada, em todos os runs, na última tentativa e sem o conteúdo (`run_id`,
+        `celula_id`, `nivel`, `formato`, `estado`, `tentativa`, `titulo`, `fonte`, `timestamp`). Do run mais recente
+        ao mais antigo."""
+
+        def consulta(conexao):
+            return conexao.execute(
+                'select p.run_id, p.celula_id, c.nivel::text as nivel, c.formato::text as formato,'
+                ' c.estado::text as estado, p.tentativa, p.payload->>\'titulo\' as titulo, r.fonte::text as fonte,'
+                ' r."timestamp" from (select distinct on (run_id, celula_id) run_id, celula_id, tentativa, payload'
+                " from pecas order by run_id, celula_id, tentativa desc) p"
+                " join celulas c on c.run_id = p.run_id and c.celula_id = p.celula_id"
+                " join runs r on r.run_id = p.run_id"
+                ' order by r."timestamp" desc, p.run_id, p.celula_id'
+            ).fetchall()
+
+        return self._executar(consulta)
+
     def detalhar_run(self, run_id: str) -> dict | None:
         """Run, documento processado (resumido), FactSheet, validações por rodada, quarentena, spans, plano
         editorial, rodadas do gate do plano e as células (peças, números usados e scorecards por tentativa).

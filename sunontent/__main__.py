@@ -2,7 +2,7 @@
 
 Sem a fonte, roda as três em sequência (copom, cvm e b3), um run por fonte.
 
-Lê os parâmetros, confere as credenciais do Supabase, do Gemini e do OpenRouter, gera o run_id, registra o run
+Lê os parâmetros, confere as credenciais do Supabase, do Gemini e do Groq, gera o run_id, registra o run
 e escolhe a entrada do grafo (E0 no modo normal, nó de referência no --dev). Ver docs/fluxos/ingestao.md.
 """
 

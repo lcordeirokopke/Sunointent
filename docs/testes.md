@@ -25,12 +25,12 @@ Quase tudo é simulado. O código do projeto roda de verdade; o mundo externo (i
 | Storage do Supabase | `_StorageFalso`: só devolve o erro que o teste pede | `test_ingestao.py` |
 | Espera do backoff | `monkeypatch` troca `retentativa._dormir` por uma lista; o teste confere o tamanho da lista e que as esperas crescem, sem esperar de verdade | `conftest.py` |
 | Disco | `tmp_path` do pytest no lugar de `data/` | todos |
-| OpenRouter | `httpx.MockTransport` devolve as respostas do OpenRouter, inclusive os erros HTTP e o erro com HTTP 200; o juiz nos testes de `llm_judge` usa o `ProviderFalso` | `test_juiz.py` |
+| Groq | `httpx.MockTransport` devolve as respostas do Groq, inclusive os erros HTTP e o JSON fora do schema; o juiz nos testes de `llm_judge` usa o `ProviderFalso` | `test_juiz.py` |
 | Gemini API | `ProviderFalso`: devolve respostas prontas em ordem (JSON, `RespostaBruta` ou exceção) e guarda os prompts recebidos; `cliente_falso` monta o `ClienteLLM` com ele, para o extractor e o adapter; `resposta_plano` monta a resposta do planejador | `conftest.py` |
 
 Rodam de verdade: `copom.py`, `cvm.py`, `b3.py`, `comum.py`, `retentativa.py`, `manifesto.py`, `graph.py` e `__main__.py` (parsing, validação de `%PDF-`, hash, limite de tamanho, classificação dos erros, ordem das gravações), o grafo LangGraph, o servidor do dashboard (`app/servidor.py` e `app/execucao.py`, com um processo filho de verdade), a leitura e o hash dos arquivos de `config/` e `prompts/` (copiados para o `tmp_path`) e a escrita de arquivos no disco dentro do `tmp_path`.
 
-Usam serviços reais só `test_persistencia_supabase.py`, contra o Supabase **local** do CLI, o teste de cobertura com marker `gemini`, que chama a Gemini API, e a calibração do juiz com marker `judge`, que chama o OpenRouter.
+Usam serviços reais só `test_persistencia_supabase.py`, contra o Supabase **local** do CLI, o teste de cobertura com marker `gemini`, que chama a Gemini API, e a calibração do juiz com marker `judge`, que chama o Groq.
 
 ## Proteções
 
@@ -38,7 +38,7 @@ Usam serviços reais só `test_persistencia_supabase.py`, contra o Supabase **lo
 - O `.env` não é carregado pelos testes.
 - Marker `supabase`: identifica os testes de integração com o Supabase local.
 - Marker `gemini`: identifica os testes que chamam a Gemini API e gastam tokens. Ficam pulados, a menos que o `-m` os peça. Leem só a `GOOGLE_API_KEY_PRINC` e a `GOOGLE_API_KEY_SEC` do `.env`, sem carregar o resto do arquivo, e pulam se a `GOOGLE_API_KEY_PRINC` estiver ausente.
-- Marker `judge`: identifica a calibração do juiz, que chama o OpenRouter e gasta tokens. Fica pulada, a menos que o `-m` a peça. Lê só a `API_KEY_ROUTER` do `.env` e pula se ela estiver ausente.
+- Marker `judge`: identifica a calibração do juiz, que chama o Groq e gasta tokens. Fica pulada, a menos que o `-m` a peça. Lê só a `GROQ_API_KEY` do `.env` e pula se ela estiver ausente.
 
 ## Limite do que provam
 
@@ -59,12 +59,12 @@ tests/
 ├── test_levelspec.py              # LevelSpec: leitura e validação de config/levels/, bloco analogia, avisos e instrucoes_redator
 ├── test_glossario.py              # glossário: validação, casamento de termos, analogia e flexões
 ├── test_adaptacao.py              # E4: pré-filtro, complemento, gate, planejador e gravação
-├── test_texto.py                  # contagem de palavras e de caracteres do texto da peça
-├── test_metrics.py                # M1, M2 e M5, sem LLM e sem banco
+├── test_texto.py                  # contagem de palavras e de caracteres, sílabas e frases do texto da peça
+├── test_metrics.py                # M1 a M5, sem LLM e sem banco
 ├── test_schemas.py                # schemas do redator, da peça, do scorecard e da célula
-├── test_sintese.py                # E5 de uma célula: pacote, redator (LLM simulado), montagem, plan_contract, gravação e nó
+├── test_sintese.py                # E5 de uma célula: pacote, redator (LLM simulado), montagem, M7 (plan_contract), gravação e nó
 ├── test_router.py                 # E6 e E7 de uma célula: scorecard, Router, relatório corretivo e o refinement loop
-├── test_juiz.py                   # juiz (M6): OpenRouter, contexto, prompt, completude, violações, matriz de níveis e calibração (marker judge)
+├── test_juiz.py                   # juiz (M6): Groq, contexto, prompt, completude, violações, matriz de níveis e calibração (marker judge)
 ├── test_main_graph.py             # manifest, grafo (E0 a E4 e o fan-out com as células simuladas) e __main__
 ├── test_fanout.py                 # fan-out das 9 células: Send, max_concurrency, isolamento de falhas, fechamento, terminal e trava do custo
 ├── test_app.py                    # dashboard: linhas do terminal, API, slide em SVG e revisão da quarentena, com processo, consulta e repositório simulados
@@ -139,8 +139,8 @@ tests/
 - a regra 7 do prompt descreve todos os tipos do `TipoClaim`, inclusive `evento_corporativo`;
 - falha de infraestrutura repete com espera crescente, sem gastar o contador de parse; 4 falhas viram terminal;
 - bloqueio de conteúdo e erro 4xx são terminais, sem repetir;
-- nó sem modelo, modelo sem preço e nível de raciocínio inválido são terminais; o `config/models.yaml` do repositório tem preço para cada modelo (inclusive o do juiz, US$ 0,50 de entrada e US$ 2,20 de saída por milhão de tokens) e o raciocínio da correção do extractor, do planejador e do redator e o do juiz;
-- sem `GOOGLE_API_KEY_PRINC`, erro terminal, mesmo com a `GOOGLE_API_KEY_SEC`; sem `API_KEY_ROUTER`, erro terminal; o cliente monta as chaves na ordem PRINC e SEC, a SEC só entra se estiver preenchida, e o juiz vai só ao OpenRouter, sem reserva;
+- nó sem modelo, modelo sem preço e nível de raciocínio inválido são terminais; o `config/models.yaml` do repositório tem preço para cada modelo (inclusive o do juiz, US$ 0,15 de entrada e US$ 0,60 de saída por milhão de tokens) e o raciocínio da correção do extractor, do planejador e do redator e o do juiz;
+- sem `GOOGLE_API_KEY_PRINC`, erro terminal, mesmo com a `GOOGLE_API_KEY_SEC`; sem `GROQ_API_KEY`, erro terminal; o cliente monta as chaves na ordem PRINC e SEC, a SEC só entra se estiver preenchida, e o juiz vai só ao Groq, sem reserva;
 - falha de infraestrutura ou chave recusada na PRINC passa para a SEC na mesma tentativa, sem esperar, e o span da falha leva o nome da chave;
 - cada chamada começa pela PRINC, mesmo depois de uma passagem para a SEC;
 - as duas chaves com falha de infraestrutura contam uma tentativa, com espera, e a seguinte recomeça pela PRINC; 4 tentativas viram terminal;
@@ -187,8 +187,9 @@ Os testes do bloco `analogia` e das instruções do redator conferem:
 - os marcadores do Iniciante, e que Intermediário e Avançado não têm o bloco;
 - `analogia` ausente no Iniciante e presente no Intermediário ou no Avançado: erro terminal; marcadores vazios, de uma palavra só, repetidos (sem maiúsculas e com espaços a mais) e campo desconhecido no bloco: erro terminal;
 - o aviso `carrossel.max_claims` maior que `slides.max - 2` (6 claims e 5 slides de corpo possíveis, num arquivo reescrito) e nenhum aviso nos três níveis atuais (4, 5 e 5, os dois últimos exatamente no limite);
+- o bloco `legibilidade`: só o Iniciante o tem (piso 30, 45 e 45 e meta de 18 palavras), piso sem um dos formatos e meta abaixo de 5 palavras: erro terminal, e o nível sem o bloco carrega;
 - as palavras mínimas do artigo: ordem decrescente aborta (`carregar_todos`), valores iguais passam;
-- `instrucoes_redator`: o orçamento e o limite do artigo, do carrossel e do roteiro (com `2,5` de vírgula decimal), os marcadores só no Iniciante.
+- `instrucoes_redator`: o orçamento e o limite do artigo, do carrossel e do roteiro (com `2,5` de vírgula decimal), os marcadores e a meta de tamanho de frase só no Iniciante.
 
 ### Glossário
 
@@ -229,14 +230,14 @@ Os testes do bloco `analogia` e das instruções do redator conferem:
 
 ## Contrato da peça
 
-`test_texto.py` confere `contar_palavras` e `contar_caracteres` (`sunontent/texto.py`): texto vazio e só de espaços, `R$ 1,2 bi` com 3 palavras e 9 caracteres, `IPCA-15` com 1 palavra, o travessão e a pontuação soltos que não contam, o marcador `{{C27.1}}` que ficou no texto com 1 palavra (a mesma contagem do trecho do claim que o substitui), quebras de linha e tabulação como separador e a letra acentuada decomposta com 1 caractere.
+`test_texto.py` confere `contar_palavras`, `contar_caracteres`, `palavras_de_leitura`, `contar_silabas` e `segmentar_frases` (`sunontent/texto.py`). A leitura confere: a contagem de sílabas de cerca de 30 palavras financeiras e comuns (hiato, ditongo, `u` mudo, acento, hífen, sigla), as palavras de leitura sem número, marcador nem pontuação, e as frases (quebra em `.`, `!` e `?`, sem quebra em decimal, abreviação e minúscula, `:` e `;` que não quebram, texto sem ponto final, texto sem letra e intervalos que apontam para o texto). A contagem de palavras e de caracteres confere: texto vazio e só de espaços, `R$ 1,2 bi` com 3 palavras e 9 caracteres, `IPCA-15` com 1 palavra, o travessão e a pontuação soltos que não contam, o marcador `{{C27.1}}` que ficou no texto com 1 palavra (a mesma contagem do trecho do claim que o substitui), quebras de linha e tabulação como separador e a letra acentuada decomposta com 1 caractere.
 
 `test_schemas.py` confere os schemas de `sunontent/schemas.py`:
 
 - **Saída do redator:** `SaidaArtigo` (seção sem claim, artigo sem seções, marcador na `linha_fina`), `SaidaCarrossel` (gancho no início, conclusão no fim, só corpo no meio, slide de corpo sem claim, menos de 3 slides) e `SaidaRoteiro` (primeira cena em 0 s, lacuna, sobreposição, cena sem duração, cena de claim sem claim, marcador no `gancho_visual`, menos de 3 cenas); a abertura, o fechamento, o gancho e a conclusão aceitam `claim_ids` vazio.
 - **`NumeroUsado` e `Peca`:** `campo` e `unidade_indice` coerentes (o título não tem unidade), payload de outro formato, `celula_id` que não confere, `claim_ids` diferente da união das unidades, número em unidade inexistente, tentativa 0 e a ida e volta por JSON que mantém o tipo do payload.
 - **`Violacao`:** posição opcional, `inicio` e `fim` sempre juntos e em ordem, campo e métrica fora do vocabulário.
-- **Detalhes, `MetricaResultado` e `Scorecard`:** as cinco métricas e o modelo de `detalhes` de cada uma (lido de volta do JSON pelo campo `metrica`), detalhes de outra métrica, `passou` coerente com as violações, violação de outra métrica, valor numérico e booleano, e o veredito da tentativa (`APROVADA` só com tudo dentro da faixa, `REPROVADA` só com métrica fora, `ERRO_INFRA` sem regra sobre as métricas), métrica repetida e tentativa 0.
+- **Detalhes, `MetricaResultado` e `Scorecard`:** as sete métricas e o modelo de `detalhes` de cada uma (lido de volta do JSON pelo campo `metrica`), detalhes de outra métrica, `passou` coerente com as violações, violação de outra métrica, valor numérico e booleano, e o veredito da tentativa (`APROVADA` só com tudo dentro da faixa, `REPROVADA` só com métrica fora, `ERRO_INFRA` sem regra sobre as métricas), métrica repetida e tentativa 0.
 - **`CelulaState`:** `motivo_reprovacao` obrigatório em `REPROVADA` e proibido nos outros estados, `erro_classe` e `erro_mensagem` obrigatórios em `ERRO_INFRA` e proibidos nos outros, e peça ou scorecard de outra célula.
 
 ## conftest.py
@@ -265,7 +266,9 @@ Não contém testes, só infraestrutura compartilhada:
 - **M1, as datas:** data com dia, por extenso e com o ano do documento passam; data que nenhum claim traz, ano diferente do ano do documento, ano e trimestre sem lastro são violação; o ano do documento vale sem claim; data não conta como número varrido.
 - **M2:** artigo dentro da faixa, nos dois limites, curto e longo, com título e linha fina fora da contagem e a faixa de cada nível; carrossel com o limite de cada papel e a letra acentuada contada uma vez; roteiro com o limite de cada cena e do total, inclusive o total acima do limite com as cenas dentro; a faixa registrada traz o limite renderizado.
 - **M5:** termo com analogia no plano e marcador na mesma unidade; sem marcador; sem analogia no plano; marcador só na unidade seguinte; só a primeira ocorrência conta; marcador sem diferença de maiúscula e acento e não dentro de outra palavra; termo de nível iniciante; termo só no título; analogia `nova` ligada pela forma escrita; Intermediário e Avançado fora da regra; a unidade nomeada como seção, slide ou cena.
-- **Valor, faixa e detalhes:** o valor é o número de violações; o da `llm_judge` é `true` ou `false`; o `plan_contract` monta o resultado pelo mesmo `resultado.montar`.
+- **M3:** o IFL calculado à mão num texto de 6 palavras, 9 sílabas e 2 frases (118,9); número e marcador fora da leitura; título e linha fina fora da medida; Iniciante abaixo do piso reprova com a frase mais longa, a posição e a instrução com a meta; até 3 frases acima da meta; Intermediário e Avançado só medem; `nivel_estatistico` pelo piso do Iniciante e pela analogia (IFL alto sem analogia é `acima_de_iniciante`); o piso do carrossel e do roteiro; o fim da unidade que fecha a frase.
+- **M4:** a densidade por 100 palavras só com termos acima de iniciante, a densidade dos termos avançados, a contagem por termo, o resultado que nunca reprova e o título e a linha fina fora da contagem.
+- **Valor, faixa e detalhes:** o valor é o número de violações (o IFL na M3 e a densidade na M4); o da `llm_judge` é `true` ou `false`; o M7 (`plan_contract`) monta o resultado pelo mesmo `resultado.montar`.
 
 ## E5: síntese de formato
 
@@ -275,8 +278,8 @@ Não contém testes, só infraestrutura compartilhada:
 - **Corte e orçamento:** o artigo usa todo o plano; o carrossel e o roteiro, o núcleo e as maiores prioridades na ordem de leitura; a faixa do artigo e os segundos e palavras do roteiro divididos pelo peso, arredondados para baixo, com o resto dos segundos na última cena de claim; o carrossel sem divisão por claim.
 - **Pacote:** analogias presas aos claims do formato (a do IPCA sai do roteiro com o `C02`), tese, núcleo, atribuição e `data_documento`; claim do plano fora do FactSheet é `FalhaTerminal`.
 - **Prompt:** marcadores com o trecho, orçamento por claim, tese, analogias e expressões no Iniciante, nada de analogia nos outros níveis, abertura e fechamento no roteiro e, no retry, a peça anterior com os marcadores, o que está certo, as violações agrupadas pelo lugar da peça e as que ficaram de fora.
-- **Montagem:** a posição de cada número no título e nas seções confere com o trecho; o marcador inexistente, o de ordem que o claim não tem e o de claim fora do plano ficam no texto e a M1 conta os três como `marcador_invalido`; `restaurar` devolve a saída do redator; o `plan_contract` do carrossel com slides demais, claim fora do plano e claim ausente (instruções no masculino de "slide"), do carrossel curto e do roteiro que passa de 60 s, com as checagens de cada formato.
-- **Nó:** a célula termina em `AVALIANDO` com a tentativa 1, depois de uma atualização para `GERANDO`; a peça, as unidades (sem o id inventado `C99`, que fica na peça e no `plan_contract`), o número do título e a cópia local são gravados; o span leva o nível, a célula e a tentativa; o retry manda a peça anterior com o marcador inválido e o relatório, com raciocínio `low`, e grava a tentativa 2; a resposta fora do schema volta ao modelo sem consumir tentativa; sem plano, a `Falha` volta no estado (`falha`), sem a célula.
+- **Montagem:** a posição de cada número no título e nas seções confere com o trecho; o marcador inexistente, o de ordem que o claim não tem e o de claim fora do plano ficam no texto e a M1 conta os três como `marcador_invalido`; `restaurar` devolve a saída do redator; o M7 (`plan_contract`) do carrossel com slides demais, claim fora do plano e claim ausente (instruções no masculino de "slide"), do carrossel curto e do roteiro que passa de 60 s, com as checagens de cada formato.
+- **Nó:** a célula termina em `AVALIANDO` com a tentativa 1, depois de uma atualização para `GERANDO`; a peça, as unidades (sem o id inventado `C99`, que fica na peça e no M7 (`plan_contract`)), o número do título e a cópia local são gravados; o span leva o nível, a célula e a tentativa; o retry manda a peça anterior com o marcador inválido e o relatório, com raciocínio `low`, e grava a tentativa 2; a resposta fora do schema volta ao modelo sem consumir tentativa; sem plano, a `Falha` volta no estado (`falha`), sem a célula.
 - **Gravação:** a mesma peça de novo não grava nada, e outra peça na mesma tentativa é `FalhaTerminal`.
 
 `test_persistencia_supabase.py::test_peca_unidades_numeros_e_celula_numa_transacao` faz a gravação no Supabase local: a peça, a unidade só com o claim do run, os números do título (unidade nula) e do texto com o `campo`, a célula em `AVALIANDO`, a repetição sem efeito e a outra peça recusada. O mesmo teste grava o scorecard da tentativa (o mesmo de novo sem efeito, outro recusado, sem peça recusado), lê de volta igual ao gravado, com o valor booleano da `llm_judge`, e grava a célula em `REPROVADA` e em `ERRO_INFRA`; o check de `celulas` recusa `APROVADA` com o erro preenchido.
@@ -285,24 +288,24 @@ Não contém testes, só infraestrutura compartilhada:
 
 `test_router.py` (fluxo em `docs/fluxos/avaliacao.md`) roda o subgrafo da célula (`graph.construir_grafo_celula`) com o `ProviderFalso`, o repositório em memória e o plano e o FactSheet de `test_sintese.py`, na célula `intermediario__carrossel`:
 
-- **Correção de verdade:** a tentativa 1 tem um número escrito à mão (M1) e um slide de corpo acima de 220 caracteres (M2); o Router devolve a célula à E5 com o relatório; o prompt da tentativa 2 traz a peça anterior, o que passou (`analogy_rule` e `plan_contract`, com o valor), as violações por slide e as instruções; a tentativa 2 passa, e a célula termina `APROVADA` na tentativa 2, com os dois scorecards (`REPROVADA` e `APROVADA`), os tokens de cada tentativa e as cópias locais.
+- **Correção de verdade:** a tentativa 1 tem um número escrito à mão (M1) e um slide de corpo acima de 220 caracteres (M2); o Router devolve a célula à E5 com o relatório; o prompt da tentativa 2 traz a peça anterior, o que passou (`analogy_rule` e M7 (`plan_contract`), com o valor), as violações por slide e as instruções; a tentativa 2 passa, e a célula termina `APROVADA` na tentativa 2, com os dois scorecards (`REPROVADA` e `APROVADA`), os tokens de cada tentativa e as cópias locais.
 - **`K` esgotado:** duas tentativas reprovadas terminam em `REPROVADA` com `k_esgotado`; aprovada na tentativa 1, o redator não é chamado de novo.
 - **Falhas:** a `Falha` do redator vira `ERRO_INFRA` com a classe e a mensagem, tentativa 0 e nada gravado; a falha na gravação do scorecard vira `ERRO_INFRA` com a peça gravada e sem scorecard; a falha no retry deixa a tentativa da última peça; sem plano, `ERRO_INFRA`; uma exceção que não é `Falha` sobe.
-- **Juiz no config:** recebe os chunks do documento processado, só roda quando as 4 determinísticas passam, entra no fim do scorecard e pode reprovar, com a instrução no retry; a `Falha` do juiz grava o scorecard com veredito `ERRO_INFRA` e as 4 determinísticas.
+- **Juiz no config:** recebe os chunks do documento processado, só roda quando as 6 determinísticas passam, entra no fim do scorecard e pode reprovar, com a instrução no retry; a `Falha` do juiz grava o scorecard com veredito `ERRO_INFRA` e as 6 determinísticas.
 - **Router:** o relatório corretivo com até 5 violações por métrica e o resto em `restantes`; a não convergência (mesma contagem e contagem maior não convergem; contagem menor e métrica que passou convergem); a regra 5 não age com `K = 2` (nem lê a tentativa anterior), encerra com `nao_convergencia` com `K = 3` e, quando a tentativa melhorou, devolve o relatório sem gravar estado; scorecard de outra tentativa é bug (`ValueError`).
 
 ## Juiz (M6)
 
 `test_juiz.py` (regras em `docs/metricas.md`, M6) usa os claims e os chunks das três referências (`<fonte>.claims.json` e `<fonte>.documento.json`, com o texto do chunk tirado das páginas) e o glossário de `config/`:
 
-- **Provider por nó:** o `judge` usa a sua cadeia e os outros nós a padrão; chave do OpenRouter recusada é terminal, sem reserva.
-- **OpenRouter (HTTP simulado):** o pedido leva o modelo, o prompt, o `json_schema` com `strict`, o `require_parameters`, o `max_tokens` e o raciocínio com `exclude` (e não leva o raciocínio quando a chamada não pede); os tokens de saída são os `completion_tokens`, com o raciocínio dentro; 408, 429, 500, 502 e 503 são retriáveis, 401 é chave recusada, 402, 400 e 403 sem motivo de moderação são terminais; 403 de moderação e `content_filter` são bloqueio; erro com HTTP 200 (no corpo ou no `finish_reason`), timeout e conexão são retriáveis; a resposta vazia por `length` volta como fora do schema e os tokens são cobrados. `schema_estrito` põe todas as propriedades em `required`, fecha os objetos e tira os `default`.
+- **Provider por nó:** o `judge` usa a sua cadeia e os outros nós a padrão; chave do Groq recusada é terminal, sem reserva.
+- **Groq (HTTP simulado):** o pedido leva o modelo, o prompt, o `json_schema` com `strict`, o `max_completion_tokens` (8.192), o `include_reasoning` falso e o `reasoning_effort` (e não leva o `reasoning_effort` quando a chamada não pede); os tokens de saída são os `completion_tokens`, com o raciocínio dentro; 408, 422, 429, 498, 500, 502 e 503 são retriáveis, 401 é chave recusada, 400, 403, 404 e 413 são terminais; o 400 `json_validate_failed` devolve o `failed_generation` para o cliente repetir; `content_filter` é bloqueio; timeout e conexão são retriáveis; a resposta vazia por `length` volta como fora do schema e os tokens são cobrados. `schema_estrito` põe todas as propriedades em `required`, fecha os objetos e tira os `default`.
 - **Contexto:** as palavras sem acento, sem maiúscula e sem as vazias; o BM25 ordena pela sobreposição; o chunk da âncora é o que contém o início dela; cada unidade recebe a âncora e os vizinhos e 3 chunks lexicais fora deles; a unidade sem claim recebe todos os da peça; cada chunk vai uma vez, na ordem do documento; o documento de um chunk só (CVM) não tem vizinho nem lexical.
-- **Juiz:** só as analogias do plano usadas na peça vão ao juiz, com a definição técnica; o prompt traz os claims com o `literal_fonte`, os trechos, as unidades e a definição, sem o nível pedido, com raciocínio `low`; tudo implicado aprova com o `nivel_percebido` e o span da célula; cada `false` vira violação, com o intervalo do trecho (no texto ou no gancho visual da cena) e, sem o trecho na unidade, sem intervalo; unidade faltando, repetida ou inexistente e analogia faltando ou não pedida são `FalhaTerminal`; `criar_juiz` tem a assinatura que a E6 chama.
+- **Juiz:** só as analogias do plano usadas na peça vão ao juiz, com a definição técnica; o prompt traz os claims com o `literal_fonte`, os trechos, as unidades e a definição, o foco de cada nível e os termos do glossário da peça com o `nivel_minimo`, sem o nível pedido, com raciocínio `low`; a `justificativa_nivel` vai para os detalhes; tudo implicado aprova com o `nivel_percebido` e o span da célula; cada `false` vira violação, com o intervalo do trecho (no texto ou no gancho visual da cena) e, sem o trecho na unidade, sem intervalo; unidade faltando, repetida ou inexistente e analogia faltando ou não pedida são `FalhaTerminal`; `criar_juiz` tem a assinatura que a E6 chama.
 - **Matriz de níveis:** `montar`, `acerto` e `formatar`, e o comando com a consulta simulada.
 - **Peças de calibração:** todas são `Peca` válidas, com claims da referência e a unidade do erro dentro da peça, toda analogia dada é usada na peça, metade tem erro, os quatro tipos de erro aparecem e as peças cobrem os 9 pares de nível e formato e as três fontes.
 
-`test_calibracao_do_juiz` (marker `judge`) julga as 20 peças de `tests/fixtures/juiz/calibracao.yaml` com o OpenRouter de verdade, 2 em paralelo, e exige acerto de pelo menos 80% em cada grupo: peças fiéis aprovadas e peças com erro reprovadas. Uma falha do juiz (o `ERRO_INFRA` do pipeline) conta como erro da peça. Imprime, com `-s`, o resultado de cada peça (as unidades apontadas e a plantada), as justificativas, os tokens, o custo e a matriz de confusão de níveis. Custa da ordem de R$ 0,60 nas 20 peças e leva de 3 a 5 minutos.
+`test_calibracao_do_juiz` (marker `judge`) julga as 20 peças de `tests/fixtures/juiz/calibracao.yaml` com o Groq de verdade, 2 em paralelo, e exige acerto de pelo menos 80% em cada grupo: peças fiéis aprovadas e peças com erro reprovadas. Uma falha do juiz (o `ERRO_INFRA` do pipeline) conta como erro da peça. Imprime, com `-s`, o resultado de cada peça (as unidades apontadas e a plantada), as justificativas, os tokens, o custo e a matriz de confusão de níveis. Custa da ordem de R$ 0,20 nas 20 peças.
 
 ## Fan-out das 9 células
 
@@ -428,7 +431,7 @@ Cobre o dashboard sem rodar o pipeline e sem banco: o processo é trocado por um
 - `test_quebra_de_linha_nao_muda_o_texto_e_cabe_na_largura`, `test_palavra_maior_que_a_caixa_fica_sozinha_na_linha` e `test_espacos_repetidos_e_quebras_de_linha_valem_um_espaco`: em cada papel (gancho, corpo e conclusão), juntar as linhas com um espaço devolve exatamente o `Slide.texto`, nenhuma linha de mais de uma palavra passa da largura da caixa (medida com o `.ttf` pelo Pillow), a palavra maior que a caixa fica sozinha e a sequência de espaços vale um espaço.
 - `test_svg_tem_o_texto_em_tspans_e_os_metadados`, `test_svg_escapa_o_texto_sem_mudar_as_palavras`, `test_texto_que_nao_cabe_na_altura_da_caixa_sai_com_aviso` e `test_nome_do_arquivo_do_slide`: o SVG tem 1080 x 1350, o texto em `<tspan>` dentro de `<text>`, `celula_id`, tentativa, posição, papel e `claim_ids` no `<metadata>`, `&` e `<` escapados sem mudar as palavras, e o aviso de estouro de altura.
 - `test_rota_devolve_o_svg_do_slide_da_ultima_tentativa`, `test_rota_baixa_com_o_nome_do_arquivo_e_aceita_a_tentativa`, `test_rota_responde_404_para_o_que_nao_existe` e `test_rota_do_slide_responde_503_com_o_banco_fora_do_ar`: a rota do slide usa a última tentativa ou a pedida, `baixar=true` devolve o mesmo arquivo com o nome `<celula_id>_t<tentativa>_slide<n>.svg` como anexo, slide fora do carrossel, célula sem peça ou de outro formato é 404, e falha do banco é 503.
-- `test_pagina_carrega_a_fonte_e_as_abas_novas`: a página tem as abas Matriz e Quarentena e serve a Inter e a licença.
+- `test_pagina_carrega_a_fonte_e_as_abas_da_sidebar`: a página tem as seis abas da sidebar na ordem (Início, Resultado, Fluxo, Quarentena, Info. técnicas, Histórico), serve os quatro scripts e a Inter e a licença.
 - `test_revisao_sugere_o_numero_e_aceita_o_claim`, `test_revisao_recusa_valor_incompleto_e_aceita_o_informado` e `test_revisao_descarta_e_recusa_o_que_nao_esta_na_quarentena`: com um run de verdade com claim em quarentena no repositório em memória, a sugestão de número vem do código, aceitar e descartar gravam com o autor `dashboard` (e a cópia em `data/runs/<run_id>/revisoes/`), valor sem unidade ou número a mais é 422, claim fora da quarentena ou já revisado é 409 e claim que não passa na E3 é 422 sem gravar nada.
 
 ## test_persistencia_supabase.py
@@ -452,5 +455,5 @@ pytest                      # tudo; os testes do Supabase local são pulados se 
 pytest -m "not supabase"    # só os testes simulados
 pytest -m supabase          # só a integração com o Supabase local
 pytest -m gemini            # só a cobertura com a Gemini API de verdade (gasta tokens)
-pytest -m judge -s          # só a calibração do juiz com o OpenRouter de verdade (gasta tokens)
+pytest -m judge -s          # só a calibração do juiz com o Groq de verdade (gasta tokens)
 ```

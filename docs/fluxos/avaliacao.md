@@ -4,7 +4,7 @@ Este documento detalha a E6 e a E7 de uma célula: como a peça de uma tentativa
 
 ## Estado
 
-Implementadas, com os nós `evaluate` e `router` e o subgrafo da célula (`graph.construir_grafo_celula`). O grafo principal dispara o subgrafo para as 9 células depois da E4, até 3 em paralelo, e o nó `fechamento` conta os estados finais (`docs/execucao.md`). O juiz (M6) entra no config pelo `__main__.py` em todo run; sem ele no config (nos testes), a E6 roda só as 4 determinísticas.
+Implementadas, com os nós `evaluate` e `router` e o subgrafo da célula (`graph.construir_grafo_celula`). O grafo principal dispara o subgrafo para as 9 células depois da E4, até 3 em paralelo, e o nó `fechamento` conta os estados finais (`docs/execucao.md`). O juiz (M6) entra no config pelo `__main__.py` em todo run; sem ele no config (nos testes), a E6 roda só as 6 determinísticas.
 
 ## Subgrafo da célula
 
@@ -34,9 +34,9 @@ O `CelulaGrafoState` leva, além do `run_id`, da `CelulaState` e do `relatorio` 
 `nodes/evaluate.py`:
 
 1. lê o LevelSpec do nível, o glossário, o plano por `carregar_plano` (sem plano, `FalhaTerminal`) e o FactSheet assinado por `carregar_factsheet`;
-2. roda as 4 verificações determinísticas, sempre, todas, nesta ordem: `numeric_fidelity` (com os claims do FactSheet que estão no plano do nível, a `tabela_numeros` e a `data_documento`), `text_size`, `analogy_rule` e o `plan_contract` que a montagem da E5.3 deixou na célula;
-3. se as 4 passaram e o config traz um `juiz`, lê os chunks do documento processado da E1 (`carregar_documento_processado`) e chama o juiz, que devolve o `MetricaResultado` da `llm_judge`, acrescentado no fim do scorecard. Sem `juiz`, o scorecard tem as 4;
-4. monta o `Scorecard` da tentativa: o veredito é `APROVADA` se todas as métricas passaram, `REPROVADA` se alguma falhou e `ERRO_INFRA` se o juiz ou a leitura dos chunks levantou uma `Falha` (o scorecard leva então só as 4 determinísticas); `custo_tokens` é o `tokens_tentativa`; `duracao_ms` vai do `inicio_tentativa` ao fim da E6;
+2. roda as 6 verificações determinísticas, sempre, todas, nesta ordem: `numeric_fidelity` (com os claims do FactSheet que estão no plano do nível, a `tabela_numeros` e a `data_documento`), `text_size`, `readability` (com o LevelSpec do nível e o do Iniciante), `term_density` (só mede), `analogy_rule` e o M7 (`plan_contract`) que a montagem da E5.3 deixou na célula;
+3. se as 6 passaram e o config traz um `juiz`, lê os chunks do documento processado da E1 (`carregar_documento_processado`) e chama o juiz, que devolve o `MetricaResultado` da `llm_judge`, acrescentado no fim do scorecard. Sem `juiz`, o scorecard tem as 6;
+4. monta o `Scorecard` da tentativa: o veredito é `APROVADA` se todas as métricas passaram, `REPROVADA` se alguma falhou e `ERRO_INFRA` se o juiz ou a leitura dos chunks levantou uma `Falha` (o scorecard leva então só as 6 determinísticas); `custo_tokens` é o `tokens_tentativa`; `duracao_ms` vai do `inicio_tentativa` ao fim da E6;
 5. grava o scorecard por `persistencia.gravar_scorecard` e devolve a célula com o `scorecard`.
 
 A E6 não grava estado de célula: a célula segue em `AVALIANDO` até a E7.

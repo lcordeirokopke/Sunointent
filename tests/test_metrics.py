@@ -10,7 +10,7 @@ import pytest
 
 from sunontent import levelspec
 from sunontent.glossario import validar
-from sunontent.metrics import analogy_rule, numeric_fidelity, resultado, text_size
+from sunontent.metrics import analogy_rule, numeric_fidelity, readability, resultado, term_density, text_size
 from sunontent.schemas import (
     Analogia,
     Ancora,
@@ -485,7 +485,7 @@ def test_resultado_numerico_vale_o_numero_de_violacoes():
 
 def test_resultado_da_llm_judge_vale_true_ou_false():
     detalhes = LlmJudgeDetalhes(analogias=[], unidades=[VeredictoUnidade(unidade_indice=0, justificativa="ok", implicada=True)],
-                                nivel_percebido="iniciante")
+                                justificativa_nivel="j", nivel_percebido="iniciante")
     aprovado = resultado.montar(detalhes, [])
     assert (aprovado.valor, aprovado.faixa_esperada, aprovado.passou) == (True, "true", True)
     from sunontent.schemas import Violacao
@@ -497,3 +497,104 @@ def test_resultado_do_plan_contract():
     detalhes = PlanContractDetalhes(checagens=[])
     r = resultado.montar(detalhes, [])
     assert (r.nome, r.valor, r.faixa_esperada, r.passou) == ("plan_contract", 0.0, "0", True)
+
+
+# M3. readability
+
+FACIL = "A taxa cai. O juro sobe."  # 6 palavras, 9 sílabas, 2 frases
+# 2 frases de 30 palavras, todas de 3 sílabas: o IFL fica abaixo de zero
+LONGA = " ".join(["Operação societária deliberada"] * 10) + "."
+
+
+def m3(peca, nivel="iniciante"):
+    return readability.avaliar(peca, SPECS[nivel], SPECS["iniciante"])
+
+
+def test_ifl_calculado_a_mao():
+    r = m3(artigo([FACIL]))
+    # 248,835 - 1,015 x (6 / 2) - 84,6 x (9 / 6) = 118,89
+    assert r.valor == 118.9 and r.detalhes.ifl == 118.9
+    assert (r.detalhes.palavras, r.detalhes.silabas, r.detalhes.frases) == (6, 9, 2)
+    assert r.passou and r.violacoes == []
+
+
+def test_numero_e_marcador_ficam_fora_da_leitura():
+    com = m3(artigo([FACIL + " A Selic ficou em 13,75% ao ano, ou {{C01.1}}."]))
+    sem = m3(artigo([FACIL + " A Selic ficou em ao ano, ou."]))
+    assert com.detalhes.palavras == sem.detalhes.palavras
+
+
+def test_so_o_texto_das_unidades_entra_na_leitura():
+    r = m3(artigo([FACIL], titulo=LONGA, linha_fina=LONGA))
+    assert r.detalhes.ifl == 118.9
+
+
+def test_iniciante_abaixo_do_piso_reprova_com_a_frase_mais_longa():
+    r = m3(artigo([FACIL, LONGA]))
+    assert not r.passou and r.valor == r.detalhes.ifl < 30
+    assert r.faixa_esperada == "IFL de pelo menos 30" and r.detalhes.ifl_minimo == 30
+    (v,) = r.violacoes
+    assert v.metrica == "readability" and v.trecho == LONGA and (v.unidade_indice, v.campo) == (1, "texto")
+    assert (v.inicio, v.fim) == (0, len(LONGA)) and v.esperado == "IFL de pelo menos 30"
+    assert "frase na seção 2 (30 palavras)" in v.instrucao_corretiva and "de até 18 palavras" in v.instrucao_corretiva
+
+
+def test_a_violacao_aponta_ate_tres_frases_acima_da_meta():
+    longa = "Operação societária deliberada " * 7 + "formalmente."  # 22 palavras, acima da meta de 18
+    r = m3(artigo([longa, longa, longa, longa]))
+    assert [v.unidade_indice for v in r.violacoes] == [0, 1, 2]
+
+
+def test_intermediario_e_avancado_so_medem():
+    for nivel in ("intermediario", "avancado"):
+        r = m3(artigo([LONGA], nivel=nivel), nivel)
+        assert r.passou and r.violacoes == [] and r.detalhes.ifl < 0
+        assert r.faixa_esperada == "sem limite (só mede)" and r.detalhes.ifl_minimo is None
+
+
+def test_nivel_estatistico_junta_o_piso_do_ifl_e_a_analogia():
+    com_analogia = FACIL + " A taxa é como um preço."
+    r = m3(artigo([com_analogia]))
+    assert r.detalhes.analogia_na_peca and r.detalhes.nivel_estatistico == "iniciante"
+    # IFL alto, mas sem analogia: frase curta de outro nível não é estilo de Iniciante
+    r = m3(artigo([FACIL], nivel="intermediario"), "intermediario")
+    assert not r.detalhes.analogia_na_peca and r.detalhes.nivel_estatistico == "acima_de_iniciante"
+    # analogia, mas IFL abaixo do piso
+    r = m3(artigo([LONGA + " Imagine que sim."]), "avancado")
+    assert r.detalhes.analogia_na_peca and r.detalhes.nivel_estatistico == "acima_de_iniciante"
+
+
+def test_piso_do_carrossel_e_do_roteiro_vem_do_formato():
+    facil = m3(carrossel([FACIL, FACIL, FACIL]))
+    assert facil.passou and facil.faixa_esperada == "IFL de pelo menos 45"
+    dificil = m3(roteiro([LONGA, LONGA, LONGA]))
+    assert not dificil.passou and dificil.faixa_esperada == "IFL de pelo menos 45"
+    assert "na cena 1" in dificil.violacoes[0].instrucao_corretiva
+
+
+def test_fim_da_unidade_fecha_a_frase():
+    r = m3(carrossel(["A taxa cai", "O juro sobe", "Fim"]))
+    assert r.detalhes.frases == 3
+
+
+# M4. term_density
+
+
+def test_densidade_conta_so_termos_acima_de_iniciante_por_cem_palavras():
+    # 20 palavras: Selic (intermediário) duas vezes, hiato do produto (avançado) uma vez, juros (iniciante) fora
+    texto = "A Selic subiu e os juros também; a taxa Selic e o hiato do produto mudam, mas o mercado segue."
+    r = term_density.avaliar(artigo([texto]), GLOSSARIO)
+    assert r.detalhes.palavras == 20 and r.detalhes.ocorrencias == 3 and r.detalhes.ocorrencias_avancado == 1
+    assert r.valor == r.detalhes.densidade == 15.0 and r.detalhes.densidade_avancado == 5.0
+    assert {(t.glossario_id, t.ocorrencias) for t in r.detalhes.termos} == {("selic", 2), ("hiato", 1)}
+
+
+def test_densidade_so_mede_e_nunca_reprova():
+    r = term_density.avaliar(artigo(["Selic CDI IPCA Selic CDI IPCA"]), GLOSSARIO)
+    assert r.passou and r.violacoes == [] and r.valor == 100.0
+    assert r.faixa_esperada == "sem limite (só mede)"
+
+
+def test_densidade_ignora_titulo_e_linha_fina():
+    r = term_density.avaliar(artigo(["A taxa cai."], titulo="Selic CDI", linha_fina="IPCA"), GLOSSARIO)
+    assert r.valor == 0.0 and r.detalhes.termos == []

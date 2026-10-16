@@ -91,7 +91,8 @@ def test_correcao_acontece_na_tentativa_2(com_plano, run_id, tmp_path):
     segundo = Scorecard.model_validate(com_plano.scorecards[(run_id, CELULA, 2)])
     assert primeiro.veredito == "REPROVADA" and segundo.veredito == "APROVADA"
     assert [(m.nome, m.passou) for m in primeiro.metricas] == [
-        ("numeric_fidelity", False), ("text_size", False), ("analogy_rule", True), ("plan_contract", True)]
+        ("numeric_fidelity", False), ("text_size", False), ("readability", True), ("term_density", True),
+        ("analogy_rule", True), ("plan_contract", True)]
     assert primeiro.custo_tokens == 1200 and segundo.custo_tokens == 1200  # 1000 de entrada e 200 de saída
 
     # O retry leva a peça anterior com o número escrito à mão, o que está certo e as instruções corretivas.
@@ -171,7 +172,8 @@ def m6(*implicadas: bool):
     violacoes = [Violacao(metrica="llm_judge", trecho="slide", esperado="implicada", obtido="não implicada",
                           instrucao_corretiva="Tire a causa que o claim não diz.", unidade_indice=u.unidade_indice)
                  for u in unidades if not u.implicada]
-    return resultado.montar(LlmJudgeDetalhes(analogias=[], unidades=unidades, nivel_percebido="intermediario"),
+    return resultado.montar(LlmJudgeDetalhes(analogias=[], unidades=unidades, justificativa_nivel="j",
+                                             nivel_percebido="intermediario"),
                             violacoes)
 
 
@@ -205,7 +207,7 @@ def test_falha_do_juiz_grava_scorecard_erro_infra(com_plano, run_id, tmp_path):
     final, _ = rodar(com_plano, run_id, tmp_path, [carrossel()], juiz)
     assert (final.celula.estado, final.celula.erro_classe) == ("ERRO_INFRA", "retriavel")
     gravado = Scorecard.model_validate(com_plano.scorecards[(run_id, CELULA, 1)])
-    assert gravado.veredito == "ERRO_INFRA" and len(gravado.metricas) == 4
+    assert gravado.veredito == "ERRO_INFRA" and len(gravado.metricas) == 6
 
 
 # Router: relatório corretivo e não convergência

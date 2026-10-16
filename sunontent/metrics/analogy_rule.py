@@ -14,7 +14,7 @@ from sunontent.metrics import campos, resultado
 from sunontent.schemas import AnalogyRuleDetalhes, MetricaResultado, Peca, PlanoNivel, TermoAnalogia, Violacao
 
 
-def _tem_marcador(texto: str, marcadores: list[str]) -> bool:
+def tem_marcador(texto: str, marcadores: list[str]) -> bool:
     dobrado = dobrar(texto)
     for marcador in marcadores:
         padrao = r"(?<!\w)" + r"\s+".join(re.escape(p) for p in dobrar(marcador).split()) + r"(?!\w)"
@@ -55,12 +55,12 @@ def avaliar(peca: Peca, spec: LevelSpec, plano: PlanoNivel, glossario: Glossario
     for termo_id, (indice, texto, inicio, fim) in primeiras.items():
         termo = glossario.termos[termo_id].termo
         analogia = analogias.get(termo_id)
-        tem_marcador = _tem_marcador(texto, marcadores)
+        com_marcador = tem_marcador(texto, marcadores)
         termos.append(TermoAnalogia(
             termo=termo, glossario_id=termo_id, unidade_indice=indice,
-            analogia_no_plano=analogia is not None, marcador_na_unidade=tem_marcador,
+            analogia_no_plano=analogia is not None, marcador_na_unidade=com_marcador,
         ))
-        if analogia is not None and tem_marcador:
+        if analogia is not None and com_marcador:
             continue
         onde = f"{em} {unidade} {indice + 1}"
         if analogia is None:

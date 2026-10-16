@@ -15,10 +15,13 @@ from sunontent.schemas import (
     NumeroUsado,
     Peca,
     PlanContractDetalhes,
+    ReadabilityDetalhes,
     SaidaArtigo,
     SaidaCarrossel,
     SaidaRoteiro,
     Scorecard,
+    TermDensityDetalhes,
+    TermoContado,
     TextSizeDetalhes,
     VeredictoAnalogia,
     VeredictoUnidade,
@@ -265,8 +268,9 @@ def test_violacao_invalida(campos):
         violacao(**campos)
 
 
-def test_as_cinco_metricas():
-    assert METRICAS == ("numeric_fidelity", "text_size", "analogy_rule", "llm_judge", "plan_contract")
+def test_as_sete_metricas():
+    assert METRICAS == (
+        "numeric_fidelity", "text_size", "readability", "term_density", "analogy_rule", "llm_judge", "plan_contract")
 
 
 # Detalhes, MetricaResultado e Scorecard
@@ -277,11 +281,17 @@ DETALHES = {
     "text_size": TextSizeDetalhes(
         grandeza="palavras", limite="de 350 a 550 palavras no texto das seções",
         unidades=[MedidaUnidade(unidade_indice=0, medida=400, limite_min=350, limite_max=550, dentro=True)]),
+    "readability": ReadabilityDetalhes(
+        palavras=120, silabas=250, frases=8, ifl=52.3, ifl_minimo=45, frase_max_palavras=18,
+        analogia_na_peca=True, nivel_estatistico="iniciante"),
+    "term_density": TermDensityDetalhes(
+        palavras=120, ocorrencias=6, densidade=5.0, ocorrencias_avancado=1, densidade_avancado=0.8,
+        termos=[TermoContado(glossario_id="selic", termo="Selic", nivel_minimo="intermediario", ocorrencias=6)]),
     "analogy_rule": AnalogyRuleDetalhes(aplicavel=False, termos=[]),
     "llm_judge": LlmJudgeDetalhes(
         analogias=[VeredictoAnalogia(termo="Selic", justificativa="Explica o preço do dinheiro.", correta=True)],
         unidades=[VeredictoUnidade(unidade_indice=0, justificativa="Os claims dizem isso.", implicada=True)],
-        nivel_percebido="iniciante"),
+        justificativa_nivel="Explica cada termo.", nivel_percebido="iniciante"),
     "plan_contract": PlanContractDetalhes(
         checagens=[ChecagemContrato(nome="quantidade_de_slides", esperado="5 a 7", obtido="6", passou=True)]),
 }

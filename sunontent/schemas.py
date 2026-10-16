@@ -337,7 +337,9 @@ class PlanoEditorial(BaseModel):
 
 # Peça final, saída do redator (E5) e avaliação (E6). Docs: docs/arquiteturas.md, Peça final e Scorecard e violação.
 
-Metrica = Literal["numeric_fidelity", "text_size", "analogy_rule", "llm_judge", "plan_contract"]
+Metrica = Literal[
+    "numeric_fidelity", "text_size", "readability", "term_density", "analogy_rule", "llm_judge", "plan_contract"
+]
 METRICAS: tuple[str, ...] = get_args(Metrica)
 # Onde, dentro da unidade da peça, está o trecho: `texto` é o texto da seção, do slide ou a fala da cena.
 CampoPeca = Literal["titulo", "linha_fina", "texto", "gancho_visual"]
@@ -554,7 +556,7 @@ class Violacao(BaseModel):
 
 
 # `detalhes` de cada métrica (metricas.detalhes, jsonb). Cada modelo leva o nome da métrica em `metrica`, que
-# distingue os cinco quando o jsonb é lido de volta.
+# distingue os sete quando o jsonb é lido de volta.
 
 
 class DesfechosNumericos(BaseModel):
@@ -590,6 +592,37 @@ class TextSizeDetalhes(BaseModel):
     grandeza: Literal["palavras", "caracteres"]
     limite: str  # o limite renderizado do LevelSpec (InstrucoesRedator.faixa_esperada)
     unidades: list[MedidaUnidade]  # no roteiro, a última é o total de palavras (unidade_indice None)
+
+
+class ReadabilityDetalhes(BaseModel):
+    metrica: Literal["readability"] = "readability"
+    palavras: int = Field(ge=0)  # as palavras de leitura (sem número nem marcador) do texto das unidades
+    silabas: int = Field(ge=0)
+    frases: int = Field(ge=0)
+    ifl: float  # Índice de Facilidade de Leitura de Flesch adaptado ao português (Martins et al., 1996)
+    ifl_minimo: float | None = None  # o piso do nível neste formato (LevelSpec); None quando o nível só mede
+    frase_max_palavras: int | None = None  # a meta de tamanho de frase do nível, quando existe
+    analogia_na_peca: bool = False  # algum texto de unidade tem um marcador de analogia do Iniciante (M5)
+    # O estilo de Iniciante: IFL no piso do Iniciante no formato e analogia na peça. Alimenta a matriz de confusão
+    # estatística; None quando o Iniciante não tem piso no formato.
+    nivel_estatistico: Literal["iniciante", "acima_de_iniciante"] | None = None
+
+
+class TermoContado(BaseModel):
+    glossario_id: str
+    termo: str
+    nivel_minimo: Nivel
+    ocorrencias: int = Field(ge=1)
+
+
+class TermDensityDetalhes(BaseModel):
+    metrica: Literal["term_density"] = "term_density"
+    palavras: int = Field(ge=0)  # as palavras do texto das unidades (mesma contagem da M2)
+    ocorrencias: int = Field(ge=0)  # ocorrências de termos do glossário com `nivel_minimo` acima de iniciante
+    densidade: float = Field(ge=0)  # por 100 palavras
+    ocorrencias_avancado: int = Field(ge=0)  # as que são de termo com `nivel_minimo` avancado
+    densidade_avancado: float = Field(ge=0)  # por 100 palavras
+    termos: list[TermoContado]
 
 
 class TermoAnalogia(BaseModel):
@@ -638,6 +671,7 @@ class LlmJudgeDetalhes(BaseModel):
     metrica: Literal["llm_judge"] = "llm_judge"
     analogias: list[VeredictoAnalogia]
     unidades: list[VeredictoUnidade]
+    justificativa_nivel: str  # antes do nível, na ordem em que o juiz escreve
     nivel_percebido: Nivel  # só informativo: alimenta a matriz de confusão de níveis
 
 
@@ -649,18 +683,27 @@ class SaidaJuiz(BaseModel):
         description="uma resposta para cada analogia pedida, com o termo escrito como na lista; vazia se não há analogia"
     )
     unidades: list[VeredictoUnidade] = Field(description="uma resposta para cada unidade da peça, pelo índice")
+    justificativa_nivel: str = Field(
+        description="o exame da peça pelos quatro critérios do nível (vocabulário, explicação, pressuposto e foco)"
+    )
     nivel_percebido: Nivel = Field(description="o nível de leitor para o qual a peça parece escrita")
 
 
 Detalhes = Annotated[
-    NumericFidelityDetalhes | TextSizeDetalhes | AnalogyRuleDetalhes | PlanContractDetalhes | LlmJudgeDetalhes,
+    NumericFidelityDetalhes
+    | TextSizeDetalhes
+    | ReadabilityDetalhes
+    | TermDensityDetalhes
+    | AnalogyRuleDetalhes
+    | PlanContractDetalhes
+    | LlmJudgeDetalhes,
     Field(discriminator="metrica"),
 ]
 
 
 class MetricaResultado(BaseModel):
     nome: Metrica
-    valor: float | bool  # número de violações (unidades fora do limite, na text_size); true ou false na llm_judge
+    valor: float | bool  # violações (unidades fora do limite, na text_size), o IFL (readability), a densidade (term_density); true ou false na llm_judge
     faixa_esperada: str
     passou: bool
     violacoes: list[Violacao]

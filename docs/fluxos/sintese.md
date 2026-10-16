@@ -1,6 +1,6 @@
 # Síntese de formato (E5)
 
-Este documento detalha a E5 de uma célula: como o plano de um nível vira a `Peca` de um formato. O desenho da etapa (pacote, redator e montagem, e os objetos `Peca`, `NumeroUsado` e os schemas de saída do redator) está em `docs/arquiteturas.md`, E5 e "Peça final". O `plan_contract`, calculado na montagem, está em `docs/metricas.md`. O plano que a E5 recebe está em `docs/fluxos/plano-editorial.md`.
+Este documento detalha a E5 de uma célula: como o plano de um nível vira a `Peca` de um formato. O desenho da etapa (pacote, redator e montagem, e os objetos `Peca`, `NumeroUsado` e os schemas de saída do redator) está em `docs/arquiteturas.md`, E5 e "Peça final". O M7 (`plan_contract`), calculado na montagem, está em `docs/metricas.md`. O plano que a E5 recebe está em `docs/fluxos/plano-editorial.md`.
 
 ## Estado
 
@@ -10,7 +10,7 @@ Implementada, com o nó `synth`, no subgrafo da célula com a E6 e a E7 (`docs/f
 
 - **Pacote (código):** corta os claims do plano do nível para o formato, troca os números do texto de cada claim por marcadores, calcula o orçamento e prende as analogias aos claims do formato.
 - **Redator (LLM, 1 chamada por tentativa):** escreve o payload do formato com os marcadores no texto, no schema do formato.
-- **Montagem (código):** troca os marcadores pelos números, registra a posição de cada número em `numeros_usados` e calcula o `plan_contract`.
+- **Montagem (código):** troca os marcadores pelos números, registra a posição de cada número em `numeros_usados` e calcula o M7 (`plan_contract`).
 
 ## Módulos
 
@@ -46,7 +46,7 @@ O pacote traz também a tese (vazia quando a limpeza da E4 a tirou, e então o p
 Um template, `prompts/synthesizer.j2`, para as 9 células, nesta ordem:
 
 1. **Regras comuns:** não criar fatos, causa ou consequência que os claims não digam; todo número que não seja data só pelo marcador, sem conta nem arredondamento; datas como o claim as escreve, com o ano do documento permitido na data sem ano; seguir a ordem de leitura; escrever com atribuição o claim marcado "atribuir à fonte"; listar em `claim_ids` os claims de cada unidade, cobrindo todos os do formato; as regras de estrutura do formato (título e linha fina, gancho e conclusão, abertura e fechamento, `gancho_visual` sem número).
-2. **O nível:** o `foco` do LevelSpec e, no Iniciante, as expressões de analogia (`instrucoes_redator(...).marcadores`).
+2. **O nível:** o `foco` do LevelSpec e, no Iniciante, as expressões de analogia (`instrucoes_redator(...).marcadores`) e a meta de tamanho de frase (`instrucoes_redator(...).legibilidade`, do bloco `legibilidade`).
 3. **O formato:** o orçamento de `instrucoes_redator` e, no roteiro, o tempo da abertura e do fechamento.
 4. **A tese do nível**, quando há.
 5. **Os claims**, na ordem de leitura: id, papel, núcleo, atribuição, a parte do orçamento, o texto com marcadores e a tabela de marcadores (`{{C01.1}} = 13,75%`).
@@ -63,7 +63,7 @@ O relatório corretivo é um `RelatorioCorretivo` (`sunontent/schemas.py`): `cer
 
 1. Em cada campo que aceita número (o título do artigo e o texto de cada unidade), cada marcador válido vira o trecho guardado no pacote, e o `NumeroUsado` registra o campo, a unidade (nula no título), o intervalo do número no texto final, o claim e a ordem. O marcador que não está entre os válidos (claim inexistente, ordem que o claim não tem ou claim fora do plano do nível) fica no texto como veio: a M1 o encontra no texto final e o aponta.
 2. A linha fina e o gancho visual não aceitam marcador já no schema do redator; o número escrito fora de marcador em qualquer campo fica no texto, e a M1 o aponta na E6.
-3. O `plan_contract` é calculado sobre o payload final e montado com `metrics.resultado.montar(PlanContractDetalhes(...), violacoes)`. As checagens de cada formato:
+3. O M7 (`plan_contract`) é calculado sobre o payload final e montado com `metrics.resultado.montar(PlanContractDetalhes(...), violacoes)`. As checagens de cada formato:
 
 | Checagem | Formatos | Violação |
 | -------- | -------- | -------- |
@@ -81,8 +81,8 @@ O relatório corretivo é um `RelatorioCorretivo` (`sunontent/schemas.py`): `cer
 1. lê o LevelSpec do nível e o glossário, o plano por `carregar_plano` (sem plano, `FalhaTerminal`) e o FactSheet assinado por `carregar_factsheet`;
 2. grava a célula em `GERANDO` por `atualizar_celula`;
 3. monta o pacote, chama o redator com a tentativa seguinte à da célula e, no retry, a peça anterior (`celula.peca`) restaurada e o relatório do estado;
-4. monta a peça e o `plan_contract`;
-5. grava a peça com a célula em `AVALIANDO` e a tentativa nova, e devolve a célula com `peca`, `tentativa`, `estado` e `plan_contract`, que a E6 junta ao scorecard, os tokens das chamadas de LLM da tentativa (`tokens_tentativa`) e o início da tentativa (`inicio_tentativa`), para o scorecard.
+4. monta a peça e o M7 (`plan_contract`);
+5. grava a peça com a célula em `AVALIANDO` e a tentativa nova, e devolve a célula com `peca`, `tentativa`, `estado` e M7 (`plan_contract`), que a E6 junta ao scorecard, os tokens das chamadas de LLM da tentativa (`tokens_tentativa`) e o início da tentativa (`inicio_tentativa`), para o scorecard.
 
 Uma `Falha` em qualquer passo não sobe do nó: vai para `falha` no estado, com a classe e a mensagem, e o subgrafo segue direto à E7, que grava a célula em `ERRO_INFRA`. A E5 não grava estado final.
 
@@ -91,15 +91,15 @@ Uma `Falha` em qualquer passo não sobe do nó: vai para `falha` no estado, com 
 `persistencia.gravar_peca` grava numa transação, no Supabase:
 
 - `pecas`: a peça da tentativa, com o payload final e a união dos `claim_ids`;
-- `peca_unidade_claims`: cada unidade com os seus claims, sem repetir e só os que existem no FactSheet do run (um id inventado pelo redator fica no payload e em `pecas.claim_ids` e é violação do `plan_contract`, mas não tem página para rastrear);
+- `peca_unidade_claims`: cada unidade com os seus claims, sem repetir e só os que existem no FactSheet do run (um id inventado pelo redator fica no payload e em `pecas.claim_ids` e é violação do M7 (`plan_contract`), mas não tem página para rastrear);
 - `peca_unidade_numeros`: cada `NumeroUsado`, com o `campo` (`texto` ou `titulo`) e a unidade nula no título, ligado a `claim_numeros`;
 - a célula, pela mesma atualização de `atualizar_celula`.
 
-A mesma peça gravada de novo na mesma tentativa não grava nada; outra peça na mesma tentativa é `FalhaTerminal`. Depois, a cópia local: `data/runs/<run_id>/celulas/<celula_id>/peca_<tentativa>.json` e `estado.json`. O `estado.json` não leva a peça, o scorecard nem o `plan_contract`.
+A mesma peça gravada de novo na mesma tentativa não grava nada; outra peça na mesma tentativa é `FalhaTerminal`. Depois, a cópia local: `data/runs/<run_id>/celulas/<celula_id>/peca_<tentativa>.json` e `estado.json`. O `estado.json` não leva a peça, o scorecard nem o M7 (`plan_contract`).
 
 ## Como falha
 
 - **Dado do claim:** número do texto do claim sem entrada na lista, ou o contrário, é `FalhaTerminal` no pacote (a E3 recusa esse claim, então só acontece com dado gravado fora do pipeline).
 - **Resposta fora do schema:** volta ao modelo pelo `llm.py`, sem consumir tentativa; esgotadas as tentativas de parse, a `Falha` vai para `falha` no estado, e a célula termina em `ERRO_INFRA`.
 - **Provider, leitura ou gravação:** a `Falha` vai para `falha` no estado, e a célula termina em `ERRO_INFRA`.
-- **Peça fora do contrato:** marcador inválido, número escrito à mão, slides demais, roteiro longo, claim fora do plano ou claim do formato ausente não interrompem a E5: a peça é gravada, e as violações ficam para a E6 (M1 e `plan_contract`).
+- **Peça fora do contrato:** marcador inválido, número escrito à mão, slides demais, roteiro longo, claim fora do plano ou claim do formato ausente não interrompem a E5: a peça é gravada, e as violações ficam para a E6 (M1 e M7 (`plan_contract`)).

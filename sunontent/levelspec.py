@@ -2,7 +2,8 @@
 
 O LevelSpec existe só em config/levels/: o prompt e o avaliador leem o mesmo arquivo. O arquivo tem os campos
 da E4, o contrato de formato (`peso_papel` e `formatos`), lido pela E4 (o `max_claims` do plano é o do artigo),
-pela E5.1 e pela M2, e, no Iniciante, o bloco `analogia` com os marcadores que a M5 procura. As frases do
+pela E5.1 e pela M2, no Iniciante, o bloco `analogia` com os marcadores que a M5 procura, e, em qualquer nível, o bloco
+opcional `legibilidade` (piso do IFL por formato, lido pela M3, e meta de frase do redator). As frases do
 prompt do redator e o limite da M2 saem da mesma função, `instrucoes_redator`. Arquivo inválido é
 FalhaTerminal: o run aborta no início da E4.
 """
@@ -126,6 +127,22 @@ class RegraAnalogia(_Fechado):
         return marcadores
 
 
+class IflMinimo(_Fechado):
+    """Piso do IFL por formato (M3): abaixo dele a peça é reprovada."""
+
+    artigo: StrictFloat | StrictInt
+    carrossel: StrictFloat | StrictInt
+    roteiro: StrictFloat | StrictInt
+
+
+class RegraLegibilidade(_Fechado):
+    """Regra da M3 num nível: o piso do IFL por formato e a meta de tamanho de frase que o redator recebe. O nível
+    sem o bloco só mede a legibilidade."""
+
+    ifl_minimo: IflMinimo
+    frase_max_palavras: StrictInt = Field(ge=5)
+
+
 class LevelSpec(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -137,6 +154,7 @@ class LevelSpec(BaseModel):
     peso_papel: PesoPapel
     formatos: Formatos
     analogia: RegraAnalogia | None = None
+    legibilidade: RegraLegibilidade | None = None
 
     @property
     def max_claims(self) -> int:
@@ -214,6 +232,7 @@ class InstrucoesRedator(_Fechado):
     orcamento: str  # o contrato do formato, em frases
     marcadores: str  # as expressões de analogia do Iniciante, em frase; vazio nos outros níveis
     faixa_esperada: str  # o limite renderizado, que a M2 registra no scorecard
+    legibilidade: str  # a meta de tamanho de frase do nível, em frase; vazio quando o nível não tem
 
 
 def _numero(valor: float) -> str:
@@ -258,4 +277,10 @@ def instrucoes_redator(spec: LevelSpec, formato: Formato) -> InstrucoesRedator:
             "Na primeira vez que usar um termo com analogia no plano, explique-o com a analogia na mesma seção, "
             f"slide ou cena, usando uma destas expressões: {expressoes}."
         )
-    return InstrucoesRedator(orcamento=orcamento, marcadores=marcadores, faixa_esperada=faixa)
+    legibilidade = ""
+    if spec.legibilidade is not None:
+        legibilidade = (
+            f"Escreva frases de até {spec.legibilidade.frase_max_palavras} palavras e prefira palavras curtas "
+            "e comuns: a legibilidade do texto é medida."
+        )
+    return InstrucoesRedator(orcamento=orcamento, marcadores=marcadores, faixa_esperada=faixa, legibilidade=legibilidade)

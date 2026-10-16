@@ -212,6 +212,21 @@ def criar_app(
     def listar_runs():
         return _ler(obter_consulta, lambda consulta: consulta.listar_runs())
 
+    @app.get("/api/balanco")
+    def balanco():
+        return _ler(obter_consulta, lambda consulta: consulta.balanco())
+
+    @app.get("/api/biblioteca")
+    def biblioteca():
+        return _ler(obter_consulta, lambda consulta: consulta.biblioteca())
+
+    @app.get("/api/runs/{run_id}/pecas/{celula_id}")
+    def peca_da_celula(run_id: str, celula_id: str):
+        peca = _ler(obter_consulta, lambda consulta: consulta.peca(run_id, celula_id))
+        if peca is None:
+            raise HTTPException(404, f"peça não encontrada: {run_id} {celula_id}")
+        return peca
+
     @app.get("/api/runs/{run_id}")
     def detalhar_run(run_id: str):
         detalhe = _ler(obter_consulta, lambda consulta: consulta.detalhar_run(run_id))

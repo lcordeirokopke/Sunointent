@@ -23,10 +23,12 @@ Cada run chama o Gemini na E2, na E4 e, por célula, na E5 (redator), e grava no
 | `app/execucao.py` | Inicia `python -m sunontent [fonte] [--dev]` como processo filho, lê stdout e stderr linha a linha e classifica cada linha. Uma execução por vez. |
 | `app/slide_svg.py` | O slide do carrossel em SVG: o template (caixas por papel), a quebra de linha medida pela fonte (Pillow) e a montagem do SVG. |
 | `sunontent/persistencia.py` | `ConsultaSupabase`: lê os runs do Supabase para o dashboard (`listar_runs`, `detalhar_run`, com as células, e `peca`), em conexão só de leitura. A revisão da quarentena grava pelo `RepositorioSupabase`, criado na primeira revisão. |
-| `app/static/` | `index.html`, `estilo.css` e os scripts `app.js` (fluxo, resultado e histórico), `matriz.js` (aba Matriz) e `revisao.js` (aba Quarentena): HTML, CSS e JS sem build e sem dependências externas. |
+| `app/static/` | `index.html` (sidebar e as seis páginas), `estilo.css` (tema claro, cor de marca `#E11927`, fonte Inter) e os scripts `app.js` (início, fluxo, histórico e a navegação), `resultado.js` (aba Resultado, com as peças por nível e a exportação em SVG e PNG), `tecnicas.js` (aba Info. técnicas) e `revisao.js` (aba Quarentena): HTML, CSS e JS sem build e sem dependências externas; os ícones são SVG inline. |
 | `app/static/fontes/` | `Inter-Regular.ttf`, `Inter-Bold.ttf` e `Inter-OFL.txt`: a fonte do slide (Inter, licença SIL OFL 1.1), carregada por `@font-face` na página e lida pelo Pillow no servidor. |
 
 ## Botões
+
+Ficam na barra fixa do topo, visível em todas as páginas.
 
 - **Executar run**: `python -m sunontent [fonte]`. O `__main__.py` monta o manifest, registra o run no Supabase e chama `graph.construir_grafo()`. Cada run passa pela E0 (download da publicação mais recente), E1, E2, E3 e E4, depois pelas 9 células em paralelo (E5, E6 e E7, até 3 ao mesmo tempo) e pelo fechamento, e termina com o plano editorial e as 9 células no estado final.
 - **Modo dev**: o mesmo com `--dev`, entrando pelo nó `referencia` com o documento de `tests/fixtures/referencia/`, sem download. A E2, a E4 e a E5 chamam o Gemini nos dois modos.
@@ -62,15 +64,22 @@ Quando o processo termina, o servidor acrescenta o evento `fim` com o código de
 
 ## Abas
 
+Uma sidebar à esquerda leva às seis páginas, nesta ordem (no celular ela vira uma barra no topo). O estado geral da execução (ocioso, rodando, concluída...) fica no pé da sidebar. Uma barra fixa no topo de todas as páginas tem só o seletor de fonte (Todas, Copom, CVM ou B3) e os botões Executar run, Modo dev e Parar (no celular a barra rola com a página).
+
+- **Início**: o resumo do último run (fonte, documento, claims, claims em quarentena, células aprovadas, tokens e custo), com atalhos para o Resultado, as Info. técnicas e o Fluxo. Enquanto o banco não tem nenhum run, a página mostra no lugar o aviso de como iniciar o pipeline; o mesmo vale para a dica do terminal do Fluxo. Ao iniciar o pipeline, a página abre o Fluxo. Depois do último run, o Início mostra o **balanço geral** de todos os runs (runs por status e por fonte, tokens e custo total e médio, células por estado, tentativas por célula e a taxa de aprovação de cada métrica na última tentativa) e as **peças salvas**: uma lista de cartões resumidos (título, formato, nível, fonte, data, run e estado) da última tentativa de cada célula, com filtro de formato, de nível e de estado (aprovadas por padrão). Cada cartão expande o conteúdo da peça: o artigo em texto, o carrossel em SVG e o roteiro por cena.
+- **Resultado**: um run lido do Supabase, escolhido no seletor (abaixo, Resultado).
 - **Fluxo**: os cartões E0 a E7 com estado e duração, o contador de rodadas do loop E2/E3, a miniatura das 9 células nos cartões da E5 à E7 e as arestas do grafo. As subabas mostram o terminal completo ou uma etapa: descrição, estado, duração, os dados do run gravados por ela e as linhas do terminal daquela etapa. O cartão da E3 cobre os nós `validate` e `quarentena`: soma as durações, junta as linhas e mostra o estado do último que rodou. Cada etapa com agente mostra só as chamadas de LLM do seu nó: a E2, as do `extractor`; a E4, as do `adapter`. A subaba da E4 mostra as rodadas do plano, se ele tem aviso e o plano gravado (ver Plano editorial abaixo). As subabas da E5, da E6 e da E7 mostram a grade das células (abaixo).
-- **Matriz**: as 9 células de um run lidas do Supabase (abaixo, Matriz 3x3).
-- **Quarentena**: a revisão humana dos claims reprovados depois da última rodada do loop E2/E3 (abaixo, Revisão da quarentena).
-- **Resultado**: um run lido do Supabase: resumo (no run abortado, o erro com a classe e a etapa em que o run abortou), documento processado, claims do FactSheet com o trecho da fonte (os aceitos na revisão da quarentena marcados como `humano`), validações por rodada, a quarentena com o motivo e a decisão de cada claim, o plano editorial da E4 e os problemas do gate por rodada, chamadas de LLM e as versões do manifest. A quarentena aparece aqui só para leitura: a revisão é feita na aba Quarentena.
+- **Quarentena**: a revisão humana dos claims reprovados depois da última rodada do loop E2/E3 (abaixo, Revisão da quarentena). No topo, um texto explica o que a página mostra, também quando a lista está vazia.
+- **Info. técnicas**: tudo o que um run gravou, de um run por vez (abaixo, Informações técnicas).
 - **Histórico**: os runs da tabela `runs`, do mais recente ao mais antigo, com os claims e os claims em quarentena ainda sem decisão; um clique abre o resultado.
+
+### Telas estreitas
+
+Até 900 px de largura, a sidebar vira uma barra no topo, com o menu rolando de lado. Até 720 px, os textos e os cartões ficam menores, os cartões das etapas do Fluxo passam a duas colunas (sem rolagem lateral), as cenas do roteiro empilham o tempo sobre a fala e a matriz 3x3 do Resultado vira uma lista: um bloco por nível, com uma linha por formato e o nome do formato em cada célula. Tabelas largas rolam dentro do próprio cartão, e identificadores longos (como o `run_id`) quebram em vez de estourar a largura.
 
 ### Plano editorial
 
-A subaba da E4 e a aba Resultado mostram o plano lido de `planos_editoriais`, `planos_nivel` e `validacoes_plano`, só leitura:
+A subaba da E4 e a aba Info. técnicas mostram o plano lido de `planos_editoriais`, `planos_nivel` e `validacoes_plano`, só leitura:
 
 - **Plano:** o núcleo, com o texto de cada claim, as rodadas do gate e o aviso, quando houver: a lista do que a limpeza do código mudou depois da última rodada.
 - **Por nível:** a tese, com os claims que ela parafraseia, ou a nota de que a limpeza tirou a tese; os claims usados em ordem de leitura, com o papel, a prioridade (1 é o mais importante; o carrossel e o roteiro usam os de maior prioridade), o texto do claim e a marca de atribuição à fonte, e o núcleo destacado; no Iniciante, as analogias, com o termo, a explicação, a origem (`glossario`, com a referência `<id>#<n>`, ou `nova`) e se está revisada; e os descartes, recolhidos, com o motivo, a origem e o claim relacionado em `redundante`.
@@ -88,29 +97,39 @@ As etapas E5, E6 e E7 rodam uma vez por célula, e as 9 células andam em parale
 
 Uma etapa é mostrada como implementada quando o seu nó existe no grafo devolvido por `/api/grafo`. A rota abre o subgrafo da célula (`get_graph(xray=True)`), então `synth`, `evaluate` e `router` aparecem como nós do grafo, ligados à `adapt` e ao `fechamento`.
 
-A URL guarda a aba: `#fluxo/E3`, `#resultado/<run_id>`, `#matriz/<run_id>/<celula_id>`, `#quarentena/<run_id>`, `#historico`.
+A URL guarda a aba: `#inicio`, `#fluxo/E3`, `#resultado/<run_id>/<celula_id>`, `#quarentena/<run_id>`, `#tecnicas/<run_id>`, `#historico`. Resultado e Info. técnicas usam o mesmo run selecionado.
 
-### Matriz 3x3
+### Resultado
 
-A aba Matriz lê as células do run (`detalhar_run`, chave `celulas`) e mostra, num quadro 3x3 (níveis nas linhas, formatos nas colunas), o estado de cada célula, o veredito da última tentativa e um selo por métrica (M1, M2, M5, contrato do plano e M6; a M6 só tem selo se o juiz rodou). Um clique na célula abre:
+A aba lê o run por `detalhar_run` e mostra, de cima para baixo:
 
-- **Estado:** `APROVADA`, `REPROVADA` (com o `motivo_reprovacao`) ou `ERRO_INFRA` (com a classe e a mensagem da falha), e um botão por tentativa gravada.
-- **Scorecard da tentativa:** valor, faixa esperada e resultado de cada métrica, e a lista das violações com o trecho, o esperado, o obtido, a instrução corretiva e a posição (unidade, campo e intervalo).
-- **Peça:** o texto final por unidade (título, linha fina e seções do artigo; slides; cenas com a fala e o gancho visual). Cada violação com posição é destacada no trecho exato, e cada número vindo de um marcador é sublinhado, com o claim e a página do PDF no balão.
-- **Rastreabilidade:** em cada seção, slide ou cena, os claims que ela usa, com a página da âncora no PDF; quando o run tem a URL de origem, o claim abre o PDF naquela página. O texto do claim vem do FactSheet do run.
-- **Plano do nível:** o plano editorial do nível da célula (tese, claims em ordem de leitura, analogias e descartes), o mesmo da aba Resultado.
+- **Resumo do run:** identificação, modo, status, tokens e custo; no run abortado, o erro com a classe e a etapa em que o run abortou.
+- **Peças geradas:** um seletor de nível (Iniciante, Intermediário, Avançado) e, para o nível escolhido, as três peças da última tentativa de cada célula: o artigo (título, linha fina e seções), o carrossel com os slides desenhados na página e o roteiro (cenas com tempo, fala e gancho visual). Cada peça mostra o estado da célula. Os slides podem ser salvos em SVG ou em PNG, um a um (botões no slide) ou todos de uma vez (botões do carrossel).
+- **Avaliação por célula:** a matriz 3x3 (níveis nas linhas, formatos nas colunas) com o estado de cada célula, o veredito da última tentativa e um selo por métrica (M1 a M7, com a M7 sendo o contrato do plano; a M6 só tem selo se o juiz rodou), e, abaixo da matriz, as duas matrizes de confusão de níveis do run (o nível pedido contra o nível percebido pelo juiz, M6, e contra o estilo de Iniciante, IFL no piso e analogia na peça, M3), calculadas da última tentativa de cada célula e só informativas. Um clique na célula abre:
+  - **Estado:** `APROVADA`, `REPROVADA` (com o `motivo_reprovacao`) ou `ERRO_INFRA` (com a classe e a mensagem da falha), e um botão por tentativa gravada.
+  - **Scorecard da tentativa:** valor, faixa esperada e resultado de cada métrica, e a lista das violações com o trecho, o esperado, o obtido, a instrução corretiva e a posição (unidade, campo e intervalo).
+  - **Peça com marcações:** o texto final por unidade (título, linha fina e seções do artigo; slides; cenas com a fala e o gancho visual). Cada violação com posição é destacada no trecho exato, e cada número vindo de um marcador é sublinhado, com o claim e a página do PDF no balão.
+  - **Rastreabilidade:** em cada seção, slide ou cena, os claims que ela usa, com a página da âncora no PDF; quando o run tem a URL de origem, o claim abre o PDF naquela página. O texto do claim vem do FactSheet do run.
+  - **Plano do nível:** o plano editorial do nível da célula (tese, claims em ordem de leitura, analogias e descartes).
+- **Claims e documento:** os claims do FactSheet com o trecho da fonte (os aceitos na revisão da quarentena marcados como `humano`) e o documento processado.
+
+### Informações técnicas
+
+A aba mostra, para o run escolhido: o resumo do run; os custos e as chamadas de LLM (resumo com chamadas, falhas, tokens e custo, a soma por nó e modelo e a lista de todas as chamadas, com nível, célula, tentativa, rodada, duração e falha); o manifest (modelos por nó, versões dos prompts e dos LevelSpecs, versão do glossário, `K` e células em paralelo); os arquivos de `config/` e `prompts/` com o SHA-256 inteiro; o documento fonte (com o `doc_sha256`) e o documento processado; as validações por rodada da E3; o plano editorial e as rodadas do gate do plano.
 
 ### Slide em SVG
 
-Na célula de um carrossel, cada slide é desenhado como um `<svg>` dentro da página, e o botão "baixar SVG" salva o mesmo arquivo. O servidor gera o SVG a cada pedido, a partir da peça lida do Supabase: o pipeline não gera arquivo, nada vai para o Storage e não há tabela para isso.
+Na célula de um carrossel, cada slide é desenhado como um `<svg>` dentro da página, e o botão "SVG" salva o mesmo arquivo. O botão "PNG" gera no navegador uma imagem 1080 x 1350 desse mesmo SVG, com a Inter embutida só na hora de desenhar (o navegador não carrega fonte externa de um SVG usado como imagem); "Todos em SVG" e "Todos em PNG" salvam os slides em sequência. O servidor gera o SVG a cada pedido, a partir da peça lida do Supabase: o pipeline não gera arquivo, nada vai para o Storage e não há tabela para isso.
 
 - **Formato:** 1080 x 1350 (retrato 4:5), com uma caixa de texto por papel (`CAIXAS` em `app/slide_svg.py`: posição, largura, altura, tamanho da fonte, entrelinha, peso e cores):
 
   | Papel | Caixa (x, y, largura x altura) | Fonte |
   | ----- | ------------------------------ | ----- |
-  | `gancho` | 96, 330, 888 x 690 | Inter Bold, 76 px, fundo escuro |
-  | `corpo` | 96, 240, 888 x 870 | Inter Regular, 52 px, fundo claro |
-  | `conclusao` | 96, 330, 888 x 690 | Inter Bold, 64 px, fundo escuro |
+  | `gancho` | 96, 330, 888 x 690 | Inter Bold, 76 px, fundo escuro (#1A1A1A) |
+  | `corpo` | 96, 240, 888 x 870 | Inter Regular, 52 px, fundo claro (#F5F6F8) |
+  | `conclusao` | 96, 330, 888 x 690 | Inter Bold, 64 px, fundo escuro (#1A1A1A) |
+
+- **Moldura:** em todos os papéis, uma faixa vermelha curva (#E11927) no topo (`<path id="faixa">`), uma pílula por slide abaixo dela (a do slide atual cheia, as outras a 30%) e um rodapé (`<g id="rodape">`) com a linha fina, a posição "n / total" à esquerda e a marca "( SUNO CONTENT )" à direita. A moldura fica fora das caixas de texto e não leva texto da peça.
 
 - **Texto editável:** o texto fica em `<text id="texto">`, uma linha por `<tspan>` com `x` e `y` próprios, e a posição do slide ("n / total") em `<text id="posicao">`. A fonte não vai dentro do arquivo: quem edita no Inkscape ou no Illustrator precisa ter a Inter instalada (os `.ttf` estão em `app/static/fontes/`). SVG não quebra linha sozinho, então quem edita uma frase depois reajusta as linhas à mão.
 - **Quebra de linha:** `slide_svg.quebrar_linhas` junta palavra por palavra e mede cada candidata com o mesmo `.ttf` que a página carrega (`ImageFont.getlength`, Pillow); a linha que passaria da largura da caixa vai para a seguinte. O código só troca o espaço entre duas palavras por uma quebra: juntar as linhas com um espaço devolve o `Slide.texto`, palavra por palavra (espaços repetidos e quebras de linha do texto valem um espaço). Uma palavra maior que a caixa fica sozinha na linha e passa da largura. Como o texto é o `Slide.texto` final, com os números já no lugar dos marcadores, a regra de todo número vir de um marcador continua valendo.
@@ -142,6 +161,9 @@ As decisões são as únicas gravações do dashboard, no Supabase e na cópia l
 | `GET /api/execucao/eventos?desde=N` | SSE com os eventos a partir de `N`; termina depois do `fim`. |
 | `POST /api/execucao/parar` | Encerra o processo. |
 | `GET /api/runs` | Resumo dos runs (`ConsultaSupabase.listar_runs`). |
+| `GET /api/balanco` | Runs por status e fonte, células por estado e a taxa de aprovação por métrica, de todos os runs (`ConsultaSupabase.balanco`). |
+| `GET /api/biblioteca` | Uma linha por célula com peça gravada, na última tentativa e sem o conteúdo (`ConsultaSupabase.biblioteca`). |
+| `GET /api/runs/<run_id>/pecas/<celula_id>` | A peça da célula, na última tentativa (`ConsultaSupabase.peca`). 404 se não existe. |
 | `GET /api/runs/<run_id>` | Run (com `etapa_erro` e `max_concorrencia`), documento resumido, FactSheet, validações, quarentena, spans (com a `rodada` do gate no `adapter`), plano editorial, rodadas do gate do plano e as células com as peças, os números usados e os scorecards por tentativa (`ConsultaSupabase.detalhar_run`). 404 se o run não existe. |
 | `GET /api/runs/<run_id>/carrossel/<celula_id>/<n>.svg` | O SVG do slide `n` (a partir de 1) do carrossel da célula, na última tentativa ou na de `?tentativa=<t>`; `?baixar=true` devolve o mesmo arquivo como anexo com o nome do download. 404 para peça inexistente, célula que não é carrossel ou slide fora do carrossel. |
 | `GET /api/runs/<run_id>/quarentena/<claim_id>/preparo` | A sugestão do código para a revisão (trecho, âncora e números); `?literal_fonte=` e `?brutos=` (repetido) corrigem o trecho e a lista de números. 422 se o trecho ou um número não é encontrado; 409 se o claim não está na quarentena ou já foi revisado. |

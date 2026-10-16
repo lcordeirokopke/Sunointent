@@ -1,9 +1,12 @@
-"""Matriz de confusão de níveis (docs/metricas.md, M6): cruza o nível pedido e o `nivel_percebido` pelo juiz, por
-formato. Só informativa: não reprova nada.
+"""Matrizes de confusão de níveis (docs/metricas.md, M6 e M3). Só informativas: não reprovam nada.
 
-`montar` e `formatar` são puras e servem à calibração do juiz (tests/test_juiz.py). O comando lê os scorecards
-gravados no Supabase, pela ConsultaSupabase (só leitura), e imprime a matriz da última tentativa julgada de cada
-célula:
+A do juiz cruza o nível pedido e o `nivel_percebido`, por formato. A estatística cruza o nível pedido e o estilo da
+peça (M3, `nivel_estatistico`): `iniciante` quando o IFL está no piso do Iniciante e a peça tem analogia, senão
+`acima_de_iniciante`.
+
+`montar` e `formatar` (e as duas versões `_estatistica`) são puras e servem à calibração do juiz
+(tests/test_juiz.py). O comando lê os scorecards gravados no Supabase, pela ConsultaSupabase (só leitura), e imprime
+as duas matrizes da última tentativa avaliada de cada célula:
 
     python -m sunontent.metrics.matriz_niveis [run_id ...]
 
@@ -55,6 +58,46 @@ def formatar(matriz: Matriz) -> str:
     return "\n\n".join(blocos)
 
 
+LADOS = ("iniciante", "acima_de_iniciante")
+MatrizEstatistica = dict[str, dict[str, dict[str, int]]]  # formato -> nível pedido -> estilo -> células
+_ROTULO_LADO = {"iniciante": "iniciante", "acima_de_iniciante": "acima de iniciante"}
+
+
+def montar_estatistica(linhas: Iterable[tuple[str, str, str]]) -> MatrizEstatistica:
+    """`linhas` são (formato, nível pedido, estilo da peça)."""
+    matriz = {f: {p: {lado: 0 for lado in LADOS} for p in NIVEIS} for f in FORMATOS}
+    for formato, pedido, lado in linhas:
+        matriz[formato][pedido][lado] += 1
+    return matriz
+
+
+def acerto_estatistico(matriz: MatrizEstatistica, formato: str | None = None) -> tuple[int, int]:
+    """(células no lado certo, total): o Iniciante pedido no lado `iniciante`, os outros dois níveis no lado
+    `acima_de_iniciante`."""
+    formatos = [formato] if formato else list(FORMATOS)
+    certas = sum(
+        matriz[f][p]["iniciante" if p == "iniciante" else "acima_de_iniciante"] for f in formatos for p in NIVEIS
+    )
+    total = sum(v for f in formatos for p in NIVEIS for v in matriz[f][p].values())
+    return certas, total
+
+
+def formatar_estatistica(matriz: MatrizEstatistica) -> str:
+    largura = max(len(r) for r in _ROTULO_LADO.values()) + 2
+    blocos = []
+    for formato in FORMATOS:
+        certas, total = acerto_estatistico(matriz, formato)
+        linhas = [f"{formato}: {certas} de {total} no estilo certo",
+                  "pedido \\ IFL".ljust(largura + 2) + "".join(_ROTULO_LADO[lado].rjust(largura) for lado in LADOS)]
+        for pedido in NIVEIS:
+            linhas.append(_ROTULO[pedido].ljust(largura + 2)
+                          + "".join(str(matriz[formato][pedido][lado]).rjust(largura) for lado in LADOS))
+        blocos.append("\n".join(linhas))
+    certas, total = acerto_estatistico(matriz)
+    blocos.append(f"total: {certas} de {total} no estilo certo")
+    return "\n\n".join(blocos)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m sunontent.metrics.matriz_niveis", description=__doc__.split("\n\n")[0])
     parser.add_argument("run_ids", nargs="*", help="runs a incluir; sem nenhum, todos")
@@ -67,14 +110,21 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     load_dotenv(Path(__file__).resolve().parents[2] / ".env")
     try:
-        linhas = persistencia.criar_consulta_supabase(os.environ).niveis_percebidos(args.run_ids or None)
+        consulta = persistencia.criar_consulta_supabase(os.environ)
+        linhas = consulta.niveis_percebidos(args.run_ids or None)
+        estatisticas = consulta.niveis_estatisticos(args.run_ids or None)
     except Falha as falha:
         print(f"erro ({falha.classe}): {falha.mensagem}", file=sys.stderr)
         return 1
-    if not linhas:
-        print("nenhuma célula julgada pelo juiz nos runs pedidos")
+    if not linhas and not estatisticas:
+        print("nenhuma célula avaliada nos runs pedidos")
         return 0
-    print(formatar(montar((l["formato"], l["nivel"], l["nivel_percebido"]) for l in linhas)))
+    if linhas:
+        print("Nível percebido pelo juiz (M6)\n")
+        print(formatar(montar((l["formato"], l["nivel"], l["nivel_percebido"]) for l in linhas)))
+    if estatisticas:
+        print("\nEstilo de Iniciante pelo IFL e pela analogia (M3)\n")
+        print(formatar_estatistica(montar_estatistica((l["formato"], l["nivel"], l["nivel_estatistico"]) for l in estatisticas)))
     return 0
 
 

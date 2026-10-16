@@ -7,20 +7,49 @@
   <link rel="stylesheet" href="/static/estilo.css">
 </head>
 <body>
-  <header class="topo">
+  <aside class="lateral">
     <div class="marca">
-      <span class="marca-icone" aria-hidden="true">◆</span>
+      <span class="marca-icone" aria-hidden="true">S</span>
       <div>
         <h1>Sunontent</h1>
-        <p>Fluxo do pipeline, do documento ao FactSheet</p>
+        <p>Do documento ao FactSheet</p>
       </div>
     </div>
+
+    <nav class="menu" role="tablist" aria-orientation="vertical" aria-label="Seções">
+      <button type="button" role="tab" class="aba" data-aba="inicio" aria-selected="true">
+        <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>
+        <span>Início</span>
+      </button>
+      <button type="button" role="tab" class="aba" data-aba="resultado" aria-selected="false">
+        <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M8 13h8M8 17h5"/></svg>
+        <span>Resultado</span>
+      </button>
+      <button type="button" role="tab" class="aba" data-aba="fluxo" aria-selected="false">
+        <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><path d="M9 6h4a2 2 0 0 1 2 2v7"/></svg>
+        <span>Fluxo</span>
+      </button>
+      <button type="button" role="tab" class="aba" data-aba="quarentena" aria-selected="false">
+        <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="M12 8v5M12 16.5v.01"/></svg>
+        <span>Quarentena</span>
+      </button>
+      <button type="button" role="tab" class="aba" data-aba="tecnicas" aria-selected="false">
+        <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>
+        <span>Info. técnicas</span>
+      </button>
+      <button type="button" role="tab" class="aba" data-aba="historico" aria-selected="false">
+        <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span>Histórico</span>
+      </button>
+    </nav>
+
     <div class="estado-geral" id="estado-geral" data-estado="ocioso">
       <span class="ponto"></span><span id="estado-geral-texto">ocioso</span>
     </div>
-  </header>
+  </aside>
 
-  <section class="controles" aria-label="Iniciar o pipeline">
+  <div class="conteudo">
+  <header class="barra-topo" aria-label="Iniciar o pipeline">
     <div class="campo">
       <span class="rotulo">Fonte</span>
       <div class="segmentado" id="fontes" role="radiogroup" aria-label="Fonte">
@@ -32,29 +61,46 @@
     </div>
     <div class="acoes">
       <button type="button" class="botao primario" id="btn-executar" title="Roda o __main__.py: baixa a publicação mais recente e executa o graph.py">
-        <span aria-hidden="true">▶</span> Executar run
+        <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4" fill="currentColor"/></svg> Executar run
       </button>
       <button type="button" class="botao dev" id="btn-dev" title="Roda o __main__.py com --dev: usa o documento de referência de tests/fixtures/referencia/">
-        <span aria-hidden="true">⚑</span> Modo dev
+        <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 22V4"/><path d="M4 4h13l-2 4 2 4H4"/></svg> Modo dev
       </button>
       <button type="button" class="botao perigo" id="btn-parar" disabled title="Interrompe o processo em andamento">
-        <span aria-hidden="true">■</span> Parar
+        <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1" fill="currentColor"/></svg> Parar
       </button>
     </div>
-    <code class="comando" id="comando">$ python -m sunontent</code>
-  </section>
-
-  <nav class="abas" role="tablist" aria-label="Seções">
-    <button type="button" role="tab" class="aba" data-aba="fluxo" aria-selected="true">Fluxo</button>
-    <button type="button" role="tab" class="aba" data-aba="resultado" aria-selected="false">Resultado</button>
-    <button type="button" role="tab" class="aba" data-aba="matriz" aria-selected="false">Matriz</button>
-    <button type="button" role="tab" class="aba" data-aba="quarentena" aria-selected="false">Quarentena</button>
-    <button type="button" role="tab" class="aba" data-aba="historico" aria-selected="false">Histórico</button>
-  </nav>
-
+  </header>
+  <div class="pagina">
   <main>
+    <!-- Início -->
+    <section class="painel" id="painel-inicio" role="tabpanel">
+      <header class="painel-cabecalho">
+        <h2>Início</h2>
+      </header>
+
+      <div id="inicio-conteudo"></div>
+    </section>
+
+    <!-- Resultado -->
+    <section class="painel" id="painel-resultado" role="tabpanel" hidden>
+      <header class="painel-cabecalho">
+        <h2>Resultado</h2>
+        <p>As peças geradas por nível (artigo, carrossel e roteiro) e, mais abaixo, a avaliação de cada célula, os claims e o documento processado.</p>
+      </header>
+      <div class="barra-resultado">
+        <label for="sel-run" class="rotulo">Run</label>
+        <select id="sel-run"></select>
+      </div>
+      <div id="resultado"></div>
+    </section>
+
     <!-- Fluxo -->
-    <section class="painel" id="painel-fluxo" role="tabpanel">
+    <section class="painel" id="painel-fluxo" role="tabpanel" hidden>
+      <header class="painel-cabecalho">
+        <h2>Fluxo</h2>
+        <p>As etapas do pipeline, o que está rodando e o que já terminou. Clique numa etapa para ver os dados e a saída dela.</p>
+      </header>
       <div class="runs-execucao" id="runs-execucao" hidden></div>
 
       <div class="pipeline" id="pipeline" aria-label="Etapas do pipeline"></div>
@@ -68,26 +114,12 @@
       <div class="subpainel" id="subpainel"></div>
     </section>
 
-    <!-- Resultado -->
-    <section class="painel" id="painel-resultado" role="tabpanel" hidden>
-      <div class="barra-resultado">
-        <label for="sel-run" class="rotulo">Run</label>
-        <select id="sel-run"></select>
-      </div>
-      <div id="resultado"></div>
-    </section>
-
-    <!-- Matriz 3x3 -->
-    <section class="painel" id="painel-matriz" role="tabpanel" hidden>
-      <div class="barra-resultado">
-        <label for="sel-run-matriz" class="rotulo">Run</label>
-        <select id="sel-run-matriz"></select>
-      </div>
-      <div id="matriz"></div>
-    </section>
-
     <!-- Quarentena -->
     <section class="painel" id="painel-quarentena" role="tabpanel" hidden>
+      <header class="painel-cabecalho">
+        <h2>Quarentena</h2>
+        <p>Aqui ficam os claims que o extrator propôs e que a validação de âncoras e números reprovou até a última rodada do loop da extração. Eles não entram no FactSheet enquanto uma pessoa não decidir: <b>aceitar</b> (o código recalcula a âncora e os números, e o claim entra no FactSheet) ou <b>descartar</b> (a decisão fica gravada). Se a lista estiver vazia, o run não teve claims reprovados.</p>
+      </header>
       <div class="barra-resultado">
         <label for="sel-run-quarentena" class="rotulo">Run</label>
         <select id="sel-run-quarentena"></select>
@@ -95,19 +127,42 @@
       <div id="quarentena"></div>
     </section>
 
+    <!-- Informações técnicas -->
+    <section class="painel" id="painel-tecnicas" role="tabpanel" hidden>
+      <header class="painel-cabecalho">
+        <h2>Informações técnicas</h2>
+        <p>Tudo o que o run gravou: custos e chamadas de LLM, modelos e versões do manifest, arquivos com SHA-256, validações por rodada, plano editorial e documento processado. Os dados são de um run por vez.</p>
+      </header>
+      <div class="barra-resultado">
+        <label for="sel-run-tecnicas" class="rotulo">Run</label>
+        <select id="sel-run-tecnicas"></select>
+      </div>
+      <div id="tecnicas"></div>
+    </section>
+
     <!-- Histórico -->
     <section class="painel" id="painel-historico" role="tabpanel" hidden>
+      <header class="painel-cabecalho">
+        <h2>Histórico</h2>
+        <p>Os runs gravados no Supabase. Clique num run para abrir o resultado.</p>
+      </header>
       <div class="barra-resultado">
         <span class="rotulo">Runs gravados no Supabase</span>
-        <button type="button" class="botao fantasma" id="btn-atualizar">↻ Atualizar</button>
+        <button type="button" class="botao fantasma" id="btn-atualizar">
+          <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg> Atualizar
+        </button>
       </div>
       <div id="historico"></div>
     </section>
   </main>
+  </div>
+  </div>
 
   <div class="aviso" id="aviso" role="status" aria-live="polite" hidden></div>
 
-  <script src="/static/matriz.js"></script>
+  <script src="/static/resultado.js"></script>
+  <script src="/static/inicio.js"></script>
+  <script src="/static/tecnicas.js"></script>
   <script src="/static/revisao.js"></script>
   <script src="/static/app.js"></script>
 </body>

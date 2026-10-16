@@ -51,7 +51,7 @@ def test_le_os_valores_da_spec():
         assert (s.formatos.roteiro.abertura_s, s.formatos.roteiro.fechamento_s) == (6, 6)
         caracteres = s.formatos.carrossel.caracteres
         assert (caracteres.gancho, caracteres.corpo, caracteres.conclusao) == (120, 220, 160)
-    assert [s.versao for s in specs.values()] == [4, 3, 4]
+    assert [s.versao for s in specs.values()] == [5, 3, 4]
     assert specs["avancado"].foco == "análise técnica e institucional"
 
 
@@ -131,8 +131,8 @@ def test_peso_do_papel_completo_e_positivo(raiz):
 
 
 def test_campo_desconhecido_e_recusado(raiz):
-    reescrever(raiz, "iniciante", legibilidade={"min": 60})
-    with pytest.raises(FalhaTerminal, match="legibilidade"):
+    reescrever(raiz, "iniciante", densidade={"min": 60})
+    with pytest.raises(FalhaTerminal, match="densidade"):
         levelspec.carregar(raiz, "iniciante")
 
 
@@ -248,3 +248,38 @@ def test_instrucoes_do_roteiro_usam_virgula_decimal():
 def test_so_o_iniciante_tem_marcadores_nas_instrucoes(nivel):
     spec = levelspec.carregar(RAIZ, nivel)
     assert all(levelspec.instrucoes_redator(spec, f).marcadores == "" for f in ("artigo", "carrossel", "roteiro"))
+
+
+# Bloco `legibilidade` (M3)
+
+
+def test_so_o_iniciante_tem_piso_de_ifl():
+    specs = levelspec.carregar_todos(RAIZ)
+    piso = specs["iniciante"].legibilidade
+    assert (piso.ifl_minimo.artigo, piso.ifl_minimo.carrossel, piso.ifl_minimo.roteiro) == (30, 45, 45)
+    assert piso.frase_max_palavras == 18
+    assert specs["intermediario"].legibilidade is None and specs["avancado"].legibilidade is None
+
+
+def test_piso_de_ifl_pede_os_tres_formatos(raiz):
+    reescrever(raiz, "iniciante", legibilidade={"ifl_minimo": {"artigo": 30, "carrossel": 45}, "frase_max_palavras": 18})
+    with pytest.raises(FalhaTerminal, match="legibilidade.ifl_minimo.roteiro"):
+        levelspec.carregar(raiz, "iniciante")
+
+
+def test_meta_de_frase_precisa_de_pelo_menos_cinco_palavras(raiz):
+    reescrever(raiz, "iniciante", legibilidade={"ifl_minimo": {"artigo": 30, "carrossel": 45, "roteiro": 45}, "frase_max_palavras": 3})
+    with pytest.raises(FalhaTerminal, match="legibilidade.frase_max_palavras"):
+        levelspec.carregar(raiz, "iniciante")
+
+
+def test_nivel_sem_o_bloco_so_mede(raiz):
+    reescrever(raiz, "avancado", legibilidade=None)
+    assert levelspec.carregar(raiz, "avancado").legibilidade is None
+
+
+def test_instrucoes_trazem_a_meta_de_frase_so_no_nivel_que_a_tem():
+    iniciante = levelspec.instrucoes_redator(levelspec.carregar(RAIZ, "iniciante"), "artigo")
+    assert iniciante.legibilidade.startswith("Escreva frases de até 18 palavras")
+    for nivel in ("intermediario", "avancado"):
+        assert levelspec.instrucoes_redator(levelspec.carregar(RAIZ, nivel), "artigo").legibilidade == ""

@@ -1,9 +1,9 @@
-"""Juiz (M6): o ProviderOpenRouter com o HTTP simulado, o provider por nó do ClienteLLM, a recuperação de contexto
+"""Juiz (M6): o ProviderGroq com o HTTP simulado, o provider por nó do ClienteLLM, a recuperação de contexto
 (BM25, chunk da âncora e vizinhos), o prompt, a completude da resposta, as violações, a matriz de confusão de
 níveis e as peças de calibração.
 
-A calibração com o OpenRouter de verdade tem o marker `judge` e só roda com `pytest -m judge`; ela lê só a
-API_KEY_ROUTER do .env, julga as peças de tests/fixtures/juiz/calibracao.yaml e exige acerto de pelo menos 80% em
+A calibração com o Groq de verdade tem o marker `judge` e só roda com `pytest -m judge`; ela lê só a
+GROQ_API_KEY do .env, julga as peças de tests/fixtures/juiz/calibracao.yaml e exige acerto de pelo menos 80% em
 cada grupo (peças corretas aprovadas e peças com erro plantado reprovadas).
 """
 
@@ -87,7 +87,7 @@ def cliente_juiz(respostas, por_no=True) -> ClienteLLM:
         {"modelo-juiz": Preco(Decimal(1), Decimal(1)), "modelo-falso": Preco(Decimal(1), Decimal(1))},
         Decimal(5),
         raciocinio={"judge": "low"},
-        por_no={"judge": [("API_KEY_ROUTER", juiz)]} if por_no else None,
+        por_no={"judge": [("GROQ_API_KEY", juiz)]} if por_no else None,
     )
 
 
@@ -96,6 +96,7 @@ def resposta(unidades, analogias=(), nivel="intermediario") -> str:
         "analogias": [{"termo": t, "justificativa": "j", "correta": ok} for t, ok in analogias],
         "unidades": [{"unidade_indice": i, "justificativa": f"justificativa {i}", "implicada": ok,
                       "trecho_problematico": trecho} for i, ok, trecho in unidades],
+        "justificativa_nivel": "vocabulário, explicação, pressuposto e foco",
         "nivel_percebido": nivel,
     }, ensure_ascii=False)
 
@@ -111,20 +112,20 @@ CARROSSEL = peca_de("iniciante", "carrossel", {"slides": [
 ANALOGIA_SELIC = {"termo": "Selic", "explicacao": "É como o aluguel do dinheiro."}
 
 
-# Cliente LLM: provider por nó e OpenRouter
+# Cliente LLM: provider por nó e Groq
 
 
 def test_juiz_usa_a_cadeia_do_no_e_os_outros_nos_a_padrao():
     juiz = ProviderFalso([resposta([(0, True, None)])])
     padrao = ProviderFalso([resposta([(0, True, None)])])
     cliente = ClienteLLM(padrao, {"judge": "m", "synthesizer": "m"}, {"m": Preco(Decimal(1), Decimal(1))}, Decimal(5),
-                         por_no={"judge": [("API_KEY_ROUTER", juiz)]})
+                         por_no={"judge": [("GROQ_API_KEY", juiz)]})
     cliente.chamar("judge", "juiz", SaidaJuiz, run_id="r", registrar_span=lambda s: None)
     cliente.chamar("synthesizer", "redator", SaidaJuiz, run_id="r", registrar_span=lambda s: None)
     assert juiz.prompts == ["juiz"] and padrao.prompts == ["redator"]
 
 
-def test_chave_do_openrouter_recusada_e_terminal_sem_reserva():
+def test_chave_do_groq_recusada_e_terminal_sem_reserva():
     cliente = cliente_juiz([llm.FalhaChave("HTTP 401: chave inválida")])
     with pytest.raises(FalhaTerminal, match="chave recusada"):
         cliente.chamar("judge", "p", SaidaJuiz, run_id="r", registrar_span=lambda s: None)
@@ -138,88 +139,82 @@ def test_schema_estrito_exige_todas_as_propriedades_e_fecha_os_objetos():
     assert "default" not in json.dumps(schema)
 
 
-def openrouter(resposta_http, pedidos=None) -> llm.ProviderOpenRouter:
+def groq(resposta_http, pedidos=None) -> llm.ProviderGroq:
     def tratar(pedido):
         if pedidos is not None:
             pedidos.append(pedido)
         return resposta_http(pedido) if callable(resposta_http) else resposta_http
 
-    return llm.ProviderOpenRouter("chave", cliente_http=httpx.Client(transport=httpx.MockTransport(tratar)))
+    return llm.ProviderGroq("chave", cliente_http=httpx.Client(transport=httpx.MockTransport(tratar)))
 
 
 def corpo_ok(conteudo='{"x": 1}', motivo="stop") -> dict:
-    return {"choices": [{"finish_reason": motivo, "message": {"content": conteudo}}],
+    return {"choices": [{"finish_reason": motivo, "message": {"role": "assistant", "content": conteudo}}],
             "usage": {"prompt_tokens": 100, "completion_tokens": 40,
                       "completion_tokens_details": {"reasoning_tokens": 30}}}
 
 
-def test_openrouter_pede_schema_estrito_roteamento_e_raciocinio():
+def test_groq_pede_schema_estrito_e_raciocinio_sem_devolver_o_raciocinio():
     pedidos = []
-    bruta = openrouter(httpx.Response(200, json=corpo_ok()), pedidos).gerar(
-        "nvidia/nemotron-3-ultra-550b-a55b", "prompt", SaidaJuiz.model_json_schema(), "low")
+    bruta = groq(httpx.Response(200, json=corpo_ok()), pedidos).gerar(
+        "openai/gpt-oss-120b", "prompt", SaidaJuiz.model_json_schema(), "low")
     (pedido,) = pedidos
     corpo = json.loads(pedido.content)
-    assert str(pedido.url) == llm.URL_OPENROUTER and pedido.headers["Authorization"] == "Bearer chave"
-    assert corpo["model"] == "nvidia/nemotron-3-ultra-550b-a55b"
+    assert str(pedido.url) == llm.URL_GROQ and pedido.headers["Authorization"] == "Bearer chave"
+    assert corpo["model"] == "openai/gpt-oss-120b"
     assert corpo["messages"] == [{"role": "user", "content": "prompt"}]
     assert corpo["response_format"]["type"] == "json_schema"
     assert corpo["response_format"]["json_schema"]["strict"] is True
-    assert corpo["provider"] == {"require_parameters": True}
-    assert corpo["reasoning"] == {"effort": "low", "exclude": True}
-    assert corpo["max_tokens"] == llm.MAX_TOKENS_SAIDA_ROUTER
+    assert corpo["reasoning_effort"] == "low" and corpo["include_reasoning"] is False
+    assert corpo["max_completion_tokens"] == llm.MAX_TOKENS_SAIDA_JUIZ == 8192
     # Os tokens de raciocínio já estão em completion_tokens: contam como saída, sem somar de novo.
     assert bruta == RespostaBruta('{"x": 1}', 100, 40, None)
 
 
-def test_openrouter_sem_raciocinio_nao_manda_o_parametro():
+def test_groq_sem_raciocinio_nao_manda_o_parametro():
     pedidos = []
-    openrouter(httpx.Response(200, json=corpo_ok()), pedidos).gerar("m", "p", {})
-    assert "reasoning" not in json.loads(pedidos[0].content)
+    groq(httpx.Response(200, json=corpo_ok()), pedidos).gerar("m", "p", {})
+    assert "reasoning_effort" not in json.loads(pedidos[0].content)
 
 
 @pytest.mark.parametrize("codigo, classe", [
-    (408, FalhaRetriavel), (429, FalhaRetriavel), (500, FalhaRetriavel), (502, FalhaRetriavel),
-    (503, FalhaRetriavel), (401, llm.FalhaChave), (402, FalhaTerminal), (400, FalhaTerminal),
-    (403, FalhaTerminal),  # 403 sem motivo de moderação, como o teto de gasto da chave
+    (408, FalhaRetriavel), (422, FalhaRetriavel), (429, FalhaRetriavel), (498, FalhaRetriavel),
+    (500, FalhaRetriavel), (502, FalhaRetriavel), (503, FalhaRetriavel), (401, llm.FalhaChave),
+    (400, FalhaTerminal), (403, FalhaTerminal), (404, FalhaTerminal), (413, FalhaTerminal),
 ])
-def test_openrouter_classifica_o_erro_http(codigo, classe):
-    resposta_http = httpx.Response(codigo, json={"error": {"code": codigo, "message": "erro"}})
+def test_groq_classifica_o_erro_http(codigo, classe):
+    resposta_http = httpx.Response(codigo, json={"error": {"message": "erro", "type": "invalid_request_error"}})
     with pytest.raises(classe, match=f"HTTP {codigo}"):
-        openrouter(resposta_http).gerar("m", "p", {})
+        groq(resposta_http).gerar("m", "p", {})
 
 
-def test_openrouter_moderacao_e_content_filter_sao_bloqueio():
-    moderado = httpx.Response(403, json={"error": {"code": 403, "message": "flagged",
-                                                   "metadata": {"reasons": ["violencia"]}}})
-    assert "violencia" in openrouter(moderado).gerar("m", "p", {}).bloqueio
-    filtrado = openrouter(httpx.Response(200, json=corpo_ok("", "content_filter"))).gerar("m", "p", {})
+def test_groq_json_fora_do_schema_volta_como_texto_para_repetir():
+    erro = {"error": {"message": "Failed to validate JSON", "type": "invalid_request_error",
+                      "code": "json_validate_failed", "failed_generation": '{"x": "a"}'}}
+    assert groq(httpx.Response(400, json=erro)).gerar("m", "p", {}) == RespostaBruta('{"x": "a"}', 0, 0)
+
+
+def test_groq_content_filter_e_bloqueio():
+    filtrado = groq(httpx.Response(200, json=corpo_ok("", "content_filter"))).gerar("m", "p", {})
     assert filtrado.bloqueio == "finish_reason content_filter"
 
 
-def test_openrouter_erro_com_http_200_e_retriavel():
-    with pytest.raises(FalhaRetriavel, match="HTTP 502"):
-        openrouter(httpx.Response(200, json={"error": {"code": 502, "message": "provedor caiu"}})).gerar("m", "p", {})
-    no_meio = {"choices": [{"finish_reason": "error", "error": {"message": "cortou"}, "message": {"content": ""}}]}
-    with pytest.raises(FalhaRetriavel, match="cortou"):
-        openrouter(httpx.Response(200, json=no_meio)).gerar("m", "p", {})
-
-
-def test_openrouter_conexao_e_timeout_sao_retriaveis():
+def test_groq_conexao_e_timeout_sao_retriaveis():
     def cair(pedido):
         raise httpx.ReadTimeout("demorou", request=pedido)
 
     with pytest.raises(FalhaRetriavel, match="ReadTimeout"):
-        openrouter(cair).gerar("m", "p", {})
+        groq(cair).gerar("m", "p", {})
 
 
 def test_saida_esgotada_pelo_raciocinio_volta_como_fora_do_schema():
     """`finish_reason` length com o conteúdo vazio: o ClienteLLM repete com o erro de validação."""
-    vazia = RespostaBruta("", 100, 16384)
+    vazia = RespostaBruta("", 100, 8192)
     cliente = cliente_juiz([vazia, resposta([(0, True, None)])])
     spans = []
     saida = cliente.chamar("judge", "p", SaidaJuiz, run_id="r", registrar_span=spans.append)
     assert saida.unidades[0].implicada and spans[0].falha_mensagem.startswith("resposta fora do schema")
-    assert spans[0].tokens_saida == 16384  # os tokens da resposta vazia são cobrados
+    assert spans[0].tokens_saida == 8192  # os tokens da resposta vazia são cobrados
 
 
 # Recuperação de contexto
@@ -300,6 +295,10 @@ def test_prompt_traz_claims_trechos_unidades_e_definicao_sem_o_nivel_pedido():
     ctx = contexto.montar(CARROSSEL, {c.id: c for c in COPOM.claims}, CHUNKS_COPOM)
     assert all(f"[{c.chunk_id}]" in prompt for c in ctx.chunks)
     assert cliente._por_no["judge"][0][1].raciocinios == ["low"]
+    # O nível percebido: o foco de cada nível do LevelSpec e os termos do glossário da peça com o nível mínimo.
+    assert "- avancado (foco: análise técnica e institucional)" in prompt
+    assert "- Selic: intermediario" in prompt and "- Copom: intermediario" in prompt
+    assert "`justificativa_nivel`" in prompt
 
 
 def test_juiz_aprova_quando_tudo_e_implicado_e_registra_o_nivel_percebido():
@@ -307,6 +306,7 @@ def test_juiz_aprova_quando_tudo_e_implicado_e_registra_o_nivel_percebido():
     m6, spans = julgar(cliente)
     assert m6.nome == "llm_judge" and m6.passou and m6.valor is True and m6.faixa_esperada == "true"
     assert m6.detalhes.nivel_percebido == "iniciante" and len(m6.detalhes.unidades) == 4
+    assert m6.detalhes.justificativa_nivel == "vocabulário, explicação, pressuposto e foco"
     (span,) = spans
     assert (span.no, span.celula_id, span.tentativa, span.nivel) == ("judge", "iniciante__carrossel", 1, "iniciante")
 
@@ -379,10 +379,27 @@ def test_comando_da_matriz_le_a_consulta(monkeypatch, capsys):
             assert run_ids == ["r1"]
             return [{"formato": "carrossel", "nivel": "iniciante", "nivel_percebido": "intermediario"}]
 
+        def niveis_estatisticos(self, run_ids):
+            assert run_ids == ["r1"]
+            return [{"formato": "carrossel", "nivel": "avancado", "nivel_estatistico": "iniciante"}]
+
     monkeypatch.setattr("sunontent.persistencia.criar_consulta_supabase", lambda ambiente: Consulta())
     monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **k: None)
     assert matriz_niveis.main(["r1"]) == 0
-    assert "carrossel: 0 de 1 no nível pedido" in capsys.readouterr().out
+    saida = capsys.readouterr().out
+    assert "carrossel: 0 de 1 no nível pedido" in saida
+    assert "carrossel: 0 de 1 no estilo certo" in saida
+
+
+def test_matriz_estatistica_cruza_o_nivel_pedido_e_o_lado_do_piso():
+    matriz = matriz_niveis.montar_estatistica([
+        ("artigo", "iniciante", "iniciante"), ("artigo", "avancado", "acima_de_iniciante"),
+        ("artigo", "intermediario", "iniciante"),
+    ])
+    assert matriz["artigo"]["intermediario"]["iniciante"] == 1 and matriz["roteiro"]["iniciante"]["iniciante"] == 0
+    assert matriz_niveis.acerto_estatistico(matriz) == (2, 3)
+    texto = matriz_niveis.formatar_estatistica(matriz)
+    assert "artigo: 2 de 3 no estilo certo" in texto and "acima de iniciante" in texto
 
 
 # Calibração
@@ -417,11 +434,11 @@ def test_pecas_de_calibracao_sao_validas_e_equilibradas():
 def test_calibracao_do_juiz():
     from dotenv import dotenv_values
 
-    chave = dotenv_values(RAIZ / ".env").get(llm.CHAVE_ROUTER)
+    chave = dotenv_values(RAIZ / ".env").get(llm.CHAVE_JUIZ)
     if not chave:
-        pytest.skip(f"{llm.CHAVE_ROUTER} ausente no .env")
+        pytest.skip(f"{llm.CHAVE_JUIZ} ausente no .env")
     cliente = ClienteLLM.de_config(RAIZ, ProviderFalso([]), por_no={
-        "judge": [(llm.CHAVE_ROUTER, llm.ProviderOpenRouter(chave))]})
+        "judge": [(llm.CHAVE_JUIZ, llm.ProviderGroq(chave))]})
     fontes = {f: referencia(f) for f in ("copom", "cvm", "b3")}
 
     def julgar_peca(p):
@@ -435,7 +452,6 @@ def test_calibracao_do_juiz():
             return falha
 
     pecas = pecas_de_calibracao()
-    # O OpenRouter reserva o custo do max_tokens de cada chamada em andamento: poucas em paralelo.
     with ThreadPoolExecutor(max_workers=CALIBRACAO_EM_PARALELO) as executor:
         resultados = list(executor.map(julgar_peca, pecas))
 

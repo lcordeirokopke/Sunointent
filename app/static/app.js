@@ -16,7 +16,7 @@ const ETAPAS = [
   { id: "E5", nos: ["synth"], celulas: true, nome: "Format Synthesizer",
     descricao: "Gera as 9 peças: texto, carrossel e roteiro de vídeo para cada nível." },
   { id: "E6", nos: ["evaluate"], celulas: true, nome: "Hybrid Evaluator",
-    descricao: "Mede a fidelidade numérica, o tamanho por nível, a regra de analogia e o entailment dos claims (M1, M2, M5 e M6)." },
+    descricao: "Mede a fidelidade numérica, o tamanho por nível, a legibilidade, a densidade de termos, a regra de analogia, o entailment dos claims e o contrato do plano (M1 a M7)." },
   { id: "E7", nos: ["router"], celulas: true, nome: "Router",
     descricao: "Aprova a célula, devolve para nova tentativa ou descarta conforme as métricas." },
 ];
@@ -36,7 +36,7 @@ const ROTULO_ESTADO = {
 
 const estado = {
   fonte: "",
-  aba: "fluxo",
+  aba: "inicio",
   subaba: "terminal",
   grafo: { nos: [], arestas: [], rodadas_extracao: 3, rodadas_plano: 3, max_concorrencia: 3 },
   execucao: null,
@@ -88,6 +88,12 @@ function selo(estadoItem, texto) {
 function metrica(rotulo, valor, mono = false) {
   return `<div class="metrica"><span class="rotulo">${esc(rotulo)}</span>`
     + `<span class="valor${mono ? " mono" : ""}">${valor === "" || valor == null ? "-" : valor}</span></div>`;
+}
+
+// <option> de cada run do histórico, com o selecionado marcado: os seletores de Resultado e Info. técnicas usam o mesmo run.
+function opcoesDeRuns(atual) {
+  return estado.historico.map((r) => `<option value="${esc(r.run_id)}" ${r.run_id === atual ? "selected" : ""}>
+    ${esc(r.run_id)} · ${esc(ROTULO_ESTADO[r.status] ?? r.status)}</option>`).join("");
 }
 
 function avisar(texto, erro = false) {
@@ -290,9 +296,42 @@ function renderControles() {
     ? `${ROTULO_ESTADO[geral] ?? geral}${ex.codigo != null ? ` (código ${ex.codigo})` : ""}`
     : "ocioso";
 
-  $("#comando").textContent = ativo
-    ? `$ ${ex.comando}`
-    : `$ python -m sunontent${estado.fonte ? ` ${estado.fonte}` : ""}   ·   modo dev: python -m sunontent${estado.fonte ? ` ${estado.fonte}` : ""} --dev`;
+}
+
+// Início: o resumo do último run gravado; as células aprovadas vêm do detalhe do run.
+function renderInicio() {
+  const alvo = $("#inicio-conteudo");
+  const ultimo = estado.historico[0];
+  if (!ultimo) {
+    alvo.innerHTML = `<div class="vazio">Nenhum run no Supabase ainda.<br>Escolha a fonte na barra do topo e use <b>Executar run</b> para baixar a publicação mais recente
+      ou <b>Modo dev</b> para usar o documento de referência. Ao iniciar, a página abre o Fluxo para você acompanhar as etapas ao vivo.</div>`;
+    return;
+  }
+  const d = estado.detalhes[ultimo.run_id];
+  if (!d) carregarDetalhe(ultimo.run_id);
+  const celulas = d?.celulas ?? [];
+  const aprovadas = celulas.filter((c) => c.estado === "APROVADA").length;
+  alvo.innerHTML = `<div class="cartao"><div class="cabecalho-etapa"><div>
+      <h3>Último run</h3><h2 class="mono">${esc(ultimo.run_id)}</h2>
+      <p class="descricao">${esc(fmtData(ultimo.timestamp))}</p></div>
+      <div>${selo(ultimo.modo, ultimo.modo)} ${selo(ultimo.status, ROTULO_ESTADO[ultimo.status] ?? ultimo.status)}</div></div>
+    <div class="metricas" style="margin-top:12px">
+      ${metrica("Fonte", esc(ultimo.fonte))}
+      ${metrica("Documento", esc(ultimo.doc_id ?? ""), true)}
+      ${metrica("Claims", fmtInt(ultimo.claims))}
+      ${metrica("Em quarentena", fmtInt(ultimo.quarentena))}
+      ${metrica("Células aprovadas", d ? `${aprovadas} de ${celulas.length || NIVEIS.length * FORMATOS.length}` : "")}
+      ${metrica("Tokens", fmtInt(ultimo.custo_total_tokens))}
+      ${metrica("Custo", fmtBRL(ultimo.custo_total_brl))}
+    </div>
+    <div class="inicio-atalhos">
+      <button type="button" class="botao primario" data-ir="resultado" data-run="${esc(ultimo.run_id)}">Ver resultado</button>
+      <button type="button" class="botao" data-ir="tecnicas" data-run="${esc(ultimo.run_id)}">Info. técnicas</button>
+      <button type="button" class="botao" data-ir="fluxo">Ver fluxo</button>
+    </div></div>
+    <div id="inicio-balanco"></div>
+    <div id="inicio-biblioteca"></div>`;
+  renderBalancoEBiblioteca();
 }
 
 function renderFluxo() {
@@ -428,8 +467,8 @@ function renderSubpainel(run) {
 function painelTerminal() {
   const ex = estado.execucao;
   if (!ex) {
-    return `<div class="vazio">Nenhuma execução nesta sessão do dashboard.<br>
-      Use <b>Executar run</b> para rodar o pipeline completo ou <b>Modo dev</b> para usar o documento de referência.</div>`;
+    const dica = estado.historico.length ? "" : `<br>Use <b>Executar run</b> para rodar o pipeline completo ou <b>Modo dev</b> para usar o documento de referência.`;
+    return `<div class="vazio">Nenhuma execução nesta sessão do dashboard.${dica}</div>`;
   }
   const erro = ex.erro ? `
     <div class="cartao"><div class="cabecalho-etapa"><h2>Erro antes do run</h2>${selo("erro", ex.erro.classe)}</div>
@@ -489,15 +528,7 @@ function dadosEtapa(etapa, run) {
   const m = d.manifest;
   switch (etapa.id) {
     case "E0":
-      return `<div class="cartao"><h3>Documento fonte</h3><div class="metricas">
-        ${metrica("Fonte", esc(m.fonte))}
-        ${metrica("Modo", selo(m.modo, m.modo))}
-        ${metrica("doc_id", esc(m.doc_id), true)}
-        ${metrica("doc_sha256", m.doc_sha256 ? `<span title="${esc(m.doc_sha256)}">${esc(m.doc_sha256.slice(0, 16))}…</span>` : "", true)}
-        ${metrica("Coletado em", esc(fmtData(m.coletado_em)))}
-        ${metrica("coleta_id", esc(m.coleta_id ?? "sem coleta (dev)"), true)}
-        ${metrica("Origem", m.url_origem ? `<a href="${esc(m.url_origem)}" target="_blank" rel="noopener">abrir PDF ↗</a>` : "")}
-      </div></div>`;
+      return cartaoDocumentoFonte(m);
     case "E1":
       return cartaoDocumento(d.documento);
     case "E2":
@@ -703,69 +734,6 @@ function cartaoQuarentena(itens) {
       <tbody>${linhas}</tbody></table></div></div>`;
 }
 
-// Resultado
-
-function renderResultado() {
-  const sel = $("#sel-run");
-  const atual = estado.resultadoRun ?? estado.historico[0]?.run_id ?? null;
-  estado.resultadoRun = atual;
-  sel.innerHTML = estado.historico.map((r) => `<option value="${esc(r.run_id)}" ${r.run_id === atual ? "selected" : ""}>
-    ${esc(r.run_id)} · ${esc(ROTULO_ESTADO[r.status] ?? r.status)}</option>`).join("");
-  const alvo = $("#resultado");
-  if (!atual) {
-    alvo.innerHTML = `<div class="vazio">Nenhum run no Supabase.</div>`;
-    return;
-  }
-  const d = estado.detalhes[atual];
-  if (!d) {
-    alvo.innerHTML = `<div class="vazio">Carregando...</div>`;
-    carregarDetalhe(atual);
-    return;
-  }
-  const m = d.manifest;
-  const erro = m.erro_mensagem ? `<div class="cartao"><div class="cabecalho-etapa"><h3>Erro</h3>${selo("erro", m.erro_classe)}
-    ${m.etapa_erro ? `<span class="motivo">na etapa <code>${esc(m.etapa_erro)}</code></span>` : ""}</div>
-    <p class="descricao">${esc(m.erro_mensagem)}</p></div>` : "";
-  const versoes = Object.entries(m.arquivos_sha256 ?? {}).map(([arq, hash]) => `
-    <tr><td><code>${esc(arq)}</code></td><td class="num" title="${esc(hash)}">${esc(hash.slice(0, 16))}…</td></tr>`).join("");
-  const mapa = (obj) => Object.entries(obj ?? {}).map(([k, v]) => `${esc(k)}: <b>${esc(v)}</b>`).join(" · ") || "-";
-  alvo.innerHTML = `<div class="resultado">
-    <div class="cartao"><div class="cabecalho-etapa"><div><h2 class="mono">${esc(m.run_id)}</h2>
-      <p class="descricao">${esc(fmtData(m.timestamp))}</p></div>
-      <div>${selo(m.modo, m.modo)} ${selo(m.status, ROTULO_ESTADO[m.status] ?? m.status)}</div></div>
-      <div class="metricas" style="margin-top:12px">
-        ${metrica("Fonte", esc(m.fonte))}
-        ${metrica("doc_id", esc(m.doc_id), true)}
-        ${metrica("Claims", d.factsheet ? fmtInt(d.factsheet.claims.length) : "")}
-        ${d.quarentena?.length ? metrica("Em quarentena", fmtInt(d.quarentena.filter((q) => !q.decisao).length)) : ""}
-        ${metrica("Rodadas E2/E3", fmtInt(d.validacoes.length || ""))}
-        ${d.plano ? metrica("Rodadas do plano", fmtInt(d.plano.rodadas)) : ""}
-        ${metrica("Tokens", fmtInt(m.custo_total_tokens))}
-        ${metrica("Custo", fmtBRL(m.custo_total_brl))}
-      </div>
-    </div>
-    ${erro}
-    ${d.documento ? cartaoDocumento(d.documento) : ""}
-    ${cartaoClaims(d.factsheet)}
-    ${d.validacoes.length ? cartaoValidacoes(d.validacoes, d.factsheet) : ""}
-    ${cartaoQuarentena(d.quarentena)}
-    ${d.plano ? cartaoPlano(d.plano, d.factsheet) : ""}
-    ${d.plano || d.validacoes_plano?.length ? cartaoValidacoesPlano(d.validacoes_plano, d.plano) : ""}
-    ${d.spans.length ? cartaoSpans(d.spans, m) : ""}
-    <div class="cartao"><h3>Manifest: versões usadas no run</h3>
-      <div class="metricas" style="margin-bottom:12px">
-        ${metrica("Modelos", mapa(m.modelos))}
-        ${metrica("Prompts", mapa(m.prompts))}
-        ${metrica("LevelSpecs", mapa(m.level_specs))}
-        ${metrica("Glossário", esc(m.glossario_versao))}
-        ${metrica("K", esc(m.K))}
-        ${metrica("Células em paralelo", esc(m.max_concorrencia))}
-      </div>
-      <div class="tabela-rolagem"><table><thead><tr><th>Arquivo</th><th>SHA-256</th></tr></thead><tbody>${versoes}</tbody></table></div>
-    </div>
-  </div>`;
-}
-
 // Histórico
 
 function renderHistorico() {
@@ -812,9 +780,10 @@ async function carregarHistorico() {
   } catch (erro) {
     avisar(`Não foi possível listar os runs: ${erro.message}`, true);
   }
+  if (estado.aba === "inicio") renderInicio();
   if (estado.aba === "historico") renderHistorico();
   if (estado.aba === "resultado") renderResultado();
-  if (estado.aba === "matriz") renderMatriz();
+  if (estado.aba === "tecnicas") renderTecnicas();
   if (estado.aba === "quarentena" && !revisao.ocupado) renderQuarentena();
 }
 
@@ -833,8 +802,9 @@ async function carregarDetalhe(runId) {
     return;
   }
   agendarRender();
+  if (estado.aba === "inicio" && estado.historico[0]?.run_id === runId) renderInicio();
   if (estado.aba === "resultado" && estado.resultadoRun === runId) renderResultado();
-  if (estado.aba === "matriz" && matriz.run === runId) renderMatriz();
+  if (estado.aba === "tecnicas" && estado.resultadoRun === runId) renderTecnicas();
   if (estado.aba === "quarentena" && revisao.run === runId && !revisao.ocupado) renderQuarentena();
 }
 
@@ -895,12 +865,14 @@ async function parar() {
 
 // Eventos da página
 
-// Endereço da aba na URL: #fluxo, #fluxo/E3, #resultado/<run_id>, #historico.
+// Endereço da aba na URL: #inicio, #fluxo/E3, #resultado/<run_id>/<celula_id>, #quarentena/<run_id>, #tecnicas/<run_id>, #historico.
+const ABAS = ["inicio", "resultado", "fluxo", "quarentena", "tecnicas", "historico"];
+
 function gravarEndereco() {
   const extras = {
     fluxo: [estado.subaba],
-    resultado: [estado.resultadoRun],
-    matriz: [matriz.run, matriz.celula],
+    resultado: [estado.resultadoRun, vista.celula],
+    tecnicas: [estado.resultadoRun],
     quarentena: [revisao.run],
   }[estado.aba] ?? [];
   const caminho = extras.filter(Boolean).map(encodeURIComponent).join("/");
@@ -909,10 +881,10 @@ function gravarEndereco() {
 
 function lerEndereco() {
   const [aba, extra, extra2] = location.hash.slice(1).split("/");
-  if (!["fluxo", "resultado", "matriz", "quarentena", "historico"].includes(aba)) return;
+  if (!ABAS.includes(aba)) { trocarAba("inicio"); return; }
   if (aba === "fluxo" && extra && (extra === "terminal" || ETAPAS.some((e) => e.id === extra))) estado.subaba = extra;
-  if (aba === "resultado" && extra) estado.resultadoRun = decodeURIComponent(extra);
-  if (aba === "matriz" && extra) { matriz.run = decodeURIComponent(extra); matriz.celula = extra2 ? decodeURIComponent(extra2) : null; }
+  if ((aba === "resultado" || aba === "tecnicas") && extra) estado.resultadoRun = decodeURIComponent(extra);
+  if (aba === "resultado" && extra2) vista.celula = decodeURIComponent(extra2);
   if (aba === "quarentena" && extra) revisao.run = decodeURIComponent(extra);
   trocarAba(aba);
 }
@@ -920,9 +892,10 @@ function lerEndereco() {
 function trocarAba(aba) {
   estado.aba = aba;
   for (const b of document.querySelectorAll(".aba")) b.setAttribute("aria-selected", String(b.dataset.aba === aba));
-  for (const nome of ["fluxo", "resultado", "matriz", "quarentena", "historico"]) $(`#painel-${nome}`).hidden = nome !== aba;
+  for (const nome of ABAS) $(`#painel-${nome}`).hidden = nome !== aba;
+  if (aba === "inicio") { renderInicio(); carregarHistorico(); carregarBiblioteca(); }
   if (aba === "resultado") { renderResultado(); carregarHistorico(); }
-  if (aba === "matriz") { renderMatriz(); carregarHistorico(); }
+  if (aba === "tecnicas") { renderTecnicas(); carregarHistorico(); }
   if (aba === "quarentena") { renderQuarentena(); carregarHistorico(); }
   if (aba === "historico") { renderHistorico(); carregarHistorico(); }
   if (aba === "fluxo") agendarRender();
@@ -932,7 +905,10 @@ function trocarAba(aba) {
 document.addEventListener("click", (evento) => {
   const alvo = evento.target.closest("button, tr[data-run]");
   if (!alvo) return;
-  if (alvo.matches("#fontes button")) {
+  if (alvo.dataset.ir) {
+    if (alvo.dataset.run) estado.resultadoRun = alvo.dataset.run;
+    trocarAba(alvo.dataset.ir);
+  } else if (alvo.matches("#fontes button")) {
     estado.fonte = alvo.dataset.fonte;
     for (const b of document.querySelectorAll("#fontes button")) b.setAttribute("aria-checked", String(b === alvo));
     renderControles();
@@ -961,12 +937,6 @@ document.addEventListener("click", (evento) => {
     estado.resultadoRun = alvo.dataset.run;
     trocarAba("resultado");
   }
-});
-
-$("#sel-run").addEventListener("change", (evento) => {
-  estado.resultadoRun = evento.target.value;
-  gravarEndereco();
-  renderResultado();
 });
 
 // Atualiza a duração da etapa em andamento.

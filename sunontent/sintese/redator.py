@@ -80,6 +80,7 @@ def montar_prompt(
         ano_documento=pacote.data_documento.year,
         foco=spec.foco,
         marcadores=pacote.instrucoes.marcadores,
+        legibilidade=pacote.instrucoes.legibilidade,
         orcamento=pacote.instrucoes.orcamento,
         orcamento_abertura=pacote.orcamento_abertura,
         orcamento_fechamento=pacote.orcamento_fechamento,

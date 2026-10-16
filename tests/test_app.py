@@ -103,6 +103,16 @@ class ConsultaFalsa:
             raise self.falha
         return list(self.runs.values())
 
+    def balanco(self):
+        if self.falha:
+            raise self.falha
+        return {"runs": [], "celulas": [], "metricas": []}
+
+    def biblioteca(self):
+        if self.falha:
+            raise self.falha
+        return [{"run_id": p["run_id"], "celula_id": p["celula_id"]} for p in self.pecas]
+
     def detalhar_run(self, run_id):
         if self.falha:
             raise self.falha
@@ -119,6 +129,15 @@ def montar_cliente(tmp_path, consulta):
 @pytest.fixture
 def cliente(tmp_path):
     return montar_cliente(tmp_path, ConsultaFalsa())
+
+
+def test_balanco_biblioteca_e_peca_da_celula(tmp_path):
+    peca = {"run_id": "r1", "celula_id": "iniciante__artigo", "tentativa": 1, "formato": "artigo", "payload": {}}
+    http, _ = montar_cliente(tmp_path, ConsultaFalsa(pecas=[peca]))
+    assert http.get("/api/balanco").json() == {"runs": [], "celulas": [], "metricas": []}
+    assert http.get("/api/biblioteca").json() == [{"run_id": "r1", "celula_id": "iniciante__artigo"}]
+    assert http.get("/api/runs/r1/pecas/iniciante__artigo").json()["tentativa"] == 1
+    assert http.get("/api/runs/r1/pecas/avancado__roteiro").status_code == 404
 
 
 def test_grafo_vem_do_graph_py(cliente):
@@ -334,14 +353,19 @@ def test_rota_do_slide_responde_503_com_o_banco_fora_do_ar(tmp_path):
     assert resposta.status_code == 503 and "conexão recusada" in resposta.json()["detail"]
 
 
-def test_pagina_carrega_a_fonte_e_as_abas_novas(cliente):
+def test_pagina_carrega_a_fonte_e_as_abas_da_sidebar(cliente):
     http, _ = cliente
     assert "Inter-Regular.ttf" in http.get("/static/estilo.css").text
     for arquivo in ("Inter-Regular.ttf", "Inter-Bold.ttf", "Inter-OFL.txt"):
         assert http.get(f"/static/fontes/{arquivo}").status_code == 200
     pagina = http.get("/").text
-    for trecho in ('data-aba="matriz"', 'data-aba="quarentena"', "/static/matriz.js", "/static/revisao.js"):
-        assert trecho in pagina
+    abas = ["inicio", "resultado", "fluxo", "quarentena", "tecnicas", "historico"]
+    posicoes = [pagina.index(f'data-aba="{aba}"') for aba in abas]
+    assert posicoes == sorted(posicoes)
+    assert 'data-aba="matriz"' not in pagina
+    for script in ("resultado", "tecnicas", "revisao", "app"):
+        assert f"/static/{script}.js" in pagina
+        assert http.get(f"/static/{script}.js").status_code == 200
 
 
 # Revisão da quarentena

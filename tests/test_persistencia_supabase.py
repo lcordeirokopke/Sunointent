@@ -375,7 +375,7 @@ def test_peca_unidades_numeros_e_celula_numa_transacao(repositorio, ambiente, tm
     scorecard = Scorecard(celula_id="iniciante__artigo", tentativa=1, veredito="REPROVADA", custo_tokens=1200,
                           duracao_ms=35, metricas=[
                               resultado.montar(PlanContractDetalhes(checagens=[]), [violacao, violacao]),
-                              resultado.montar(LlmJudgeDetalhes(analogias=[], unidades=[], nivel_percebido="iniciante"), [])])
+                              resultado.montar(LlmJudgeDetalhes(analogias=[], unidades=[], justificativa_nivel="j", nivel_percebido="iniciante"), [])])
     for _ in range(2):  # o mesmo scorecard de novo não grava nada
         persistencia.gravar_scorecard(repositorio, tmp_path, run_id, scorecard)
     with pytest.raises(FalhaTerminal, match="outro scorecard"):
@@ -504,6 +504,9 @@ def test_consulta_le_o_run_completo_do_dashboard(repositorio, ambiente, tmp_path
     assert [(v["rodada"], v["claims"][0]["passou"]) for v in detalhe["validacoes"]] == [(1, False), (2, True)]
     assert len(detalhe["spans"]) == 2 and detalhe["spans"][0]["criado_em"] <= detalhe["spans"][1]["criado_em"]
     assert consulta.detalhar_run("cvm_20261004T142205Z_ffffff") is None
+    balanco = consulta.balanco()
+    assert any(l["status"] == "concluido" and l["fonte"] == "cvm" for l in balanco["runs"])
+    assert all(i["run_id"] != run_id for i in consulta.biblioteca())
 
 
 def test_quarentena_e_revisao_humana(repositorio, ambiente, tmp_path):

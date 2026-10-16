@@ -1,5 +1,5 @@
 nivel: iniciante
-versao: 4
+versao: 5
 # Campos da E4 (docs/fluxos/plano-editorial.md, LevelSpec da E4). Valores de partida.
 foco: "impacto prático no bolso do leitor"
 tags_priorizadas: [impacto_pratico]
@@ -25,3 +25,8 @@ formatos:
 # no plano tem, na mesma unidade da primeira ocorrência, uma destas expressões (duas palavras ou mais).
 analogia:
   marcadores: ["é como", "funciona como", "imagine que", "na prática"]
+# Regra da M3 (docs/metricas.md): piso do Índice de Facilidade de Leitura (Flesch adaptado ao português) por formato,
+# medido sobre o texto das unidades, e a meta de tamanho de frase que o redator recebe. Os outros níveis só medem.
+legibilidade:
+  ifl_minimo: {artigo: 30, carrossel: 45, roteiro: 45}
+  frase_max_palavras: 18

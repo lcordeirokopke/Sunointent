@@ -4,7 +4,7 @@
   para um host diferente de localhost, 127.0.0.1 ou ::1. O .env não é carregado aqui.
 - Marker `supabase`: testes de integração com a cópia local do Supabase CLI.
 - Marker `gemini`: testes que chamam a Gemini API de verdade (custam tokens); só rodam com `-m gemini`.
-- Marker `judge`: calibração do juiz (M6) com o OpenRouter de verdade (custa tokens); só roda com `-m judge`.
+- Marker `judge`: calibração do juiz (M6) com o Groq de verdade (custa tokens); só roda com `-m judge`.
 - Repositório em memória no lugar do Supabase e retentativa sem espera.
 - `ProviderFalso`: provider de LLM com respostas prontas, no lugar do Gemini.
 """
@@ -49,7 +49,7 @@ def pytest_configure(config):
         "markers", "gemini: chama a Gemini API de verdade (GOOGLE_API_KEY_PRINC e GOOGLE_API_KEY_SEC); só roda com -m gemini"
     )
     config.addinivalue_line(
-        "markers", "judge: calibração do juiz (M6) no OpenRouter de verdade (API_KEY_ROUTER); só roda com -m judge"
+        "markers", "judge: calibração do juiz (M6) no Groq de verdade (GROQ_API_KEY); só roda com -m judge"
     )
     for variavel in ("SUPABASE_URL", "SUPABASE_DB_URL"):
         valor = os.environ.get(variavel)
@@ -66,7 +66,7 @@ def pytest_configure(config):
 def pytest_collection_modifyitems(config, items):
     """Testes `gemini` e `judge` gastam tokens: ficam de fora, a menos que o -m os peça."""
     pedido = config.getoption("-m") or ""
-    for marker, onde in (("gemini", "a Gemini API"), ("judge", "o OpenRouter")):
+    for marker, onde in (("gemini", "a Gemini API"), ("judge", "o Groq")):
         if marker in pedido:
             continue
         pular = pytest.mark.skip(reason=f"chama {onde}; rode com -m {marker}")

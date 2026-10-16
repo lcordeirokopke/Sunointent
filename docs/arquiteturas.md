@@ -233,7 +233,7 @@ O redator não devolve a `Peca`. Cada formato tem um schema de saída próprio, 
 - `claim_ids` vazio só no gancho e na conclusão do carrossel e na abertura e no fechamento do roteiro; seção, slide de corpo e cena de claim usam pelo menos um claim;
 - a `linha_fina` e o `gancho_visual` não aceitam marcador.
 
-As regras que dependem do LevelSpec ou do plano (quantidade de slides, soma das cenas até `duracao_s`, `claim_ids` dentro do plano do nível, cobertura do formato) ficam na montagem como violações do `plan_contract` e consomem o `K`.
+As regras que dependem do LevelSpec ou do plano (quantidade de slides, soma das cenas até `duracao_s`, `claim_ids` dentro do plano do nível, cobertura do formato) ficam na montagem como violações do M7 (`plan_contract`) e consomem o `K`.
 
 Número com marcador vale no texto das unidades e no `titulo` do artigo; é proibido na `linha_fina` e no `gancho_visual`. Por isso `NumeroUsado` tem `campo` (`texto` ou `titulo`), e o número do título não tem `unidade_indice`.
 
@@ -246,7 +246,7 @@ As palavras e os caracteres de uma peça são contados por `sunontent/texto.py`,
 ## Scorecard e violação
 
 ```python
-Metrica = Literal["numeric_fidelity", "text_size", "analogy_rule", "llm_judge", "plan_contract"]
+Metrica = Literal["numeric_fidelity", "text_size", "readability", "term_density", "analogy_rule", "llm_judge", "plan_contract"]
 
 class Violacao(BaseModel):
     metrica: Metrica
@@ -278,7 +278,7 @@ class Scorecard(BaseModel):
 
 O `veredito` é da tentativa: `APROVADA` se todas as métricas passaram, `REPROVADA` se alguma falhou, `ERRO_INFRA` se o juiz ou a gravação falharam com a peça existente. O estado final da célula não fica no scorecard: fica só em `celulas`, gravado pela E7.
 
-`numeric_fidelity`, `analogy_rule` e `plan_contract` valem o número de violações, com faixa `"0"`. `text_size` vale o número de unidades fora do limite, e a faixa traz o limite renderizado do LevelSpec. `llm_judge` vale `true` quando o juiz não reprova nada e `false` quando reprova. `Violacao.campo` diz onde está o trecho: `texto` é o texto da seção ou do slide e a fala da cena.
+`numeric_fidelity`, `analogy_rule` e M7 (`plan_contract`) valem o número de violações, com faixa `"0"`. `text_size` vale o número de unidades fora do limite, e a faixa traz o limite renderizado do LevelSpec. `llm_judge` vale `true` quando o juiz não reprova nada e `false` quando reprova. `Violacao.campo` diz onde está o trecho: `texto` é o texto da seção ou do slide e a fala da cena.
 
 Cada métrica tem o seu modelo de `detalhes`, gravado em `metricas.detalhes`:
 
@@ -286,9 +286,11 @@ Cada métrica tem o seu modelo de `detalhes`, gravado em `metricas.detalhes`:
 | ------- | -------------------- |
 | `numeric_fidelity` | `numeros_varridos`, `com_marcador`, `datas_conferidas` e `desfechos` (a contagem de cada desfecho da M1, inclusive o número em formato que o parser não lê) |
 | `text_size` | `grandeza` (`palavras` ou `caracteres`), `limite` (o limite renderizado) e `unidades` (a medida e o limite de cada unidade; no roteiro, a última é o total) |
+| `readability` | `palavras`, `silabas`, `frases`, `ifl`, `ifl_minimo` e `frase_max_palavras` (os do nível, quando existem), `analogia_na_peca` e `nivel_estatistico` (o estilo da peça: IFL no piso do Iniciante e analogia na peça) |
+| `term_density` | `palavras`, `ocorrencias`, `densidade` (por 100 palavras), `ocorrencias_avancado`, `densidade_avancado` e `termos` (cada termo acima de iniciante encontrado, com o nível e a contagem) |
 | `analogy_rule` | `aplicavel` (a regra vale só no Iniciante) e `termos` (cada termo acima de iniciante encontrado, com a unidade da primeira ocorrência, se há `Analogia` no plano e se há marcador na unidade) |
 | `plan_contract` | `checagens` (quantidade de slides, soma das cenas, `claim_ids` no plano e cobertura do formato, cada uma com o esperado, o obtido e se passou) |
-| `llm_judge` | `analogias` (termo, justificativa e `correta`), `unidades` (índice, justificativa, `implicada` e trecho problemático) e `nivel_percebido` |
+| `llm_judge` | `analogias` (termo, justificativa e `correta`), `unidades` (índice, justificativa, `implicada` e trecho problemático), `justificativa_nivel` e `nivel_percebido` |
 
 ## Run manifest
 
@@ -356,7 +358,7 @@ flowchart TD
     PE --> FAN{{"Fan-out 3 para 9: cada nivel se abre em 3 formatos"}}
     FAN --> SY["E5. Format Synthesizer: pacote (codigo), redator (LLM), montagem (codigo); 9 instancias isoladas"]
     SY --> PECA[("Peca: celula_id igual a nivel__formato")]
-    PECA --> EV["E6. Hybrid Evaluator: 5 metricas deterministicas + 1 LLM Judge"]
+    PECA --> EV["E6. Hybrid Evaluator: 6 verificacoes deterministicas + 1 LLM Judge"]
     EV --> SC[("Scorecard com lista de Violacao")]
 
     SC --> ROUTE{"E7. Router (deterministico)"}
@@ -369,7 +371,7 @@ flowchart TD
     OK --> MTX["Matriz 3x3 completa + scorecards"]
     REP --> MTX
     ERR --> MTX
-    MTX --> DASH["Dashboard: aba da matriz com scorecards e rastreabilidade (leitura)"]
+    MTX --> DASH["Dashboard: pagina Resultado com scorecards, rastreabilidade e matrizes de confusao (leitura)"]
 
     LS[("LevelSpec YAML: fonte unica")] -.->|"regras e instrucao"| PRE
     LS -.-> PLA
@@ -577,7 +579,7 @@ No retry, recebe também o payload anterior, com os marcadores restaurados (incl
 
 1. Troca cada marcador pelo mesmo trecho do texto do claim que ele cobriu na E5.1 (ex.: `5,2%`) e registra em `numeros_usados` a posição do número no texto final, o claim e a `ordem` de onde veio. O `bruto` do documento fica só para a rastreabilidade (do claim à âncora no PDF).
 2. Marcador inexistente, ou de um claim que não está no plano do nível, é violação da M1: a montagem troca os marcadores válidos, deixa o inválido no texto, registra a violação, e o conserto consome uma tentativa do `K`.
-3. Confere o contrato do plano: a quantidade de slides, a soma das cenas até `duracao_s`, os `claim_ids` de cada unidade dentro do plano do nível e a cobertura do formato (todo claim do formato aparece em alguma unidade). O que falha é violação do `plan_contract` e consome o `K`.
+3. Confere o contrato do plano: a quantidade de slides, a soma das cenas até `duracao_s`, os `claim_ids` de cada unidade dentro do plano do nível e a cobertura do formato (todo claim do formato aparece em alguma unidade). O que falha é violação do M7 (`plan_contract`) e consome o `K`.
 
 Números escritos pelo modelo fora de marcador não são corrigidos aqui: ficam no texto e a M1 os aponta na E6.
 
@@ -599,13 +601,17 @@ Números escritos pelo modelo fora de marcador não são corrigidos aqui: ficam 
 
 ```mermaid
 flowchart LR
-    P["Peca"] --> DET["As 4 verificacoes deterministicas rodam SEMPRE, todas, sem curto-circuito"]
+    P["Peca"] --> DET["As 6 verificacoes deterministicas rodam SEMPRE, todas, sem curto-circuito"]
     DET --> M1["M1. numeric_fidelity"]
     DET --> M2["M2. text_size"]
+    DET --> M3["M3. readability"]
+    DET --> M4["M4. term_density (so mede)"]
     DET --> M5["M5. analogy_rule"]
-    DET --> PC["plan_contract"]
+    DET --> PC["M7. plan_contract"]
     M1 --> G{"alguma violacao?"}
     M2 --> G
+    M3 --> G
+    M4 --> G
     M5 --> G
     PC --> G
     G -->|"sim: relatorio completo, e NAO paga o Judge"| SC["Scorecard"]
@@ -613,14 +619,14 @@ flowchart LR
     J --> SC
 ```
 
-Uma decisão sustenta esse desenho: **as 4 verificações determinísticas rodam sempre, todas, e o portão vem depois. O único curto-circuito do sistema protege a M6.**
+Uma decisão sustenta esse desenho: **as 6 verificações determinísticas rodam sempre, todas, e o portão vem depois. O único curto-circuito do sistema protege a M6.**
 
 As duas razões, em ordem de importância:
 
 - **Qualidade: o relatório corretivo precisa ser completo em uma passada.** Se o avaliador parasse na primeira métrica que falha, o retry consertaria o tamanho do artigo, a passada seguinte descobriria a analogia que falta, o conserto da analogia estouraria o tamanho, e o orçamento `K` se esgotaria sem convergir. Pior: uma peça que inventou um número receberia um relatório que não diz nada sobre formato ou analogia, e o modelo reescreveria às cegas justamente nas dimensões que já estavam certas. É o oposto do que a seção do Refinement Loop promete.
-- **Custo: rodar as 4 é grátis.** São microssegundos de código Python, sem token. O que custa é a M6, e ela só roda se as 4 passarem. Curto-circuitar verificações gratuitas para economizar nada, ao custo de um relatório mutilado, é trocar qualidade por zero.
+- **Custo: rodar as 6 é grátis.** São microssegundos de código Python, sem token. O que custa é a M6, e ela só roda se as 6 passarem. Curto-circuitar verificações gratuitas para economizar nada, ao custo de um relatório mutilado, é trocar qualidade por zero.
 
-O nível é medido pela regra de analogia (M5), pelo tamanho do artigo por nível (M2) e pelo nível percebido pelo juiz (M6). A numeração das métricas é M1, M2, M5 e M6; o `plan_contract` é uma checagem sem número.
+O nível é medido pela regra de analogia (M5), pelo tamanho do artigo por nível (M2), pela legibilidade (M3), pela densidade de termos (M4, que só mede) e pelo nível percebido pelo juiz (M6). A numeração das métricas é M1 a M7; a M7 é o M7 (`plan_contract`), a checagem de estrutura que a montagem da E5.3 calcula.
 
 ### As métricas
 
@@ -639,7 +645,9 @@ A varredura roda em cada campo da peça: o título, a linha fina, o texto de cad
 
 **M2. Format Contract Check (determinístico).** Aritmética sobre o payload estruturado, com os números do contrato de formato do LevelSpec, contados por `sunontent/texto.py`. Artigo: palavras do texto das seções na faixa do nível. Carrossel: caracteres de cada slide dentro do limite do papel. Roteiro: palavras de cada cena até a duração da cena vezes `palavras_por_segundo`, e o total até `duracao_s` vezes `palavras_por_segundo`. O limite que a M2 registra é o `faixa_esperada` de `instrucoes_redator`, a mesma função que escreve o orçamento do prompt.
 
-**plan_contract (determinístico).** As regras de estrutura que dependem do LevelSpec ou do plano: quantidade de slides do carrossel, soma das cenas do roteiro até `duracao_s`, `claim_ids` de cada unidade dentro do plano do nível e cobertura do formato. A montagem da E5.3 entrega as violações já calculadas. As regras que valem para qualquer célula são validadores do schema do redator e não passam por aqui.
+**M3. Legibilidade (determinístico).** Índice de Facilidade de Leitura de Flesch adaptado ao português (Martins et al., 1996) sobre o texto das unidades: `248,835 - 1,015 x (palavras / frases) - 84,6 x (sílabas / palavras)`, com palavras, sílabas e frases contadas por `sunontent/texto.py`. O nível que tem o bloco `legibilidade` no LevelSpec (hoje o Iniciante) reprova abaixo do piso de IFL do formato; os outros só medem. A violação aponta as frases mais longas. O resultado também registra o estilo da peça (IFL no piso do Iniciante e analogia na peça), para a matriz de confusão estatística.
+
+**M4. Densidade de termos (determinístico, só mede).** Ocorrências dos termos do glossário com `nivel_minimo` acima de iniciante por 100 palavras do texto das unidades, casadas pela regra da M5, e a densidade só dos termos de nível avançado. Nunca gera violação: a densidade varia mais entre as fontes que entre os níveis.
 
 **M5. Regra de analogia (determinístico).** Só no nível Iniciante: todo termo do glossário com `nivel_minimo` acima de iniciante encontrado no texto precisa ter uma `Analogia` no plano do nível **e** um marcador de analogia, de `analogia.marcadores` do LevelSpec do Iniciante ("é como", "funciona como", "imagine que", "na prática"), na mesma unidade (seção, slide ou cena) da primeira ocorrência do termo. Os termos são casados pela regra de `docs/glossario.md`, e só no texto das unidades: o título e a linha fina não são unidades e não entram na busca. Uma expressão de analogia em qualquer ponto da unidade vale para todos os termos da unidade. Termo do glossário sem analogia no plano é violação, com o trecho exato e a instrução de trocar o termo por uma explicação simples; termo com analogia no plano e sem marcador na unidade é violação com a analogia do plano e as expressões na instrução.
 
@@ -648,13 +656,15 @@ A varredura roda em cada campo da peça: o título, a linha fina, o texto de cad
 1. Cada `Analogia` explica o conceito **corretamente**, ou é decorativa ou enganosa? A M5 confirma que a analogia existe; só o juiz sabe se "Selic é como o aluguel do dinheiro" está certo e "Selic é como o preço do dólar" está errado.
 2. Cada unidade da peça (seção, slide ou cena) é implicada (*entailment*) pelos claims que ela cita? Projeção apresentada como fato não é implicada pelo claim, e causa que o claim não diz também não. O juiz recebe os claims citados (texto e trecho literal), o chunk da âncora de cada um, os chunks vizinhos e os 3 chunks de maior sobreposição lexical com a unidade, para pegar contradição com outra parte do documento; para as analogias, recebe a definição técnica do glossário.
 
-O `nivel_percebido` de cada peça é só informativo: a matriz de confusão de níveis cruza o nível pedido e o percebido, por formato. O nó confere que toda unidade e toda analogia tem resposta; resposta incompleta é `ERRO_INFRA`.
+O `nivel_percebido` de cada peça é só informativo: a matriz de confusão de níveis cruza o nível pedido e o percebido, por formato. Uma segunda matriz, estatística, cruza o nível pedido e o estilo da peça medido pela M3 (IFL no piso do Iniciante e analogia na peça); como as determinísticas rodam em toda tentativa, ela não depende de o juiz ter rodado. O nó confere que toda unidade e toda analogia tem resposta; resposta incompleta é `ERRO_INFRA`.
+
+**M7. plan_contract (determinístico).** As regras de estrutura que dependem do LevelSpec ou do plano: quantidade de slides do carrossel, soma das cenas do roteiro até `duracao_s`, `claim_ids` de cada unidade dentro do plano do nível e cobertura do formato. A montagem da E5.3 entrega as violações já calculadas. As regras que valem para qualquer célula são validadores do schema do redator e não passam por aqui.
 
 **Decide:** nada nas métricas determinísticas, que só calculam. Só a M6 exerce julgamento, e ela **só pode reprovar**: não existe caminho em que o juiz aprove uma peça que a M1 rejeitou, e cada `false` vira uma `Violacao` da `llm_judge`. Falha esgotada do juiz é `ERRO_INFRA`, nunca aprovação.
 
 **Gera:** `Scorecard` com a lista completa de `Violacao`, cada uma com trecho, esperado, obtido, posição e instrução corretiva. O veredito é da tentativa. Grava `scorecards`, `metricas` e `violacoes` da tentativa numa única transação.
 
-**Natureza:** híbrido, com a fronteira explícita: 4 verificações determinísticas, 1 juiz LLM, e nenhuma influência do juiz sobre os números.
+**Natureza:** híbrido, com a fronteira explícita: 6 verificações determinísticas (a M4 só mede), 1 juiz LLM, e nenhuma influência do juiz sobre os números.
 
 **Como falha:** falso positivo de M1 por bug de parsing de número na etapa 1 (o modo de falha mais irritante do sistema, porque acusa alucinação onde não houve); e complacência do juiz na M6, mitigada por ele ser de família de modelo diferente do extractor.
 
@@ -682,15 +692,15 @@ O `nivel_percebido` de cada peça é só informativo: a matriz de confusão de n
 
 ## Matriz no dashboard
 
-**Representa:** a leitura humana do resultado. Não é uma etapa do pipeline: o grafo termina na E7, e a matriz 3x3 com os scorecards e a rastreabilidade é uma aba do dashboard. Não há decisão editorial registrada, e o dashboard não grava nada sobre as células.
+**Representa:** a leitura humana do resultado. Não é uma etapa do pipeline: o grafo termina na E7, e a matriz 3x3 com os scorecards, a rastreabilidade e as matrizes de confusão de níveis é parte da página Resultado do dashboard. Não há decisão editorial registrada, e o dashboard não grava nada sobre as células.
 
 **Recebe:** a matriz 3x3 completa, com cada célula em um de três estados finais (`APROVADA`, `REPROVADA` ou `ERRO_INFRA`), e o scorecard de cada uma, com as justificativas do juiz quando a M6 rodou; e o plano de cada nível, com os descartes e os seus motivos, as analogias com `revisada=False` marcadas como não revisadas e o `aviso` do plano (o que a limpeza do código mudou) quando houver.
 
-**O que mostra:** as 9 peças lado a lado, com a rastreabilidade (cada seção, slide ou cena linkado aos seus claims, cada número linkado ao claim de onde veio, cada claim linkado à página do PDF) e o painel de métricas. O dashboard lê tudo do Supabase: as tabelas do run e o PDF do bucket privado `documentos`, aberto por URL assinada de curta duração gerada no servidor do dashboard. A chave de serviço nunca chega ao navegador.
+**O que mostra:** as 9 peças lado a lado, com a rastreabilidade (cada seção, slide ou cena linkado aos seus claims, cada número linkado ao claim de onde veio, cada claim linkado à página do PDF) e o painel de métricas, com as duas matrizes de confusão de níveis do run (a do juiz e a estatística). O dashboard lê tudo do Supabase: as tabelas do run e o PDF do bucket privado `documentos`, aberto por URL assinada de curta duração gerada no servidor do dashboard. A chave de serviço nunca chega ao navegador.
 
-O carrossel sai do pipeline como dado estruturado, como o artigo e o roteiro. A única forma visual é a prévia do dashboard: cada slide é um SVG de 1080 x 1350, com o texto em `<text>` e `<tspan>`, gerado na hora pelo servidor a partir da peça lida do Supabase, com a quebra de linha medida pela fonte do template e sem mudar nenhuma palavra do `Slide.texto`. O botão de baixar salva esse mesmo SVG, e nada é gravado.
+O carrossel sai do pipeline como dado estruturado, como o artigo e o roteiro. A única forma visual é a prévia do dashboard: cada slide é um SVG de 1080 x 1350, com o texto em `<text>` e `<tspan>`, gerado na hora pelo servidor a partir da peça lida do Supabase, com a quebra de linha medida pela fonte do template e sem mudar nenhuma palavra do `Slide.texto`. Os botões de baixar salvam esse mesmo SVG ou um PNG feito dele no navegador, e nada é gravado no servidor.
 
-O dashboard fica em `app/` (FastAPI, com HTML, CSS e JS sem build) e escuta só em `127.0.0.1`. Ele inicia o pipeline, mostra as etapas ao vivo, lê os runs do Supabase pela `ConsultaSupabase` de `sunontent/persistencia.py`, em conexão só de leitura, mostra a matriz 3x3 com o scorecard, as violações por posição, a rastreabilidade e o carrossel em SVG, e tem a aba da revisão humana da quarentena, a única que grava. Detalhado em `docs/fluxos/dashboard.md`.
+O dashboard fica em `app/` (FastAPI, com HTML, CSS e JS sem build) e escuta só em `127.0.0.1`. Ele inicia o pipeline, mostra as etapas ao vivo, lê os runs do Supabase pela `ConsultaSupabase` de `sunontent/persistencia.py`, em conexão só de leitura, mostra a página Resultado (as peças por nível e a matriz 3x3 com o scorecard, as violações por posição, a rastreabilidade, as matrizes de confusão e o carrossel em SVG), a página de informações técnicas do run e a revisão humana da quarentena, a única que grava. Detalhado em `docs/fluxos/dashboard.md`.
 
 **Natureza:** leitura, sem LLM e sem decisão.
 
@@ -837,7 +847,7 @@ prompt:     "Escreva um artigo curto."
 avaliador:  assert 350 <= palavras(texto) <= 550
 ```
 
-O prompt precisa dizer o alvo numérico e o que ele significa em termos operacionais (de 350 a 550 palavras no texto das seções), renderizado do mesmo arquivo que o avaliador lê: `instrucoes_redator` em `sunontent/levelspec.py` escreve as frases do orçamento e dos marcadores de analogia e o limite que a M2 registra.
+O prompt precisa dizer o alvo numérico e o que ele significa em termos operacionais (de 350 a 550 palavras no texto das seções), renderizado do mesmo arquivo que o avaliador lê: `instrucoes_redator` em `sunontent/levelspec.py` escreve as frases do orçamento, dos marcadores de analogia e da meta de tamanho de frase e o limite que a M2 registra.
 
 ## 3. Tool registry
 
@@ -895,7 +905,7 @@ E manter `ERRO_INFRA` como estado final de célula, distinto de `REPROVADA`: `ER
 
 Versão de prompt, versão de LevelSpec, pin de modelo com snapshot, e um **run manifest** que amarra tudo isso ao resultado. Sem isso, reprodutibilidade é aspiracional: o mesmo documento com o mesmo código gera outro resultado porque o provider atualizou o modelo por baixo. As instruções de reprodutibilidade do Entregável 6 são, na prática, este componente.
 
-As credenciais ficam no `.env`, fora do git. O `.env.example` versionado lista as variáveis sem valores: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_DB_URL` (conexão das transações pelo session pooler ou pela conexão direta, nunca pelo pooler de transação, que não aceita prepared statements) as chaves da Gemini API, na ordem de chamada: `GOOGLE_API_KEY_PRINC` (principal, obrigatória) e `GOOGLE_API_KEY_SEC` (reserva, opcional, chamada quando a principal falha; regra em `docs/fluxos/extracao.md`, Cliente LLM), e a `API_KEY_ROUTER`, do OpenRouter, usada só pelo juiz (M6), obrigatória e sem reserva.
+As credenciais ficam no `.env`, fora do git. O `.env.example` versionado lista as variáveis sem valores: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_DB_URL` (conexão das transações pelo session pooler ou pela conexão direta, nunca pelo pooler de transação, que não aceita prepared statements), as chaves da Gemini API, na ordem de chamada: `GOOGLE_API_KEY_PRINC` (principal, obrigatória) e `GOOGLE_API_KEY_SEC` (reserva, opcional, chamada quando a principal falha; regra em `docs/fluxos/extracao.md`, Cliente LLM), e a `GROQ_API_KEY`, do Groq, usada só pelo juiz (M6), obrigatória e sem reserva.
 
 ---
 
@@ -903,7 +913,7 @@ As credenciais ficam no `.env`, fora do git. O `.env.example` versionado lista a
 
 O contrato que define cada nível. Uma fonte, lida pelo prompt e pelo avaliador.
 
-Cada arquivo tem os campos da E4, o contrato de formato e, no Iniciante, o bloco `analogia`, validados por `sunontent/levelspec.py`, que recusa campo desconhecido (valores e motivos em `docs/fluxos/plano-editorial.md`, LevelSpec da E4):
+Cada arquivo tem os campos da E4, o contrato de formato, no Iniciante o bloco `analogia` e, em qualquer nível, o bloco opcional `legibilidade`, validados por `sunontent/levelspec.py`, que recusa campo desconhecido (valores e motivos em `docs/fluxos/plano-editorial.md`, LevelSpec da E4):
 
 ```yaml
 # config/levels/iniciante.yaml
@@ -929,9 +939,12 @@ formatos:
     fechamento_s: 6
 analogia:                                            # só no Iniciante
   marcadores: ["é como", "funciona como", "imagine que", "na prática"]
+legibilidade:                                        # opcional; hoje só no Iniciante
+  ifl_minimo: {artigo: 30, carrossel: 45, roteiro: 45}
+  frase_max_palavras: 18
 ```
 
-O contrato de formato é a fonte única do orçamento da E5.1, do prompt do redator e da M2. O bloco `analogia` é obrigatório no Iniciante e proibido nos outros níveis; os `marcadores` são expressões de pelo menos duas palavras, e a M5 os procura na mesma unidade da primeira ocorrência do termo. O `levelspec.py` confere que as palavras mínimas do artigo crescem do Iniciante ao Avançado e avisa quando `carrossel.max_claims` é maior que `slides.max - 2`, os slides de corpo possíveis.
+O contrato de formato é a fonte única do orçamento da E5.1, do prompt do redator e da M2. O bloco `analogia` é obrigatório no Iniciante e proibido nos outros níveis; os `marcadores` são expressões de pelo menos duas palavras, e a M5 os procura na mesma unidade da primeira ocorrência do termo. O bloco `legibilidade` traz o piso do IFL por formato, lido pela M3, e a meta de tamanho de frase, que só o prompt do redator lê; o nível sem o bloco só mede a legibilidade. O `levelspec.py` confere que as palavras mínimas do artigo crescem do Iniciante ao Avançado e avisa quando `carrossel.max_claims` é maior que `slides.max - 2`, os slides de corpo possíveis.
 
 Quais termos pedem analogia não fica no LevelSpec: vem do `nivel_minimo` de cada termo do glossário, a mesma fonte lida pelo planejador, pelo gate e pela M5.
 
@@ -1003,7 +1016,7 @@ Ordem por dependência, não por importância:
 3. **E1 Leitura**, com teste de igualdade exata contra fixture, e paranoia no parsing de número.
 4. **E2 + E3** em conjunto, com fixture de documento anotado à mão.
 5. **E4 Plano editorial**, com o LevelSpec com os campos da E4 e o contrato de formato, e o leitor do glossário com o casamento de termos que a M5 também usa (`docs/fluxos/plano-editorial.md`). O grafo termina na E4, com as 9 células em `PENDENTE`.
-6. **As verificações determinísticas (M1, M2, M5 e `plan_contract`), isoladas**, com teste unitário direto. Elas não dependem de nenhuma chamada de LLM e são o Entregável 2. Podem e devem ser construídas antes de existir qualquer peça.
+6. **As verificações determinísticas (M1 a M5 e M7), isoladas**, com teste unitário direto. Elas não dependem de nenhuma chamada de LLM e são o Entregável 2. Podem e devem ser construídas antes de existir qualquer peça.
 7. **E5** para uma única célula, ponta a ponta.
 8. **E7 Router + refinement loop** naquela única célula, até ver uma correção acontecer de verdade.
 9. **Fan-out para 9.**

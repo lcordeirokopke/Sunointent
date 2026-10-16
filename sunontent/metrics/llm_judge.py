@@ -1,9 +1,10 @@
 """M6. Juiz LLM (`llm_judge`, docs/metricas.md, M6): a única métrica não determinística, e ela só reprova.
 
-Uma chamada por tentativa da célula, feita pela E6 só depois de M1, M2, M5 e `plan_contract` passarem. O prompt
+Uma chamada por tentativa da célula, feita pela E6 só depois de M1, M2, M3, M5 e M7 (`plan_contract`) passarem. O prompt
 (prompts/judge.j2) traz os claims citados (texto e `literal_fonte`), os trechos do documento da recuperação de
-contexto (`contexto.py`), cada unidade da peça e, para as analogias do plano usadas na peça, a `definicao_tecnica`
-do glossário. O nível pedido não vai para o prompt, para não influenciar o `nivel_percebido`.
+contexto (`contexto.py`), cada unidade da peça, para as analogias do plano usadas na peça a `definicao_tecnica` do
+glossário e, para o nível percebido, o foco de cada nível (LevelSpec) e os termos do glossário encontrados na peça,
+com o `nivel_minimo` de cada um. O nível pedido não vai para o prompt, para não influenciar o `nivel_percebido`.
 
 A resposta precisa ter uma entrada para cada unidade e para cada analogia pedida; resposta incompleta é uma
 `FalhaTerminal`, que a E6 transforma em ERRO_INFRA. Cada `false` vira uma `Violacao` da `llm_judge`.
@@ -15,6 +16,7 @@ from pathlib import Path
 
 import jinja2
 
+from sunontent import levelspec
 from sunontent.glossario import Glossario, dobrar
 from sunontent.llm import ClienteLLM
 from sunontent.metrics import analogy_rule, campos, contexto, resultado
@@ -83,6 +85,16 @@ def analogias_usadas(peca: Peca, plano: PlanoNivel, glossario: Glossario) -> lis
     return list(achadas.values())
 
 
+def termos_da_peca(peca: Peca, glossario: Glossario) -> list[tuple[str, str]]:
+    """(termo, nivel_minimo) de cada termo do glossário encontrado em algum campo da peça, na ordem da primeira
+    ocorrência."""
+    achados: dict[str, None] = {}
+    for campo in campos.campos_da_peca(peca.payload):
+        for o in glossario.casar(campo.texto):
+            achados.setdefault(o.id, None)
+    return [(glossario.termos[i].termo, glossario.termos[i].nivel_minimo) for i in achados]
+
+
 def _papeis(peca: Peca) -> list[str | None]:
     if isinstance(peca.payload, CarrosselPayload):
         return [s.papel for s in peca.payload.slides]
@@ -93,7 +105,12 @@ def _papeis(peca: Peca) -> list[str | None]:
 
 
 def montar_prompt(
-    raiz: Path, peca: Peca, factsheet: FactSheet, ctx: contexto.ContextoJuiz, analogias: list[AnalogiaJulgada]
+    raiz: Path,
+    peca: Peca,
+    factsheet: FactSheet,
+    ctx: contexto.ContextoJuiz,
+    analogias: list[AnalogiaJulgada],
+    glossario: Glossario,
 ) -> str:
     ambiente = jinja2.Environment(
         loader=jinja2.FileSystemLoader(Path(raiz) / "prompts"),
@@ -126,6 +143,8 @@ def montar_prompt(
             for u in ctx.unidades
         ],
         analogias=[a.__dict__ for a in analogias],
+        foco={nivel: spec.foco for nivel, spec in levelspec.carregar_todos(raiz).items()},
+        termos=[{"termo": termo, "nivel": nivel} for termo, nivel in termos_da_peca(peca, glossario)],
     )
 
 
@@ -209,7 +228,7 @@ def julgar(
     ctx = contexto.montar(peca, {c.id: c for c in factsheet.claims}, chunks)
     analogias = analogias_usadas(peca, plano, glossario)
     saida = llm.chamar(
-        NO, montar_prompt(raiz, peca, factsheet, ctx, analogias), SaidaJuiz,
+        NO, montar_prompt(raiz, peca, factsheet, ctx, analogias, glossario), SaidaJuiz,
         run_id=run_id, registrar_span=registrar_span, nivel=peca.nivel, celula_id=peca.celula_id,
         tentativa=peca.tentativa, raciocinio=RACIOCINIO,
     )
@@ -225,7 +244,10 @@ def julgar(
         _violacao_da_unidade(peca, u, ctx.unidades[u.unidade_indice].claim_ids) for u in unidades if not u.implicada
     ]
     violacoes.sort(key=lambda v: v.unidade_indice)
-    detalhes = LlmJudgeDetalhes(analogias=vereditos_analogia, unidades=unidades, nivel_percebido=saida.nivel_percebido)
+    detalhes = LlmJudgeDetalhes(
+        analogias=vereditos_analogia, unidades=unidades, justificativa_nivel=saida.justificativa_nivel,
+        nivel_percebido=saida.nivel_percebido,
+    )
     return resultado.montar(detalhes, violacoes)
 
 
