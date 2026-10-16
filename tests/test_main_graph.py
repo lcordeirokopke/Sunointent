@@ -81,10 +81,13 @@ def test_manifest_le_versoes_e_hashes_da_config(raiz):
     glossario = yaml.safe_load((raiz / "config" / "glossario.yaml").read_text(encoding="utf-8"))
     assert m.glossario_versao == glossario["versao"]
     # templates vazios ficam de fora
-    assert m.prompts == {"adapter": versao_prompt(raiz, "adapter"), "extractor": versao_prompt(raiz, "extractor")}
+    assert m.prompts == {
+        "adapter": versao_prompt(raiz, "adapter"), "extractor": versao_prompt(raiz, "extractor"),
+        "synthesizer": versao_prompt(raiz, "synthesizer"),
+    }
     assert set(m.arquivos_sha256) == {
         "config/models.yaml", "config/glossario.yaml", "prompts/extractor.j2", "prompts/adapter.j2",
-        "config/levels/iniciante.yaml", "config/levels/intermediario.yaml", "config/levels/avancado.yaml",
+        "prompts/synthesizer.j2", "config/levels/iniciante.yaml", "config/levels/intermediario.yaml", "config/levels/avancado.yaml",
     }
 
 
@@ -107,7 +110,9 @@ def test_template_com_conteudo_exige_cabecalho_de_versao(raiz):
 def test_template_com_cabecalho_entra_no_manifest(raiz):
     (raiz / "prompts" / "adapter.j2").write_text("{# versao: 3 #}\nolá", encoding="utf-8")
     m = manifesto.montar(raiz, run_id="x", timestamp=MOMENTO, modo="normal", fonte="copom", k=2)
-    assert m.prompts == {"adapter": 3, "extractor": versao_prompt(raiz, "extractor")}
+    assert m.prompts == {
+        "adapter": 3, "extractor": versao_prompt(raiz, "extractor"), "synthesizer": versao_prompt(raiz, "synthesizer"),
+    }
     assert "prompts/adapter.j2" in m.arquivos_sha256
 
 

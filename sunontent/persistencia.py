@@ -18,6 +18,8 @@ Funções da E0 e do run (docs/fluxos/ingestao.md, docs/arquiteturas.md):
   validacoes_plano/, plano.json e celulas/<celula_id>/estado.json;
 - leitura do FactSheet assinado do run, com os números de cada claim na ordem de claim_numeros;
 - atualização do estado e da tentativa de uma célula, com atualizado_em;
+- E5: cada tentativa da peça (pecas, peca_unidade_claims e peca_unidade_numeros) com a atualização da célula
+  numa transação; data/runs/<run_id>/celulas/<celula_id>/peca_<tentativa>.json e estado.json;
 - cópia local em data/sources/<fonte>/ e data/runs/<run_id>/;
 - leitura dos runs para o dashboard (app/), em conexão só de leitura (ConsultaSupabase).
 
@@ -46,6 +48,7 @@ from sunontent.schemas import (
     FactSheet,
     Numero,
     Pagina,
+    Peca,
     PlanoEditorial,
     ProblemaPlano,
     RunManifest,
@@ -190,6 +193,12 @@ class Repositorio(Protocol):
 
     def carregar_plano(self, run_id: str) -> tuple[PlanoEditorial, list[CelulaState]] | None:
         """O plano gravado do run e as suas células, ou None se `planos_editoriais` não tem o run."""
+        ...
+
+    def gravar_peca(self, run_id: str, peca: Peca, celula: CelulaState) -> None:
+        """Grava a peça de uma tentativa (pecas, as unidades com os claims que existem no run e os números usados)
+        e atualiza a célula, numa transação. A mesma peça já gravada não grava nada; outra peça na mesma
+        tentativa é FalhaTerminal."""
         ...
 
     def atualizar_celula(self, run_id: str, celula: CelulaState) -> None:
@@ -449,7 +458,9 @@ def reiniciar_validacoes_plano(repositorio: Repositorio, raiz_dados: Path, run_i
 
 def _gravar_celula_local(raiz_dados: Path, run_id: str, celula: CelulaState) -> Path:
     destino = Path(raiz_dados) / "runs" / run_id / "celulas" / celula.celula_id / "estado.json"
-    return _gravar_json(destino, celula.model_dump(mode="json", exclude={"peca", "scorecard"}, exclude_none=True))
+    return _gravar_json(
+        destino, celula.model_dump(mode="json", exclude={"peca", "scorecard", "plan_contract"}, exclude_none=True)
+    )
 
 
 def _gravar_plano_local(raiz_dados: Path, run_id: str, plano: PlanoEditorial, celulas: list[CelulaState]) -> Path:
@@ -493,6 +504,18 @@ def atualizar_celula(repositorio: Repositorio, raiz_dados: Path, run_id: str, ce
         f"atualização da célula {celula.celula_id} do run {run_id}",
     )
     return _gravar_celula_local(raiz_dados, run_id, celula)
+
+
+def gravar_peca(repositorio: Repositorio, raiz_dados: Path, run_id: str, peca: Peca, celula: CelulaState) -> Path:
+    """Grava a peça e a célula no Supabase e, depois, em data/runs/<run_id>/celulas/<celula_id>/
+    peca_<tentativa>.json e estado.json."""
+    com_retentativa(
+        lambda: repositorio.gravar_peca(run_id, peca, celula),
+        f"gravação da peça {peca.celula_id} tentativa {peca.tentativa} do run {run_id}",
+    )
+    _gravar_celula_local(raiz_dados, run_id, celula)
+    destino = Path(raiz_dados) / "runs" / run_id / "celulas" / peca.celula_id / f"peca_{peca.tentativa}.json"
+    return _gravar_json(destino, peca.model_dump(mode="json"))
 
 
 def criar_run(repositorio: Repositorio, manifest: RunManifest) -> None:
@@ -1156,6 +1179,54 @@ class RepositorioSupabase:
     def atualizar_celula(self, run_id: str, celula: CelulaState) -> None:
         def transacao(conexao):
             with conexao.transaction(), conexao.cursor() as cursor:
+                self._atualizar_celula(cursor, run_id, celula)
+
+        self._executar(transacao)
+
+    def gravar_peca(self, run_id: str, peca: Peca, celula: CelulaState) -> None:
+        from psycopg.types.json import Jsonb
+
+        payload = peca.payload.model_dump(mode="json")
+        chave = (run_id, peca.celula_id, peca.tentativa)
+        unidades = [(i, list(dict.fromkeys(ids))) for i, ids in enumerate(peca.payload.claim_ids_por_unidade())]
+        numeros = [
+            (*chave, n.campo, n.unidade_indice, n.inicio, n.fim, n.claim_id, n.ordem) for n in peca.numeros_usados
+        ]
+
+        def transacao(conexao):
+            with conexao.transaction(), conexao.cursor() as cursor:
+                inserido = cursor.execute(
+                    "insert into pecas (run_id, celula_id, tentativa, nivel, formato, payload, claim_ids)"
+                    " values (%s, %s, %s, %s::nivel, %s::formato, %s, %s)"
+                    " on conflict (run_id, celula_id, tentativa) do nothing returning tentativa",
+                    (*chave, peca.nivel, peca.formato, Jsonb(payload), peca.claim_ids),
+                ).fetchone()
+                if inserido is None:
+                    gravado = cursor.execute(
+                        "select payload, claim_ids from pecas where run_id = %s and celula_id = %s and tentativa = %s",
+                        chave,
+                    ).fetchone()
+                    if (gravado[0], list(gravado[1])) != (payload, peca.claim_ids):
+                        raise FalhaTerminal(
+                            f"run {run_id} já tem outra peça gravada em {peca.celula_id} tentativa {peca.tentativa}"
+                        )
+                    return
+                existentes = {
+                    linha[0] for linha in cursor.execute(
+                        "select claim_id from claims where run_id = %s and claim_id = any(%s)",
+                        (run_id, peca.claim_ids),
+                    ).fetchall()
+                }
+                cursor.executemany(
+                    "insert into peca_unidade_claims (run_id, celula_id, tentativa, unidade_indice, claim_id)"
+                    " values (%s, %s, %s, %s, %s)",
+                    [(*chave, indice, c) for indice, ids in unidades for c in ids if c in existentes],
+                )
+                cursor.executemany(
+                    "insert into peca_unidade_numeros (run_id, celula_id, tentativa, campo, unidade_indice, inicio,"
+                    " fim, claim_id, ordem) values (%s, %s, %s, %s::campo_numero, %s, %s, %s, %s, %s)",
+                    numeros,
+                )
                 self._atualizar_celula(cursor, run_id, celula)
 
         self._executar(transacao)

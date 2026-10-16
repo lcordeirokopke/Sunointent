@@ -547,6 +547,8 @@ O run aborta com erro terminal, depois de gravar as rodadas, só em dois casos: 
 
 ## E5. Format Synthesizer (9 instâncias isoladas)
 
+Divisão do orçamento, prompt do redator, montagem, nó e gravação em `docs/fluxos/sintese.md`.
+
 **Representa:** a mesma tese e os mesmos claims reencenados em três gramáticas de mídia diferentes. Um artigo argumenta, um carrossel escaneia, um roteiro é falado em voz alta.
 
 **Recebe:** 1 dos 3 `PlanoNivel` + os claims do plano, lidos do FactSheet assinado do run por `carregar_factsheet` (com os números de cada claim na ordem de `claim_numeros`) + o contrato do formato no LevelSpec do nível. Aqui acontece o fan-out de 3 para 9: cada `PlanoNivel` é consumido por 3 synthesizers diferentes.
@@ -743,6 +745,7 @@ class CelulaState(BaseModel):
     motivo_reprovacao: Literal["k_esgotado", "nao_convergencia"] | None  # só em REPROVADA
     erro_classe: Literal["retriavel", "terminal"] | None                 # só em ERRO_INFRA
     erro_mensagem: str | None                                            # só em ERRO_INFRA
+    plan_contract: MetricaResultado | None   # calculado na montagem da E5.3 e entregue à E6
 
 class PipelineState(BaseModel):
     run_id: str

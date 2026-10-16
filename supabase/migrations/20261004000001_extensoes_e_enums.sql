@@ -37,6 +37,9 @@ create type regra_plano as enum (
 -- Slide.papel (docs/arquiteturas.md, Peça final)
 create type papel_slide as enum ('gancho', 'corpo', 'conclusao');
 
+-- NumeroUsado.campo (docs/arquiteturas.md, Peça final): o número com marcador vale no texto das unidades e no título.
+create type campo_numero as enum ('texto', 'titulo');
+
 -- CelulaState.estado (docs/arquiteturas.md, O objeto de estado)
 create type estado_celula as enum ('PENDENTE', 'GERANDO', 'AVALIANDO', 'APROVADA', 'REPROVADA', 'ERRO_INFRA');
 

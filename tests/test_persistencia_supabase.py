@@ -307,6 +307,66 @@ def test_plano_editorial_rodadas_e_celulas(repositorio, ambiente, tmp_path):
     ]}]
 
 
+def test_peca_unidades_numeros_e_celula_numa_transacao(repositorio, ambiente, tmp_path):
+    import psycopg
+
+    from sunontent.extracao import extractor
+    from sunontent.schemas import (
+        FORMATOS, NIVEIS, ArtigoPayload, CelulaState, ClaimPlanejado, ClaimProposto, FactSheet, NumeroUsado, Peca,
+        PlanoEditorial, PlanoNivel, celula_id,
+    )
+
+    run_id, documento = run_com_referencia(repositorio, ambiente["SUPABASE_DB_URL"])
+    persistencia.gravar_documento_processado(repositorio, tmp_path, run_id, documento)
+    proposto = ClaimProposto(
+        id="C01", chunk_id="K01", texto="O fato relevante atende à Resolução CVM nº 44.",
+        literal_fonte="CVM nº 44, de 23 de agosto de 2021", numeros=["44"], tipo="resultado", tags=["governanca"])
+    claims, _ = extractor.ancorar(documento, {"C01": proposto})
+    persistencia.gravar_factsheet(repositorio, tmp_path, run_id, FactSheet(
+        doc_id=documento.doc_id, tipo_documento=documento.tipo_documento, emissor=documento.emissor,
+        data_documento=documento.data_documento, claims=claims, tabela_numeros=documento.tabela_numeros,
+        assinado=True))
+    plano = PlanoEditorial(nucleo=["C01"], rodadas=1, aviso=None, niveis=[
+        PlanoNivel(nivel=n, descartes=[], tese="Tese.", tese_claim_ids=["C01"], analogias=[],
+                   claims=[ClaimPlanejado(claim_id="C01", papel="principal", prioridade=1, atribuir_fonte=False)])
+        for n in NIVEIS])
+    celulas = [CelulaState(celula_id=celula_id(n, f), nivel=n, formato=f) for n in NIVEIS for f in FORMATOS]
+    persistencia.gravar_plano(repositorio, tmp_path, run_id, plano, celulas)
+
+    # C77 não existe no run: fica na peça, mas não em peca_unidade_claims.
+    payload = ArtigoPayload(titulo="Norma 44", linha_fina="O que diz",
+                            secoes=[{"texto": "Atende à norma 44.", "claim_ids": ["C01", "C77", "C01"]}])
+    peca = Peca(celula_id="iniciante__artigo", nivel="iniciante", formato="artigo", payload=payload,
+                claim_ids=["C01", "C77"], tentativa=1, numeros_usados=[
+                    NumeroUsado(campo="titulo", unidade_indice=None, inicio=6, fim=8, claim_id="C01", ordem=1),
+                    NumeroUsado(campo="texto", unidade_indice=0, inicio=15, fim=17, claim_id="C01", ordem=1)])
+    avaliando = CelulaState(celula_id="iniciante__artigo", nivel="iniciante", formato="artigo", estado="AVALIANDO",
+                            tentativa=1)
+    for _ in range(2):  # a mesma peça de novo não grava nada
+        persistencia.gravar_peca(repositorio, tmp_path, run_id, peca, avaliando)
+    outra = peca.model_copy(update={"payload": payload.model_copy(update={"linha_fina": "Outra"})})
+    with pytest.raises(FalhaTerminal, match="outra peça"):
+        persistencia.gravar_peca(repositorio, tmp_path, run_id, outra, avaliando)
+
+    with psycopg.connect(ambiente["SUPABASE_DB_URL"]) as conexao:
+        gravada = conexao.execute(
+            "select payload, claim_ids from pecas where run_id = %s and celula_id = 'iniciante__artigo'", (run_id,)
+        ).fetchall()
+        unidades = conexao.execute(
+            "select unidade_indice, claim_id from peca_unidade_claims where run_id = %s", (run_id,)).fetchall()
+        numeros = conexao.execute(
+            "select campo::text, unidade_indice, inicio, fim, claim_id, ordem from peca_unidade_numeros"
+            " where run_id = %s order by campo, inicio", (run_id,)).fetchall()
+        celula = conexao.execute(
+            "select estado::text, tentativa from celulas where run_id = %s and celula_id = 'iniciante__artigo'",
+            (run_id,)).fetchone()
+    assert gravada == [(payload.model_dump(mode="json"), ["C01", "C77"])]
+    assert unidades == [(0, "C01")]
+    assert numeros == [("texto", 0, 15, 17, "C01", 1), ("titulo", None, 6, 8, "C01", 1)]
+    assert celula == ("AVALIANDO", 1)
+    assert (tmp_path / "runs" / run_id / "celulas" / "iniciante__artigo" / "peca_1.json").exists()
+
+
 def test_span_do_adapter_aceita_nivel_nulo(repositorio, ambiente, tmp_path):
     """O planejador da E4 faz 1 chamada para os 3 níveis: o span do adapter não tem nível. O extractor nunca tem."""
     import uuid

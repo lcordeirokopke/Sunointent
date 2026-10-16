@@ -79,6 +79,8 @@ create table pecas (
 
 -- Rastreabilidade granular: cada unidade estrutural (seção, slide, cena) ligada aos seus claims
 -- (docs/arquiteturas.md, E5. Format Synthesizer, Matriz no dashboard e 6. Observability / tracing). Permite consulta claim -> peças e claim -> página do PDF.
+-- Só os claims que existem no FactSheet do run: um id que o redator inventou fica em pecas.payload e
+-- pecas.claim_ids e é violação do plan_contract, mas não tem página para rastrear.
 create table peca_unidade_claims (
   run_id         text not null,
   celula_id      text not null,
@@ -93,20 +95,24 @@ create table peca_unidade_claims (
 create index peca_unidade_claims_claim_idx on peca_unidade_claims (run_id, claim_id);
 
 -- Peca.numeros_usados (docs/arquiteturas.md, Peça final e E5.3 Montagem): cada número do texto final,
--- vindo de um marcador {{<claim_id>.<ordem>}}, com a posição no texto da unidade e o número do claim.
--- Pelo claim_numeros chega à entrada de numeros e à âncora no PDF; a M1 confere que todo número da peça
--- que não seja data está aqui.
+-- vindo de um marcador {{<claim_id>.<ordem>}}, com o campo (texto da unidade ou título do artigo), a posição
+-- no campo e o número do claim. Pelo claim_numeros chega à entrada de numeros e à âncora no PDF; a M1 confere
+-- que todo número da peça que não seja data está aqui. O título não tem unidade, por isso a chave é o id, e a
+-- unicidade da posição trata o unidade_indice nulo como um valor.
 create table peca_unidade_numeros (
+  id             bigint generated always as identity primary key,
   run_id         text not null,
   celula_id      text not null,
   tentativa      int not null,
-  unidade_indice int not null check (unidade_indice >= 0),
+  campo          campo_numero not null,
+  unidade_indice int check (unidade_indice >= 0),  -- posição da seção, slide ou cena; null no título
   inicio         int not null check (inicio >= 0),
   fim            int not null,
   claim_id       text not null,
   ordem          int not null check (ordem >= 1),
-  primary key (run_id, celula_id, tentativa, unidade_indice, inicio),
+  unique nulls not distinct (run_id, celula_id, tentativa, campo, unidade_indice, inicio),
   foreign key (run_id, celula_id, tentativa) references pecas (run_id, celula_id, tentativa),
   foreign key (run_id, claim_id, ordem) references claim_numeros (run_id, claim_id, ordem),
+  check ((campo = 'titulo') = (unidade_indice is null)),
   check (fim > inicio)
 );

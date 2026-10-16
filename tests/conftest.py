@@ -95,6 +95,9 @@ class RepositorioMemoria:
     rodadas_plano: dict[tuple, dict] = field(default_factory=dict)
     planos: dict[str, dict] = field(default_factory=dict)
     celulas: dict[tuple, object] = field(default_factory=dict)
+    pecas: dict[tuple, dict] = field(default_factory=dict)
+    peca_unidade_claims: dict[tuple, None] = field(default_factory=dict)
+    peca_unidade_numeros: dict[tuple, dict] = field(default_factory=dict)
 
     def registrar_run(self, run_id: str) -> None:
         self.runs[run_id] = {"coleta_id": None}
@@ -337,6 +340,36 @@ class RepositorioMemoria:
             raise FalhaTerminal(f"célula {celula.celula_id} do run {run_id} não existe em celulas")
         self.celulas[chave] = celula.model_copy()
 
+    def gravar_peca(self, run_id, peca, celula) -> None:
+        """Mesmas regras do Supabase: a célula existe; a mesma peça já gravada não grava nada, outra na mesma
+        tentativa é FalhaTerminal; cada número usado aponta para um número de claim do run; peca_unidade_claims
+        recebe só os claims do run; tudo, com a célula, numa transação."""
+        self._entrar("gravar_peca")
+        if (run_id, peca.celula_id) not in self.celulas:
+            raise FalhaTerminal(f"célula {peca.celula_id} do run {run_id} não existe em celulas")
+        chave = (run_id, peca.celula_id, peca.tentativa)
+        nova = peca.model_dump(mode="json")
+        if chave in self.pecas:
+            if self.pecas[chave] != nova:
+                raise FalhaTerminal(f"run {run_id} já tem outra peça gravada em {peca.celula_id} tentativa {peca.tentativa}")
+            return
+        claims = {c["id"]: len(c["numeros"]) for c in self.factsheets.get(run_id, {}).get("claims", [])}
+        claims |= {c.id: len(c.numeros) for (r, _), c in self.claims_humanos.items() if r == run_id}
+        for n in peca.numeros_usados:
+            if not 1 <= n.ordem <= claims.get(n.claim_id, 0):
+                raise FalhaTerminal(f"peca_unidade_numeros: {n.claim_id}.{n.ordem} não existe em claim_numeros")
+        posicoes = [(n.campo, n.unidade_indice, n.inicio) for n in peca.numeros_usados]
+        if len(set(posicoes)) != len(posicoes):
+            raise FalhaTerminal("peca_unidade_numeros: posição repetida")
+        self.pecas[chave] = nova
+        for indice, ids in enumerate(peca.payload.claim_ids_por_unidade()):
+            for claim_id in dict.fromkeys(ids):
+                if claim_id in claims:
+                    self.peca_unidade_claims[(*chave, indice, claim_id)] = None
+        for n in peca.numeros_usados:
+            self.peca_unidade_numeros[(*chave, n.campo, n.unidade_indice, n.inicio)] = n.model_dump()
+        self.celulas[(run_id, peca.celula_id)] = celula.model_copy()
+
     def criar_run(self, manifest) -> None:
         self._entrar("criar_run")
         self.runs.setdefault(manifest.run_id, {"coleta_id": None, "manifest": manifest,
@@ -412,12 +445,12 @@ def resposta_plano(*claim_ids: str, nucleo=None) -> str:
 
 
 def cliente_falso(respostas) -> ClienteLLM:
-    """ClienteLLM do extractor e do adapter com o ProviderFalso; preço de 1 US$ por milhão nos dois sentidos,
-    cotação 5, raciocínio low nas correções."""
+    """ClienteLLM do extractor, do adapter e do synthesizer com o ProviderFalso; preço de 1 US$ por milhão nos
+    dois sentidos, cotação 5, raciocínio low nas correções."""
     return ClienteLLM(
         ProviderFalso(respostas),
-        {"extractor": "modelo-falso", "adapter": "modelo-falso"},
+        {"extractor": "modelo-falso", "adapter": "modelo-falso", "synthesizer": "modelo-falso"},
         {"modelo-falso": Preco(Decimal(1), Decimal(1))},
         Decimal(5),
-        raciocinio={"extractor_correcao": "low", "adapter_correcao": "low"},
+        raciocinio={"extractor_correcao": "low", "adapter_correcao": "low", "synthesizer_correcao": "low"},
     )

@@ -374,8 +374,11 @@ class ArtigoPayload(BaseModel):
     def textos(self) -> list[str]:
         return [s.texto for s in self.secoes]
 
+    def claim_ids_por_unidade(self) -> list[list[str]]:
+        return [s.claim_ids for s in self.secoes]
+
     def claim_ids(self) -> list[str]:
-        return _uniao([s.claim_ids for s in self.secoes])
+        return _uniao(self.claim_ids_por_unidade())
 
 
 class Slide(BaseModel):
@@ -403,8 +406,11 @@ class CarrosselPayload(BaseModel):
     def textos(self) -> list[str]:
         return [s.texto for s in self.slides]
 
+    def claim_ids_por_unidade(self) -> list[list[str]]:
+        return [s.claim_ids for s in self.slides]
+
     def claim_ids(self) -> list[str]:
-        return _uniao([s.claim_ids for s in self.slides])
+        return _uniao(self.claim_ids_por_unidade())
 
 
 class Cena(BaseModel):
@@ -444,8 +450,11 @@ class RoteiroPayload(BaseModel):
     def textos(self) -> list[str]:
         return [c.fala for c in self.cenas]
 
+    def claim_ids_por_unidade(self) -> list[list[str]]:
+        return [c.claim_ids for c in self.cenas]
+
     def claim_ids(self) -> list[str]:
-        return _uniao([c.claim_ids for c in self.cenas])
+        return _uniao(self.claim_ids_por_unidade())
 
 
 def _uniao(listas: list[list[str]]) -> list[str]:
@@ -676,6 +685,15 @@ class Scorecard(BaseModel):
         return self
 
 
+class RelatorioCorretivo(BaseModel):
+    """O que o redator recebe no retry (docs/arquiteturas.md, O que se reinjeta), montado pela E7 a partir do
+    scorecard da tentativa anterior e renderizado por prompts/synthesizer.j2."""
+
+    certos: list[str]  # o que passou e não deve mudar, com o valor: "text_size: 0 unidades fora do limite"
+    violacoes: list[Violacao]  # até 5 por métrica, na ordem do scorecard
+    restantes: dict[Metrica, int] = {}  # quantas violações de cada métrica ficaram de fora das 5
+
+
 class CelulaState(BaseModel):
     """Estado de uma das 9 células (docs/arquiteturas.md, O objeto de estado)."""
 
@@ -689,6 +707,8 @@ class CelulaState(BaseModel):
     motivo_reprovacao: MotivoReprovacao | None = None  # só em REPROVADA; a tentativa que explica é `tentativa`
     erro_classe: ClasseFalha | None = None  # só em ERRO_INFRA
     erro_mensagem: str | None = None
+    # Calculado na montagem da E5.3 sobre a `peca` e entregue à E6, que o junta ao scorecard.
+    plan_contract: MetricaResultado | None = None
 
     @model_validator(mode="after")
     def _id(self) -> "CelulaState":
@@ -704,7 +724,17 @@ class CelulaState(BaseModel):
             raise ValueError("ERRO_INFRA exige erro_classe e erro_mensagem")
         if self.estado != "ERRO_INFRA" and erro != (None, None):
             raise ValueError("erro_classe e erro_mensagem só valem em ERRO_INFRA")
+        if self.plan_contract is not None and self.plan_contract.nome != "plan_contract":
+            raise ValueError(f"plan_contract com o resultado de {self.plan_contract.nome}")
         return self
+
+
+class CelulaGrafoState(BaseModel):
+    """Estado de uma célula nos nós da E5 à E7. O plano e o FactSheet são lidos do Supabase, não do estado."""
+
+    run_id: str
+    celula: CelulaState
+    relatorio: RelatorioCorretivo | None = None  # o relatório da tentativa anterior, no retry
 
 
 def celula_id(nivel: str, formato: str) -> str:

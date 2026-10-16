@@ -1,6 +1,6 @@
 # Testes
 
-Os testes ficam em `tests/` e rodam com `pytest` a partir da raiz do repositório. Hoje cobrem a E0 (coleta dos PDFs de Copom, CVM e B3), a E1 (leitura), a E2 (extractor e ancoragem), a E3 (validador de âncoras), a E4 (LevelSpec, glossário e plano editorial), o cliente LLM, o manifest do run, o grafo, o `__main__`, o dashboard (`app/`) e as consultas de leitura do dashboard.
+Os testes ficam em `tests/` e rodam com `pytest` a partir da raiz do repositório. Hoje cobrem a E0 (coleta dos PDFs de Copom, CVM e B3), a E1 (leitura), a E2 (extractor e ancoragem), a E3 (validador de âncoras), a E4 (LevelSpec, glossário e plano editorial), a E5 de uma célula (pacote, redator, montagem e gravação da peça), as métricas determinísticas, o cliente LLM, o manifest do run, o grafo, o `__main__`, o dashboard (`app/`) e as consultas de leitura do dashboard.
 
 ## Para que servem
 
@@ -59,6 +59,7 @@ tests/
 ├── test_texto.py                  # contagem de palavras e de caracteres do texto da peça
 ├── test_metrics.py                # M1, M2 e M5, sem LLM e sem banco
 ├── test_schemas.py                # schemas do redator, da peça, do scorecard e da célula
+├── test_sintese.py                # E5 de uma célula: pacote, redator (LLM simulado), montagem, plan_contract, gravação e nó
 ├── test_main_graph.py             # manifest, grafo (E0 a E4) e __main__
 ├── test_app.py                    # dashboard: linhas do terminal e API com processo e consulta simulados
 ├── test_persistencia_supabase.py  # integração com o Supabase local
@@ -243,7 +244,8 @@ Não contém testes, só infraestrutura compartilhada:
 - `referencia(fonte)`: devolve bytes e metadados do documento congelado, ou `None` se ainda não existir.
 - `RepositorioMemoria` também guarda spans (sem somar duas vezes o mesmo), validações e FactSheets, e recusa número de claim que não está em `numeros`, como o Supabase. Guarda ainda a quarentena e as decisões da revisão, com as mesmas regras: uma decisão por claim, e aceitar só com FactSheet assinado.
 - `RepositorioMemoria` guarda também as rodadas do gate com a saída do planejador, o plano e as células, recusa o plano sem FactSheet do run, recusa outro plano para o run que já tem plano e recusa `rodada` em span que não é do `adapter`. O FactSheet e o plano ficam como JSON (`model_dump(mode="json")`) e voltam por `model_validate`, como pelo Postgres; `factsheet_gravado` e `plano_gravado` são os atalhos dos testes para ler o que foi gravado.
-- `ProviderFalso` e `cliente_falso`: o LLM simulado. `resposta_plano(*claim_ids)`: resposta do planejador que usa os claims dados nos 3 níveis, com as prioridades em ordem.
+- `RepositorioMemoria` guarda também as peças de cada tentativa, as unidades com os claims e os números usados: recusa a peça de célula inexistente, outra peça na mesma tentativa, número usado que não aponta para um número de claim do run e posição repetida; grava em `peca_unidade_claims` só os claims do run; a mesma peça de novo não grava nada.
+- `ProviderFalso` e `cliente_falso`: o LLM simulado, com modelo para o `extractor`, o `adapter` e o `synthesizer`. `resposta_plano(*claim_ids)`: resposta do planejador que usa os claims dados nos 3 níveis, com as prioridades em ordem.
 
 ## Métricas
 
@@ -256,6 +258,20 @@ Não contém testes, só infraestrutura compartilhada:
 - **M2:** artigo dentro da faixa, nos dois limites, curto e longo, com título e linha fina fora da contagem e a faixa de cada nível; carrossel com o limite de cada papel e a letra acentuada contada uma vez; roteiro com o limite de cada cena e do total, inclusive o total acima do limite com as cenas dentro; a faixa registrada traz o limite renderizado.
 - **M5:** termo com analogia no plano e marcador na mesma unidade; sem marcador; sem analogia no plano; marcador só na unidade seguinte; só a primeira ocorrência conta; marcador sem diferença de maiúscula e acento e não dentro de outra palavra; termo de nível iniciante; termo só no título; analogia `nova` ligada pela forma escrita; Intermediário e Avançado fora da regra; a unidade nomeada como seção, slide ou cena.
 - **Valor, faixa e detalhes:** o valor é o número de violações; o da `llm_judge` é `true` ou `false`; o `plan_contract` monta o resultado pelo mesmo `resultado.montar`.
+
+## E5: síntese de formato
+
+`test_sintese.py` (fluxo em `docs/fluxos/sintese.md`) usa o LevelSpec e o glossário de `config/`, seis claims montados no teste e um plano em que o `C02` do Iniciante tem prioridade 4 (sai do roteiro e fica no carrossel):
+
+- **Marcadores:** o número vira `{{C01.1}}` e a data fica no texto; o trecho guardado é o do texto do claim (`R$ 1,2 bi`); o mesmo valor duas vezes casa com a primeira entrada livre (`{{C05.1}}` e `{{C05.2}}`); número sem entrada, entrada sem número e mesma cifra com outra unidade são `FalhaTerminal`; os marcadores válidos são os de todos os claims do plano do nível.
+- **Corte e orçamento:** o artigo usa todo o plano; o carrossel e o roteiro, o núcleo e as maiores prioridades na ordem de leitura; a faixa do artigo e os segundos e palavras do roteiro divididos pelo peso, arredondados para baixo, com o resto dos segundos na última cena de claim; o carrossel sem divisão por claim.
+- **Pacote:** analogias presas aos claims do formato (a do IPCA sai do roteiro com o `C02`), tese, núcleo, atribuição e `data_documento`; claim do plano fora do FactSheet é `FalhaTerminal`.
+- **Prompt:** marcadores com o trecho, orçamento por claim, tese, analogias e expressões no Iniciante, nada de analogia nos outros níveis, abertura e fechamento no roteiro e, no retry, a peça anterior com os marcadores, o que está certo, as violações agrupadas pelo lugar da peça e as que ficaram de fora.
+- **Montagem:** a posição de cada número no título e nas seções confere com o trecho; o marcador inexistente, o de ordem que o claim não tem e o de claim fora do plano ficam no texto e a M1 conta os três como `marcador_invalido`; `restaurar` devolve a saída do redator; o `plan_contract` do carrossel com slides demais, claim fora do plano e claim ausente (instruções no masculino de "slide"), do carrossel curto e do roteiro que passa de 60 s, com as checagens de cada formato.
+- **Nó:** a célula termina em `AVALIANDO` com a tentativa 1, depois de uma atualização para `GERANDO`; a peça, as unidades (sem o id inventado `C99`, que fica na peça e no `plan_contract`), o número do título e a cópia local são gravados; o span leva o nível, a célula e a tentativa; o retry manda a peça anterior com o marcador inválido e o relatório, com raciocínio `low`, e grava a tentativa 2; a resposta fora do schema volta ao modelo sem consumir tentativa; sem plano, `FalhaTerminal`.
+- **Gravação:** a mesma peça de novo não grava nada, e outra peça na mesma tentativa é `FalhaTerminal`.
+
+`test_persistencia_supabase.py::test_peca_unidades_numeros_e_celula_numa_transacao` faz a gravação no Supabase local: a peça, a unidade só com o claim do run, os números do título (unidade nula) e do texto com o `campo`, a célula em `AVALIANDO`, a repetição sem efeito e a outra peça recusada.
 
 ## test_ingestao.py
 
