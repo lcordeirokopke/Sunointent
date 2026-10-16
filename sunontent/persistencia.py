@@ -1356,7 +1356,8 @@ class RepositorioSupabase:
         def insercao(conexao):
             conexao.execute(
                 'insert into runs (run_id, "timestamp", modo, fonte, modelos, prompts, level_specs,'
-                ' glossario_versao, arquivos_sha256, "K") values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)'
+                ' glossario_versao, arquivos_sha256, "K", max_concorrencia)'
+                ' values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)'
                 " on conflict (run_id) do nothing",
                 (
                     manifest.run_id,
@@ -1369,6 +1370,7 @@ class RepositorioSupabase:
                     manifest.glossario_versao,
                     Jsonb(manifest.arquivos_sha256),
                     manifest.K,
+                    manifest.max_concorrencia,
                 ),
             )
 
@@ -1461,7 +1463,7 @@ class ConsultaSupabase:
             manifest = conexao.execute(
                 'select run_id, "timestamp", modo, fonte, status, doc_id, doc_sha256, coleta_id, url_origem,'
                 ' coletado_em, modelos, prompts, level_specs, glossario_versao, arquivos_sha256, "K",'
-                " custo_total_tokens, custo_total_brl, erro_classe, erro_mensagem, etapa_erro"
+                " max_concorrencia, custo_total_tokens, custo_total_brl, erro_classe, erro_mensagem, etapa_erro"
                 " from runs where run_id = %s",
                 (run_id,),
             ).fetchone()

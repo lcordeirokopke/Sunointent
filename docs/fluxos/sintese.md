@@ -4,7 +4,7 @@ Este documento detalha a E5 de uma célula: como o plano de um nível vira a `Pe
 
 ## Estado
 
-Implementada para uma célula, com o nó `synth`, no subgrafo da célula com a E6 e a E7 (`docs/fluxos/avaliacao.md`), que ainda não tem ligação com o grafo principal: o grafo principal termina na E4. O fan-out para as 9 células ainda não existe.
+Implementada, com o nó `synth`, no subgrafo da célula com a E6 e a E7 (`docs/fluxos/avaliacao.md`). O grafo principal dispara o subgrafo para as 9 células depois da E4, até 3 em paralelo (`docs/execucao.md`).
 
 ## Responsabilidade
 

@@ -610,7 +610,7 @@ def raiz_completa(tmp_path):
 
 @pytest.mark.gemini
 @pytest.mark.parametrize("fonte", FONTES)
-def test_gemini_cobre_os_fatos_anotados(documentos, raiz_completa, fonte):
+def test_gemini_cobre_os_fatos_anotados(documentos, raiz_completa, fonte, celulas_aprovadas):
     from dotenv import dotenv_values
 
     valores = dotenv_values(RAIZ / ".env")

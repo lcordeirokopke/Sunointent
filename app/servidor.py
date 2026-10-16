@@ -46,6 +46,26 @@ class _Consulta:
             return self._consulta
 
 
+def _sem_pseudonos(desenho) -> tuple[list[str], list[dict]]:
+    """Nós e arestas do desenho do grafo (xray) com os nós do subgrafo da célula sem o prefixo `celula:` e sem os
+    pseudonós `__start__` e `__end__` do subgrafo: a aresta que chega ao início do subgrafo passa a chegar ao primeiro
+    nó dele, e a que sai do fim passa a sair do último."""
+    def nome(no: str) -> str:
+        return no.rpartition(":")[2] if ":" in no else no
+
+    def pseudo(no: str) -> bool:
+        return ":" in no and nome(no) in ("__start__", "__end__")
+
+    arestas = [(a.source, a.target, a.conditional) for a in desenho.edges]
+    for no in [n for n in desenho.nodes if pseudo(n)]:
+        entram = [a for a in arestas if a[1] == no]
+        saem = [a for a in arestas if a[0] == no]
+        arestas = [a for a in arestas if no not in (a[0], a[1])]
+        arestas += [(de, para, cond) for de, _, cond in entram for _, para, _ in saem]
+    nos = [nome(n) for n in desenho.nodes if not nome(n).startswith("__") and not pseudo(n)]
+    return nos, [{"de": nome(de), "para": nome(para), "condicional": cond} for de, para, cond in arestas]
+
+
 def _ler(obter_consulta, leitura):
     """Executa a leitura; uma Falha do banco vira 503 com a mensagem."""
     try:
@@ -66,16 +86,16 @@ def criar_app(raiz: Path = RAIZ, gerenciador: execucao.Gerenciador | None = None
 
     @app.get("/api/grafo")
     def grafo():
-        """Nós e arestas do grafo montado por graph.construir_grafo(), sem executar nada."""
-        desenho = graph.construir_grafo().get_graph()
+        """Nós e arestas do grafo montado por graph.construir_grafo(), com o subgrafo da célula aberto (xray), sem
+        executar nada."""
+        nos, arestas = _sem_pseudonos(graph.construir_grafo().get_graph(xray=True))
         return {
-            "nos": [no for no in desenho.nodes if not no.startswith("__")],
-            "arestas": [
-                {"de": a.source, "para": a.target, "condicional": a.conditional} for a in desenho.edges
-            ],
+            "nos": nos,
+            "arestas": arestas,
             "rodadas_extracao": graph.RODADAS_EXTRACAO,
             "rodadas_plano": graph.RODADAS_PLANO,
             "k": graph.K,
+            "max_concorrencia": graph.MAX_CONCORRENCIA,
         }
 
     @app.post("/api/execucao", status_code=201)

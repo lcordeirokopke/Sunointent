@@ -13,13 +13,17 @@ const ETAPAS = [
     descricao: "Confere âncoras e números de cada claim. Reprovado volta à E2; aprovado, o FactSheet é assinado. Reprovado depois da última rodada vai para a quarentena, à espera de revisão humana." },
   { id: "E4", nos: ["adapt"], nome: "Plano editorial",
     descricao: "Decide o núcleo e, para cada nível, o que entra, em que ordem, o que sai e por quê, e quais analogias usar. O código confere o plano." },
-  { id: "E5", nos: ["synth"], nome: "Format Synthesizer",
+  { id: "E5", nos: ["synth"], celulas: true, nome: "Format Synthesizer",
     descricao: "Gera as 9 peças: texto, carrossel e roteiro de vídeo para cada nível." },
-  { id: "E6", nos: ["evaluate"], nome: "Hybrid Evaluator",
+  { id: "E6", nos: ["evaluate"], celulas: true, nome: "Hybrid Evaluator",
     descricao: "Mede a fidelidade numérica, o tamanho por nível, a regra de analogia e o entailment dos claims (M1, M2, M5 e M6)." },
-  { id: "E7", nos: ["router"], nome: "Router",
+  { id: "E7", nos: ["router"], celulas: true, nome: "Router",
     descricao: "Aprova a célula, devolve para nova tentativa ou descarta conforme as métricas." },
 ];
+// Matriz de saída: as 9 células da E5 à E7, em paralelo (celula_id = <nivel>__<formato>).
+const NIVEIS = [["iniciante", "Iniciante"], ["intermediario", "Intermediário"], ["avancado", "Avançado"]];
+const FORMATOS = [["artigo", "Artigo"], ["carrossel", "Carrossel"], ["roteiro", "Roteiro"]];
+const ESTADOS_FINAIS = ["APROVADA", "REPROVADA", "ERRO_INFRA"];
 const REFERENCIA = { nome: "Referência",
   descricao: "Modo --dev: lê o documento congelado de tests/fixtures/referencia/, confere o doc_sha256 e o registra no Supabase." };
 
@@ -34,7 +38,7 @@ const estado = {
   fonte: "",
   aba: "fluxo",
   subaba: "terminal",
-  grafo: { nos: [], arestas: [], rodadas_extracao: 3, rodadas_plano: 3 },
+  grafo: { nos: [], arestas: [], rodadas_extracao: 3, rodadas_plano: 3, max_concorrencia: 3 },
   execucao: null,
   runSelecionado: null,
   historico: [],
@@ -124,7 +128,7 @@ function aplicar(ev) {
   switch (ev.tipo) {
     case "run": {
       run = { run_id: ev.run_id, modo: ev.modo, fonte: ev.run_id.split("_")[0], status: "rodando",
-        etapas: {}, atual: null, rodadas: 0, inicio: hora, fim: null, linhas: [], resumo: null, erro: null };
+        etapas: {}, celulas: {}, atual: null, rodadas: 0, inicio: hora, fim: null, linhas: [], resumo: null, erro: null };
       ex.runs.push(run);
       estado.runSelecionado = run.run_id;
       break;
@@ -146,6 +150,20 @@ function aplicar(ev) {
         carregarDetalhe(run.run_id);
       }
       et.linhas.push(ev);
+      break;
+    }
+    case "celula": {
+      if (!run) break;
+      const c = run.celulas[ev.celula_id] ??= { estado: "pendente", tentativa: 0, nos: {} };
+      if (ev.no) {
+        const n = c.nos[ev.no] ??= { iniciadas: 0, concluidas: 0, ativo: false, primeiro: hora, ultimo: null };
+        if (ev.estado === "iniciada") { n.iniciadas += 1; n.ativo = true; c.estado = "rodando"; }
+        else { n.concluidas += 1; n.ativo = false; n.ultimo = hora; }
+        c.tentativa = Number(ev.tentativa);
+      } else {
+        c.estado = ev.estado;
+        carregarDetalhe(run.run_id);
+      }
       break;
     }
     case "concluido":
@@ -207,8 +225,27 @@ function noDaEtapa(etapa, run) {
   return [...etapa.nos].reverse().find((no) => run?.etapas[no]) ?? etapa.nos[0];
 }
 
+// E5 a E7: o nó roda uma vez por célula, em paralelo; o estado da etapa sai das 9 células.
+function infoEtapaCelulas(etapa, run) {
+  const no = etapa.nos[0];
+  const celulas = Object.values(run?.celulas ?? {});
+  const com = celulas.filter((c) => c.nos[no]);
+  if (!com.length) return { estado: "pendente", no };
+  const ativas = com.filter((c) => c.nos[no].ativo).length;
+  const final = celulas.length >= NIVEIS.length * FORMATOS.length && celulas.every((c) => ESTADOS_FINAIS.includes(c.estado));
+  let situacao = ativas || !final ? "rodando" : "concluida";
+  if (situacao === "rodando" && run.status !== "rodando") situacao = run.status === "abortado" ? "falhou" : "interrompida";
+  const inicio = Math.min(...com.map((c) => c.nos[no].primeiro));
+  const fim = ativas ? Date.now() : Math.max(...com.map((c) => c.nos[no].ultimo ?? 0));
+  return {
+    estado: situacao, no, duracao: fim - inicio, vezes: com.reduce((soma, c) => soma + c.nos[no].iniciadas, 0),
+    linhas: run.linhas.filter((ev) => ev.tipo === "celula" && ev.no === no),
+  };
+}
+
 function infoEtapa(etapa, run) {
   if (!implementada(etapa)) return { estado: "nao-implementada", no: etapa.nos[0] };
+  if (etapa.celulas) return infoEtapaCelulas(etapa, run);
   const no = noDaEtapa(etapa, run);
   const et = run?.etapas[no];
   if (!et) return { estado: "pendente", no };
@@ -292,6 +329,7 @@ function renderPipeline(run) {
         <span class="codigo">${etapa.id}</span>
         <span class="nome">${esc(nomeEtapa(etapa, run))}</span>
         <span class="no">${esc(nos)}</span>
+        ${etapa.celulas && info.estado !== "nao-implementada" ? miniGrade(run) : ""}
         <span class="rodape">
           ${selo(info.estado)}
           <span class="tempo">${info.duracao != null ? fmtDuracao(info.duracao) : ""}</span>
@@ -300,6 +338,41 @@ function renderPipeline(run) {
       </button>`;
   }).join("");
   $("#pipeline").innerHTML = html;
+}
+
+function celulaId(nivel, formato) {
+  return `${nivel}__${formato}`;
+}
+
+// As 9 células em miniatura, nos cartões da E5 à E7: cada quadrado mostra o estado da célula.
+function miniGrade(run) {
+  const quadrados = NIVEIS.flatMap(([nivel]) => FORMATOS.map(([formato]) => {
+    const c = run?.celulas[celulaId(nivel, formato)];
+    return `<i data-estado="${esc(c?.estado ?? "pendente")}" title="${esc(celulaId(nivel, formato))}: ${esc(c?.estado ?? "pendente")}"></i>`;
+  }));
+  return `<span class="minigrade" aria-hidden="true">${quadrados.join("")}</span>`;
+}
+
+// Grade 3x3 do painel da etapa: linhas são os níveis, colunas os formatos; cada célula mostra o que ela fez no nó.
+function gradeCelulas(etapa, run) {
+  const no = etapa.nos[0];
+  const celula = (nivel, formato) => {
+    const c = run.celulas[celulaId(nivel, formato)];
+    const passo = c?.nos[no];
+    let corpo;
+    if (!c) corpo = selo("pendente");
+    else if (passo?.ativo) corpo = selo("rodando", `tentativa ${c.tentativa}`);
+    else if (no === "router" && ESTADOS_FINAIS.includes(c.estado)) corpo = selo(c.estado);
+    else if (passo?.concluidas) corpo = selo("concluida", `concluída${passo.concluidas > 1 ? ` ×${passo.concluidas}` : ""}`);
+    else corpo = selo("pendente", ESTADOS_FINAIS.includes(c.estado) ? "não passou" : "pendente");
+    const final = c && no !== "router" && ESTADOS_FINAIS.includes(c.estado) ? `<span class="final">${selo(c.estado)}</span>` : "";
+    return `<td data-celula="${esc(celulaId(nivel, formato))}">${corpo}${final}</td>`;
+  };
+  const linhas = NIVEIS.map(([nivel, rotulo]) => `<tr><th>${rotulo}</th>${FORMATOS.map(([f]) => celula(nivel, f)).join("")}</tr>`);
+  return `<div class="cartao"><h3>Células (até ${estado.grafo.max_concorrencia} em paralelo)</h3>
+    <div class="tabela-rolagem"><table class="grade-celulas">
+      <thead><tr><th></th>${FORMATOS.map(([, rotulo]) => `<th>${rotulo}</th>`).join("")}</tr></thead>
+      <tbody>${linhas.join("")}</tbody></table></div></div>`;
 }
 
 function renderSubabas(run) {
@@ -318,7 +391,7 @@ function linhasHtml(eventos) {
   if (!eventos.length) return `<div class="terminal-vazio">sem saída</div>`;
   return eventos.map((ev) => {
     const classes = ["linha", ev.canal, `t-${ev.tipo}`];
-    if (ev.tipo === "etapa") classes.push(ev.estado === "iniciada" ? "iniciada" : "concluida");
+    if (ev.tipo === "etapa" || (ev.tipo === "celula" && ev.no)) classes.push(ev.estado === "iniciada" ? "iniciada" : "concluida");
     const texto = ev.tipo === "fim"
       ? `processo encerrado (${ROTULO_ESTADO[ev.estado] ?? ev.estado}, código ${ev.codigo})`
       : ev.texto;
@@ -399,8 +472,9 @@ function painelEtapa(etapa, run) {
     metricas.push(metrica("Rodadas do plano", plano ? `${plano.rodadas} de ${estado.grafo.rodadas_plano}` : ""));
     if (plano) metricas.push(metrica("Aviso", plano.aviso ? selo("erro", "com aviso") : selo("ok", "sem aviso")));
   }
+  if (etapa.celulas) metricas.push(metrica("Passagens pelo nó", fmtInt(info.vezes)));
   const execucao = `<div class="cartao"><h3>Execução</h3><div class="metricas">${metricas.join("")}</div></div>`;
-  const dados = dadosEtapa(etapa, run);
+  const dados = (etapa.celulas ? gradeCelulas(etapa, run) : "") + dadosEtapa(etapa, run);
   return cabecalho + execucao + dados + terminalHtml(`saída de ${info.no}`, info.linhas ?? []);
 }
 
@@ -677,6 +751,7 @@ function renderResultado() {
         ${metrica("LevelSpecs", mapa(m.level_specs))}
         ${metrica("Glossário", esc(m.glossario_versao))}
         ${metrica("K", esc(m.K))}
+        ${metrica("Células em paralelo", esc(m.max_concorrencia))}
       </div>
       <div class="tabela-rolagem"><table><thead><tr><th>Arquivo</th><th>SHA-256</th></tr></thead><tbody>${versoes}</tbody></table></div>
     </div>

@@ -17,10 +17,22 @@ FONTES = ("copom", "cvm", "b3")
 
 _RUN = re.compile(r"^run (?P<run_id>\S+) \((?P<modo>normal|dev)\)$")
 _ETAPA = re.compile(r"^etapa (?P<no>\w+): (?P<estado>iniciada|concluída)$")
+_CELULA_NO = re.compile(
+    r"^celula (?P<celula_id>\w+) (?P<no>\w+) (?P<tentativa>\d+): (?P<estado>iniciada|concluída)$"
+)
+_CELULA_FINAL = re.compile(r"^celula (?P<celula_id>\w+): (?P<estado>APROVADA|REPROVADA|ERRO_INFRA)$")
 _CONCLUIDO = re.compile(r"^concluído: (?P<resumo>.*)$")
 _ABORTADO = re.compile(r"^abortado \((?P<classe>\w+)\): (?P<mensagem>.*)$")
 _ERRO = re.compile(r"^erro \((?P<classe>\w+)\): (?P<mensagem>.*)$")
-_PADROES = (("run", _RUN), ("etapa", _ETAPA), ("concluido", _CONCLUIDO), ("abortado", _ABORTADO), ("erro", _ERRO))
+_PADROES = (
+    ("run", _RUN),
+    ("etapa", _ETAPA),
+    ("celula", _CELULA_NO),
+    ("celula", _CELULA_FINAL),
+    ("concluido", _CONCLUIDO),
+    ("abortado", _ABORTADO),
+    ("erro", _ERRO),
+)
 
 
 def classificar(texto: str) -> dict:

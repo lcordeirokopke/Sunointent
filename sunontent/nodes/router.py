@@ -17,9 +17,8 @@ config["configurable"]: repositorio e raiz_dados; `K` vem do graph.py.
 from pathlib import Path
 
 from sunontent import persistencia
-from sunontent.schemas import CelulaGrafoState, MetricaResultado, RelatorioCorretivo, Scorecard
+from sunontent.schemas import ESTADOS_FINAIS, CelulaGrafoState, MetricaResultado, RelatorioCorretivo, Scorecard
 
-ESTADOS_FINAIS = ("APROVADA", "REPROVADA", "ERRO_INFRA")
 VIOLACOES_POR_METRICA = 5
 
 

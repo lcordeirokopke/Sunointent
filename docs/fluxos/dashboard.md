@@ -12,7 +12,7 @@ python -m app --porta 8080
 
 Rode a partir da raiz do repositório, com o mesmo `.env` do pipeline e o Python do `.venv` (`.venv\Scripts\python -m app` no Windows): o processo iniciado pelo dashboard é o próprio `python -m sunontent`, executado com o mesmo Python do servidor, que lê o `.env` e confere as credenciais.
 
-Cada run chama o Gemini na E2 e na E4 e grava no Supabase do site. A ordem de grandeza do custo está em `docs/fluxos/extracao.md` (Custo); com a fonte "Todas", são três runs.
+Cada run chama o Gemini na E2, na E4 e, por célula, na E5 (redator), e grava no Supabase do site. A ordem de grandeza do custo está em `docs/fluxos/extracao.md` (Custo); com a fonte "Todas", são três runs.
 
 ## Peças
 
@@ -26,8 +26,8 @@ Cada run chama o Gemini na E2 e na E4 e grava no Supabase do site. A ordem de gr
 
 ## Botões
 
-- **Executar run**: `python -m sunontent [fonte]`. O `__main__.py` monta o manifest, registra o run no Supabase e chama `graph.construir_grafo()`. Cada run passa pela E0 (download da publicação mais recente), E1, E2, E3 e E4, e termina com o plano editorial e as 9 células em `PENDENTE`; a E5 em diante ainda não existe no grafo.
-- **Modo dev**: o mesmo com `--dev`, entrando pelo nó `referencia` com o documento de `tests/fixtures/referencia/`, sem download. A E2 e a E4 chamam o Gemini nos dois modos.
+- **Executar run**: `python -m sunontent [fonte]`. O `__main__.py` monta o manifest, registra o run no Supabase e chama `graph.construir_grafo()`. Cada run passa pela E0 (download da publicação mais recente), E1, E2, E3 e E4, depois pelas 9 células em paralelo (E5, E6 e E7, até 3 ao mesmo tempo) e pelo fechamento, e termina com o plano editorial e as 9 células no estado final.
+- **Modo dev**: o mesmo com `--dev`, entrando pelo nó `referencia` com o documento de `tests/fixtures/referencia/`, sem download. A E2, a E4 e a E5 chamam o Gemini nos dois modos.
 - **Parar**: encerra o processo. O run em andamento fica com status `em_andamento` no Supabase, porque o `__main__.py` não chega a registrar o aborto.
 - **Fonte**: Todas (sem fonte, os três runs em sequência), Copom, CVM ou B3.
 
@@ -49,6 +49,8 @@ O `__main__.py` escreve `etapa <no>: iniciada` e `etapa <no>: concluída` para c
 | ----- | ------ |
 | `run <run_id> (<modo>)` | `run`: começa um run; sem fonte, uma execução tem três. |
 | `etapa <no>: iniciada` / `concluída` | `etapa`: muda o estado da etapa e soma a duração. |
+| `celula <celula_id> <no> <tentativa>: iniciada` / `concluída` | `celula`: um nó do subgrafo de uma célula (`synth`, `evaluate` ou `router`) começou ou terminou, com a tentativa. |
+| `celula <celula_id>: <ESTADO>` | `celula`: a célula terminou em `APROVADA`, `REPROVADA` ou `ERRO_INFRA`; a página relê o run no Supabase. |
 | `concluído: ...` | `concluido`: o run terminou; a página relê o run no Supabase. |
 | `abortado (<classe>): <mensagem>` | `abortado`: a etapa em andamento fica como `falhou`. |
 | `erro (<classe>): <mensagem>` | `erro`: falha antes de existir o run (credencial, conexão, config). |
@@ -58,7 +60,7 @@ Quando o processo termina, o servidor acrescenta o evento `fim` com o código de
 
 ## Abas
 
-- **Fluxo**: os cartões E0 a E7 com estado e duração, o contador de rodadas do loop E2/E3 e as arestas do grafo. As subabas mostram o terminal completo ou uma etapa: descrição, estado, duração, os dados do run gravados por ela e as linhas do terminal daquela etapa. O cartão da E3 cobre os nós `validate` e `quarentena`: soma as durações, junta as linhas e mostra o estado do último que rodou. Cada etapa com agente mostra só as chamadas de LLM do seu nó: a E2, as do `extractor`; a E4, as do `adapter`. A subaba da E4 mostra as rodadas do plano, se ele tem aviso e o plano gravado (ver Plano editorial abaixo).
+- **Fluxo**: os cartões E0 a E7 com estado e duração, o contador de rodadas do loop E2/E3, a miniatura das 9 células nos cartões da E5 à E7 e as arestas do grafo. As subabas mostram o terminal completo ou uma etapa: descrição, estado, duração, os dados do run gravados por ela e as linhas do terminal daquela etapa. O cartão da E3 cobre os nós `validate` e `quarentena`: soma as durações, junta as linhas e mostra o estado do último que rodou. Cada etapa com agente mostra só as chamadas de LLM do seu nó: a E2, as do `extractor`; a E4, as do `adapter`. A subaba da E4 mostra as rodadas do plano, se ele tem aviso e o plano gravado (ver Plano editorial abaixo). As subabas da E5, da E6 e da E7 mostram a grade das células (abaixo).
 - **Resultado**: um run lido do Supabase: resumo (no run abortado, o erro com a classe e a etapa em que o run abortou), documento processado, claims do FactSheet com o trecho da fonte (os aceitos na revisão da quarentena marcados como `humano`), validações por rodada, a quarentena com o motivo e a decisão de cada claim, o plano editorial da E4 e os problemas do gate por rodada, chamadas de LLM e as versões do manifest. A quarentena é só leitura: a revisão é feita pelas funções de `sunontent/extracao/quarentena.py` (`docs/fluxos/extracao.md`, Quarentena).
 - **Histórico**: os runs da tabela `runs`, do mais recente ao mais antigo, com os claims e os claims em quarentena ainda sem decisão; um clique abre o resultado.
 
@@ -72,7 +74,15 @@ A subaba da E4 e a aba Resultado mostram o plano lido de `planos_editoriais`, `p
 
 O texto dos claims vem do FactSheet do run. O plano não tem texto de peça: artigo, carrossel e roteiro são da E5.
 
-Uma etapa é mostrada como implementada quando o seu nó existe no grafo devolvido por `/api/grafo`, que chama `graph.construir_grafo()`. As etapas E5 a E7 aparecem como não implementadas até os nós `synth`, `evaluate` e `router` existirem.
+### Células
+
+As etapas E5, E6 e E7 rodam uma vez por célula, e as 9 células andam em paralelo (`MAX_CONCORRENCIA`, 3). O estado de cada etapa sai das 9 células, lido das linhas `celula`:
+
+- **Cartão da etapa:** pendente até a primeira célula entrar no nó; rodando enquanto alguma célula está no nó ou alguma ainda não terminou; concluída quando as 9 células têm estado final. Se o processo termina antes disso, a etapa fica interrompida (ou falhou, se o run abortou). A duração vai do início da primeira célula no nó ao fim da última. Dentro do cartão, uma miniatura 3x3 pinta cada célula pelo estado (rodando, `APROVADA`, `REPROVADA`, `ERRO_INFRA`).
+- **Grade da subaba:** 3 linhas (Iniciante, Intermediário, Avançado) por 3 colunas (Artigo, Carrossel, Roteiro). Cada quadro mostra o que a célula fez naquele nó: a tentativa em curso, quantas vezes concluiu o nó (`×2` depois de um retry) ou, na E7, o estado final; nas outras etapas, a célula que terminou mostra o estado final embaixo.
+- **Terminal da etapa:** as linhas `celula ... <no> ...` do nó daquela etapa, de todas as células.
+
+Uma etapa é mostrada como implementada quando o seu nó existe no grafo devolvido por `/api/grafo`. A rota abre o subgrafo da célula (`get_graph(xray=True)`), então `synth`, `evaluate` e `router` aparecem como nós do grafo, ligados à `adapt` e ao `fechamento`.
 
 A URL guarda a aba: `#fluxo/E3`, `#resultado/<run_id>`, `#historico`.
 
@@ -80,12 +90,12 @@ A URL guarda a aba: `#fluxo/E3`, `#resultado/<run_id>`, `#historico`.
 
 | Rota | O que faz |
 | ---- | --------- |
-| `GET /api/grafo` | Nós e arestas de `construir_grafo()`, `RODADAS_EXTRACAO`, `RODADAS_PLANO` e `K`. |
+| `GET /api/grafo` | Nós e arestas de `construir_grafo()` com o subgrafo da célula aberto (`get_graph(xray=True)`), sem os nós de início e fim do subgrafo; `RODADAS_EXTRACAO`, `RODADAS_PLANO`, `K` e `max_concorrencia`. |
 | `POST /api/execucao` | Corpo `{"fonte": null \| "copom" \| "cvm" \| "b3", "dev": bool}`. 409 se já houver execução em andamento, 422 para fonte desconhecida. |
 | `GET /api/execucao` | A execução atual ou a última, com todos os eventos. |
 | `GET /api/execucao/eventos?desde=N` | SSE com os eventos a partir de `N`; termina depois do `fim`. |
 | `POST /api/execucao/parar` | Encerra o processo. |
 | `GET /api/runs` | Resumo dos runs (`ConsultaSupabase.listar_runs`). |
-| `GET /api/runs/<run_id>` | Run (com `etapa_erro`), documento resumido, FactSheet, validações, quarentena, spans (com a `rodada` do gate no `adapter`), plano editorial e rodadas do gate do plano (`ConsultaSupabase.detalhar_run`). 404 se o run não existe. |
+| `GET /api/runs/<run_id>` | Run (com `etapa_erro` e `max_concorrencia`), documento resumido, FactSheet, validações, quarentena, spans (com a `rodada` do gate no `adapter`), plano editorial e rodadas do gate do plano (`ConsultaSupabase.detalhar_run`). 404 se o run não existe. |
 
 As duas rotas de runs respondem 503 com a mensagem quando o banco recusa a conexão ou a consulta.

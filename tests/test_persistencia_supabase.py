@@ -46,8 +46,8 @@ def novo_run(db_url: str) -> str:
     with psycopg.connect(db_url) as conexao:
         conexao.execute(
             "insert into runs (run_id, \"timestamp\", modo, fonte, modelos, prompts, level_specs,"
-            " glossario_versao, arquivos_sha256, \"K\")"
-            " values (%s, now(), 'normal', 'copom', '{}', '{}', '{}', 1, '{}', 2)",
+            " glossario_versao, arquivos_sha256, \"K\", max_concorrencia)"
+            " values (%s, now(), 'normal', 'copom', '{}', '{}', '{}', 1, '{}', 2, 3)",
             (run_id,),
         )
     return run_id
@@ -69,8 +69,8 @@ def run_com_referencia(repositorio, db_url: str):
     with psycopg.connect(db_url) as conexao:
         conexao.execute(
             "insert into runs (run_id, \"timestamp\", modo, fonte, modelos, prompts, level_specs,"
-            " glossario_versao, arquivos_sha256, \"K\")"
-            " values (%s, now(), 'dev', 'cvm', '{\"extractor\": \"m\"}', '{}', '{}', 1, '{}', 2)",
+            " glossario_versao, arquivos_sha256, \"K\", max_concorrencia)"
+            " values (%s, now(), 'dev', 'cvm', '{\"extractor\": \"m\"}', '{}', '{}', 1, '{}', 2, 3)",
             (run_id,),
         )
     persistencia.registrar_documento_referencia(

@@ -16,6 +16,8 @@ from test_extractor import documento_fonte
 from test_main_graph import DECISAO, ERRADO, VOTACAO, raiz, repo, rodar  # noqa: F401 (fixtures)
 from conftest import cliente_falso, resposta_plano
 
+pytestmark = pytest.mark.usefixtures("celulas_aprovadas")  # as 9 células aprovadas sem LLM
+
 SELIC = "13,75%"
 
 

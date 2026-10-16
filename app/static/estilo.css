@@ -260,6 +260,9 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .selo.rodando { background: var(--rodando-fundo); color: var(--rodando); }
 .selo.concluida, .selo.concluido, .selo.ok { background: var(--ok-fundo); color: var(--ok); }
 .selo.falhou, .selo.abortado, .selo.interrompida, .selo.erro { background: var(--erro-fundo); color: var(--erro); }
+.selo.APROVADA { background: var(--ok-fundo); color: var(--ok); }
+.selo.REPROVADA { background: var(--rodando-fundo); color: var(--rodando); }
+.selo.ERRO_INFRA { background: var(--erro-fundo); color: var(--erro); }
 .selo.dev { background: var(--dev-fundo); color: var(--dev); }
 .selo.normal { background: var(--acento-fundo); color: var(--acento); }
 
@@ -452,3 +455,13 @@ select {
 details.descartes { margin-top: 14px; }
 details.descartes summary { cursor: pointer; color: var(--texto-suave); font-size: 13px; font-weight: 600; }
 details.descartes .tabela-rolagem { margin-top: 8px; }
+
+/* Células (E5 a E7): miniatura 3x3 nos cartões da etapa e grade no painel */
+.minigrade { display: grid; grid-template-columns: repeat(3, 10px); gap: 3px; margin-top: 4px; }
+.minigrade i { width: 10px; height: 10px; border-radius: 2px; background: var(--superficie-2); border: 1px solid var(--borda); }
+.minigrade i[data-estado="rodando"] { background: var(--rodando); border-color: var(--rodando); animation: pulso 1.2s infinite; }
+.minigrade i[data-estado="APROVADA"] { background: var(--ok); border-color: var(--ok); }
+.minigrade i[data-estado="REPROVADA"] { background: var(--rodando); border-color: var(--rodando); }
+.minigrade i[data-estado="ERRO_INFRA"] { background: var(--erro); border-color: var(--erro); }
+.grade-celulas td { min-width: 130px; }
+.grade-celulas td .final { display: block; margin-top: 4px; }

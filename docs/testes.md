@@ -61,7 +61,8 @@ tests/
 ├── test_schemas.py                # schemas do redator, da peça, do scorecard e da célula
 ├── test_sintese.py                # E5 de uma célula: pacote, redator (LLM simulado), montagem, plan_contract, gravação e nó
 ├── test_router.py                 # E6 e E7 de uma célula: scorecard, Router, relatório corretivo e o refinement loop
-├── test_main_graph.py             # manifest, grafo (E0 a E4) e __main__
+├── test_main_graph.py             # manifest, grafo (E0 a E4 e o fan-out com as células simuladas) e __main__
+├── test_fanout.py                 # fan-out das 9 células: Send, max_concurrency, isolamento de falhas, fechamento, terminal e trava do custo
 ├── test_app.py                    # dashboard: linhas do terminal e API com processo e consulta simulados
 ├── test_persistencia_supabase.py  # integração com o Supabase local
 └── fixtures/
@@ -149,7 +150,7 @@ tests/
 
 ### Gemini de verdade
 
-`test_gemini_cobre_os_fatos_anotados` (marker `gemini`) roda o `__main__` em modo `--dev` para cada fonte, com a Gemini API de verdade e o repositório em memória, e exige o FactSheet assinado e todos os fatos anotados cobertos. Imprime claims, tokens, custo e rodadas, e os tokens, o custo e a duração de cada chamada (com `-s`). O run vai até a E4, com o planejador de verdade. Custa da ordem de R$ 0,15 a R$ 0,76 por documento na extração, mais R$ 0,07 a R$ 0,46 pelo plano, e leva de 15 a 20 minutos nas 3 fontes. Como a resposta do modelo varia, uma falha aqui pede para ler os claims gerados (`data/runs/<run_id>/factsheet.json` no `tmp_path` do teste) antes de mexer no prompt ou na anotação.
+`test_gemini_cobre_os_fatos_anotados` (marker `gemini`) roda o `__main__` em modo `--dev` para cada fonte, com a Gemini API de verdade e o repositório em memória, e exige o FactSheet assinado e todos os fatos anotados cobertos. Imprime claims, tokens, custo e rodadas, e os tokens, o custo e a duração de cada chamada (com `-s`). O run vai até a E4, com o planejador de verdade; as 9 células ficam simuladas, sem chamar o redator. Custa da ordem de R$ 0,15 a R$ 0,76 por documento na extração, mais R$ 0,07 a R$ 0,46 pelo plano, e leva de 15 a 20 minutos nas 3 fontes. Como a resposta do modelo varia, uma falha aqui pede para ler os claims gerados (`data/runs/<run_id>/factsheet.json` no `tmp_path` do teste) antes de mexer no prompt ou na anotação.
 
 ### No grafo
 
@@ -211,7 +212,7 @@ Os testes do bloco `analogia` e das instruções do redator conferem:
 
 `test_main_graph.py`, com o `ProviderFalso`:
 
-- o run conclui com o plano, as 9 células em `PENDENTE`, as analogias do glossário no Iniciante, o span do `adapter` sem nível e com a rodada 1, a saída do planejador em `rodadas_plano` e na cópia local, e a linha `plano em 1 rodada`;
+- o run conclui com o plano, as 9 células ainda em `PENDENTE` no banco (o subgrafo simulado não grava), as analogias do glossário no Iniciante, o span do `adapter` sem nível e com a rodada 1, a saída do planejador em `rodadas_plano` e na cópia local, e a linha `plano em 1 rodada`;
 - o problema do gate volta ao planejador só com a lista de problemas, e o plano fica pronto na rodada 2, com as 2 saídas e os 2 spans com a rodada;
 - problema que continua depois da 3ª rodada: a limpeza corrige o plano, o `aviso` lista o que mudou, e a linha final diz `(com aviso)`;
 - núcleo vazio depois da limpeza: aborta com a etapa `adapt`, com as 3 rodadas gravadas e sem plano;
@@ -246,6 +247,7 @@ Não contém testes, só infraestrutura compartilhada:
 - `RepositorioMemoria` também guarda spans (sem somar duas vezes o mesmo), validações e FactSheets, e recusa número de claim que não está em `numeros`, como o Supabase. Guarda ainda a quarentena e as decisões da revisão, com as mesmas regras: uma decisão por claim, e aceitar só com FactSheet assinado.
 - `RepositorioMemoria` guarda também as rodadas do gate com a saída do planejador, o plano e as células, recusa o plano sem FactSheet do run, recusa outro plano para o run que já tem plano e recusa `rodada` em span que não é do `adapter`. O FactSheet e o plano ficam como JSON (`model_dump(mode="json")`) e voltam por `model_validate`, como pelo Postgres; `factsheet_gravado` e `plano_gravado` são os atalhos dos testes para ler o que foi gravado.
 - `RepositorioMemoria` guarda também as peças de cada tentativa, as unidades com os claims e os números usados: recusa a peça de célula inexistente, outra peça na mesma tentativa, número usado que não aponta para um número de claim do run e posição repetida; grava em `peca_unidade_claims` só os claims do run; a mesma peça de novo não grava nada.
+- `SubgrafoFalso` e a fixture `celulas_aprovadas`: o subgrafo de uma célula no lugar do real, com os nós `synth`, `evaluate` e `router`, que termina cada célula no estado pedido (padrão `APROVADA`) sem chamar LLM e mede o pico de células ao mesmo tempo. `test_main_graph.py` o usa em todos os testes, para que o run passe pelas 9 células sem redator.
 - `ProviderFalso` e `cliente_falso`: o LLM simulado, com modelo para o `extractor`, o `adapter` e o `synthesizer`. `resposta_plano(*claim_ids)`: resposta do planejador que usa os claims dados nos 3 níveis, com as prioridades em ordem.
 
 ## Métricas
@@ -283,6 +285,17 @@ Não contém testes, só infraestrutura compartilhada:
 - **Falhas:** a `Falha` do redator vira `ERRO_INFRA` com a classe e a mensagem, tentativa 0 e nada gravado; a falha na gravação do scorecard vira `ERRO_INFRA` com a peça gravada e sem scorecard; a falha no retry deixa a tentativa da última peça; sem plano, `ERRO_INFRA`; uma exceção que não é `Falha` sobe.
 - **Juiz no config:** só roda quando as 4 determinísticas passam, entra no fim do scorecard e pode reprovar, com a instrução no retry; a `Falha` do juiz grava o scorecard com veredito `ERRO_INFRA` e as 4 determinísticas.
 - **Router:** o relatório corretivo com até 5 violações por métrica e o resto em `restantes`; a não convergência (mesma contagem e contagem maior não convergem; contagem menor e métrica que passou convergem); a regra 5 não age com `K = 2` (nem lê a tentativa anterior), encerra com `nao_convergencia` com `K = 3` e, quando a tentativa melhorou, devolve o relatório sem gravar estado; scorecard de outra tentativa é bug (`ValueError`).
+
+## Fan-out das 9 células
+
+`test_fanout.py` (fluxo em `docs/execucao.md`) usa o `SubgrafoFalso` no grafo principal, com o repositório em memória; o loop de uma célula está em `test_router.py`.
+
+- **`Send` e `max_concurrency`:** num grafo mínimo, 9 ramos com `max_concurrency` 3 nunca passam de 3 ao mesmo tempo, e sem o limite passam; uma `Falha` tratada no ramo vira estado da célula e os outros 8 ramos terminam.
+- **Grafo principal:** `MAX_CONCORRENCIA` vale 3 e o config de execução leva o `max_concurrency`; as 9 células rodam com no máximo 3 em paralelo; o manifest (no Supabase simulado e no `manifest.json`) registra `max_concorrencia`.
+- **Terminal:** cada célula escreve as 6 linhas de início e fim de `synth`, `evaluate` e `router` na tentativa 1 e a linha do estado final; não há linhas `etapa` dos nós das células; a linha `concluído` traz a contagem por estado (`9 células (7 APROVADA, 2 REPROVADA)`).
+- **Falhas:** célula em `ERRO_INFRA` não para as outras 8, o run fecha como `concluido` e o código de saída é 1; célula `REPROVADA` não muda o código; uma exceção que não é `Falha` dentro de uma célula aborta o run, com o nó em `etapa_erro`.
+- **Fechamento:** conta os estados finais; célula sem estado final é `ValueError`.
+- **`ClienteLLM`:** 8 threads com 25 chamadas cada somam exatamente os tokens e o custo.
 
 ## test_ingestao.py
 

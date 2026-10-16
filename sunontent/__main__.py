@@ -67,21 +67,59 @@ def _com_custo(manifest: RunManifest, cliente_llm: llm.ClienteLLM) -> RunManifes
     )
 
 
-def _rodar_grafo(grafo, estado: PipelineState, config: dict, progresso: dict | None = None) -> dict:
-    """Roda o grafo e escreve uma linha no início e no fim de cada etapa. Devolve o estado final.
+def _celula_da_entrada(evento: dict):
+    """A CelulaState na entrada de uma tarefa do fan-out, ou None se a tarefa não é de uma célula."""
+    entrada = evento.get("input")
+    celula = entrada.get("celula") if isinstance(entrada, dict) else getattr(entrada, "celula", None)
+    return celula if hasattr(celula, "celula_id") else None
 
-    Formato: `etapa <no>: iniciada` e `etapa <no>: concluída`. A etapa que falha não tem a linha de fim: a exceção
+
+def _rodar_grafo(grafo, estado: PipelineState, config: dict, progresso: dict | None = None) -> dict:
+    """Roda o grafo e escreve uma linha no início e no fim de cada etapa e de cada passo de célula. Devolve o
+    estado final.
+
+    Formato, fora das células: `etapa <no>: iniciada` e `etapa <no>: concluída`. Nas células, que rodam em
+    paralelo: `celula <celula_id> <no> <tentativa>: iniciada|concluída` para cada nó do subgrafo e
+    `celula <celula_id>: <ESTADO>` quando a célula termina. A etapa que falha não tem a linha de fim: a exceção
     sobe e o `abortado (...)` vem em seguida. O dashboard (app/) lê essas linhas.
     `progresso["etapa"]` guarda o último nó iniciado: na falha, é o nó em execução.
     """
     resultado = None
-    for modo, evento in grafo.stream(estado, config, stream_mode=["tasks", "values"]):
+    celula_da_tarefa: dict[str, str] = {}  # id da tarefa `celula` do grafo principal -> celula_id
+    tentativa_da_tarefa: dict[str, int] = {}  # id da tarefa de um nó do subgrafo -> tentativa da linha de início
+    for namespace, modo, evento in grafo.stream(estado, config, stream_mode=["tasks", "values"], subgraphs=True):
         if modo == "values":
-            resultado = evento
+            if not namespace:
+                resultado = evento
+            continue
+        if evento.get("error"):
+            continue  # tarefa que falhou: sem linha de fim, a exceção sobe do stream
+        iniciada = "result" not in evento
+        if namespace:
+            celula_id = celula_da_tarefa.get(namespace[0].partition(":")[2])
+            if celula_id is None:
+                continue
+            if iniciada:
+                tentativa_da_tarefa[evento["id"]] = (
+                    _celula_da_entrada(evento).tentativa + (evento["name"] == "synth")
+                )
+                if progresso is not None:
+                    progresso["etapa"] = evento["name"]
+            print(
+                f"celula {celula_id} {evento['name']} {tentativa_da_tarefa[evento['id']]}: "
+                f"{'iniciada' if iniciada else 'concluída'}",
+                flush=True,
+            )
+        elif evento["name"] == "celula":
+            if iniciada:
+                celula_da_tarefa[evento["id"]] = _celula_da_entrada(evento).celula_id
+            else:
+                (celula,) = evento["result"]["celulas"].values()
+                print(f"celula {celula.celula_id}: {celula.estado}", flush=True)
         else:
             if progresso is not None:
                 progresso["etapa"] = evento["name"]
-            print(f"etapa {evento['name']}: {'concluída' if 'result' in evento else 'iniciada'}", flush=True)
+            print(f"etapa {evento['name']}: {'iniciada' if iniciada else 'concluída'}", flush=True)
     return resultado
 
 
@@ -95,7 +133,7 @@ def executar(
     cliente_http=None,
     relogio: Callable[[], datetime] = comum.agora_utc,
 ) -> int:
-    """Roda um run. Devolve o código de saída: 0 concluído, 1 abortado."""
+    """Roda um run. Devolve o código de saída: 0 concluído, 1 abortado ou concluído com célula em ERRO_INFRA."""
     momento = relogio()
     run_id = gerar_run_id(fonte, momento)
     raiz_dados = raiz / "data"
@@ -106,6 +144,7 @@ def executar(
         modo="dev" if dev else "normal",
         fonte=fonte,
         k=graph.K,
+        max_concorrencia=graph.MAX_CONCORRENCIA,
     )
     persistencia.criar_run(repositorio, manifest)
     persistencia.gravar_manifest_local(raiz_dados, manifest, "em_andamento")
@@ -126,7 +165,7 @@ def executar(
         resultado = _rodar_grafo(
             graph.construir_grafo(),
             PipelineState(run_id=run_id, manifest=manifest),
-            {"configurable": configuravel},
+            graph.config_execucao(configuravel),
             progresso,
         )
     except Falha as falha:
@@ -158,14 +197,17 @@ def executar(
     # Com o run concluído, as correções que restam são os claims que foram para a quarentena.
     em_quarentena = len(resultado["correcoes"])
     plano = resultado["plano"]
+    contagem = resultado["contagem_celulas"]
+    celulas = ", ".join(f"{n} {estado}" for estado, n in contagem.items() if n)
     print(
         f"concluído: {documento.doc_id} ({documento.doc_sha256[:12]}), {claims} claims,"
         + (f" {em_quarentena} em quarentena," if em_quarentena else "")
         + f" plano em {plano.rodadas} {'rodada' if plano.rodadas == 1 else 'rodadas'}"
         + (" (com aviso)," if plano.aviso else ",")
+        + f" {sum(contagem.values())} células ({celulas}),"
         + f" {cliente_llm.custo_total_tokens} tokens, R$ {cliente_llm.custo_total_brl:.4f}"
     )
-    return 0
+    return 1 if contagem.get("ERRO_INFRA") else 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:

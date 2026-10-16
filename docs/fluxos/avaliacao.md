@@ -4,7 +4,7 @@ Este documento detalha a E6 e a E7 de uma célula: como a peça de uma tentativa
 
 ## Estado
 
-Implementadas para uma célula, com os nós `evaluate` e `router` e o subgrafo da célula (`graph.construir_grafo_celula`), que ainda não tem ligação com o grafo principal: o grafo principal termina na E4. O fan-out para as 9 células e o juiz (M6) ainda não existem; a E6 chama o juiz só quando o config traz um.
+Implementadas, com os nós `evaluate` e `router` e o subgrafo da célula (`graph.construir_grafo_celula`). O grafo principal dispara o subgrafo para as 9 células depois da E4, até 3 em paralelo, e o nó `fechamento` conta os estados finais (`docs/execucao.md`). O juiz (M6) ainda não existe; a E6 chama o juiz só quando o config traz um.
 
 ## Subgrafo da célula
 

@@ -16,6 +16,8 @@ from sunontent import graph, manifesto, persistencia
 from sunontent.retentativa import FalhaRetriavel, FalhaTerminal
 from test_ingestao import cliente, listagem
 
+pytestmark = pytest.mark.usefixtures("celulas_aprovadas")  # as 9 células aprovadas sem LLM; o fan-out está em test_fanout.py
+
 RAIZ = Path(__file__).resolve().parent.parent
 MOMENTO = datetime(2026, 10, 6, 15, 0, 0, tzinfo=timezone.utc)
 REFERENCIA = RAIZ / "tests" / "fixtures" / "referencia"
@@ -74,7 +76,7 @@ def versao_prompt(raiz, nome):
 
 def test_manifest_le_versoes_e_hashes_da_config(raiz):
     m = manifesto.montar(raiz, run_id="copom_20261006T150000Z_aaaaaa", timestamp=MOMENTO,
-                         modo="normal", fonte="copom", k=2)
+                         modo="normal", fonte="copom", k=2, max_concorrencia=3)
     assert m.level_specs == {
         n: yaml.safe_load((raiz / "config" / "levels" / f"{n}.yaml").read_text(encoding="utf-8"))["versao"]
         for n in ("iniciante", "intermediario", "avancado")}
@@ -93,7 +95,7 @@ def test_manifest_le_versoes_e_hashes_da_config(raiz):
 
 def test_hash_ignora_fim_de_linha(raiz):
     def montar():
-        return manifesto.montar(raiz, run_id="x", timestamp=MOMENTO, modo="normal", fonte="copom", k=2)
+        return manifesto.montar(raiz, run_id="x", timestamp=MOMENTO, modo="normal", fonte="copom", k=2, max_concorrencia=3)
 
     arquivo = raiz / "config" / "glossario.yaml"
     antes = montar().arquivos_sha256["config/glossario.yaml"]
@@ -104,12 +106,12 @@ def test_hash_ignora_fim_de_linha(raiz):
 def test_template_com_conteudo_exige_cabecalho_de_versao(raiz):
     (raiz / "prompts" / "adapter.j2").write_text("sem cabecalho", encoding="utf-8")
     with pytest.raises(FalhaTerminal, match="prompts/adapter.j2"):
-        manifesto.montar(raiz, run_id="x", timestamp=MOMENTO, modo="normal", fonte="copom", k=2)
+        manifesto.montar(raiz, run_id="x", timestamp=MOMENTO, modo="normal", fonte="copom", k=2, max_concorrencia=3)
 
 
 def test_template_com_cabecalho_entra_no_manifest(raiz):
     (raiz / "prompts" / "adapter.j2").write_text("{# versao: 3 #}\nolá", encoding="utf-8")
-    m = manifesto.montar(raiz, run_id="x", timestamp=MOMENTO, modo="normal", fonte="copom", k=2)
+    m = manifesto.montar(raiz, run_id="x", timestamp=MOMENTO, modo="normal", fonte="copom", k=2, max_concorrencia=3)
     assert m.prompts == {
         "adapter": 3, "extractor": versao_prompt(raiz, "extractor"), "synthesizer": versao_prompt(raiz, "synthesizer"),
     }
@@ -119,7 +121,7 @@ def test_template_com_cabecalho_entra_no_manifest(raiz):
 def test_yaml_vazio_aponta_o_arquivo(raiz):
     (raiz / "config" / "levels" / "avancado.yaml").write_text("", encoding="utf-8")
     with pytest.raises(FalhaTerminal, match="config/levels/avancado.yaml"):
-        manifesto.montar(raiz, run_id="x", timestamp=MOMENTO, modo="normal", fonte="copom", k=2)
+        manifesto.montar(raiz, run_id="x", timestamp=MOMENTO, modo="normal", fonte="copom", k=2, max_concorrencia=3)
 
 
 # Grafo
@@ -146,7 +148,7 @@ def test_modo_normal_conclui_e_grava_run_e_manifest(raiz, repo):
     local = manifest_local(raiz)
     assert local["status"] == "concluido" and local["modo"] == "normal"
     assert local["doc_id"] == "copom_ata_281" and local["coleta_id"] == 1
-    assert local["K"] == graph.K
+    assert local["K"] == graph.K and local["max_concorrencia"] == graph.MAX_CONCORRENCIA == 3
     assert (raiz / "data" / "sources" / "copom").exists()
 
 
@@ -399,8 +401,9 @@ def test_claim_que_nao_converge_vai_para_a_quarentena_e_o_run_conclui(raiz, repo
     assert [i["proposto"]["id"] for i in local] == ["C01"]
     saida = capsys.readouterr().out
     assert "1 claims, 1 em quarentena," in saida
-    assert etapas(saida)[-4:] == ["etapa quarentena: iniciada", "etapa quarentena: concluída",
-                                  "etapa adapt: iniciada", "etapa adapt: concluída"]
+    assert etapas(saida)[-6:] == ["etapa quarentena: iniciada", "etapa quarentena: concluída",
+                                  "etapa adapt: iniciada", "etapa adapt: concluída",
+                                  "etapa fechamento: iniciada", "etapa fechamento: concluída"]
 
 
 def test_sem_claim_valido_grava_a_quarentena_e_aborta(raiz, repo):
@@ -434,7 +437,7 @@ def test_run_escreve_inicio_e_fim_de_cada_etapa(raiz, repo, capsys):
     assert rodar(raiz, repo, dev=True, llm=llm) == 0
     assert etapas(capsys.readouterr().out) == [
         f"etapa {no}: {estado}"
-        for no in ("referencia", "leitura", "extract", "validate", "extract", "validate", "adapt")
+        for no in ("referencia", "leitura", "extract", "validate", "extract", "validate", "adapt", "fechamento")
         for estado in ("iniciada", "concluída")
     ]
 
@@ -475,8 +478,8 @@ def test_e4_grava_o_plano_e_as_9_celulas_pendentes(raiz, repo, capsys):
     (span_plano,) = [s for s in repo.spans.values() if s.no == "adapter"]
     assert span_plano.nivel is None and span_plano.celula_id is None and span_plano.rodada == 1
     saida = capsys.readouterr().out
-    assert etapas(saida)[-2:] == ["etapa adapt: iniciada", "etapa adapt: concluída"]
-    assert "1 claims, plano em 1 rodada, 2400 tokens" in saida
+    assert etapas(saida)[-4:-2] == ["etapa adapt: iniciada", "etapa adapt: concluída"]
+    assert "1 claims, plano em 1 rodada, 9 células (9 APROVADA), 2400 tokens" in saida
 
 
 def test_e4_devolve_so_os_problemas_ao_planejador(raiz, repo, capsys):

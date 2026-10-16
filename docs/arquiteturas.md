@@ -311,6 +311,7 @@ class RunManifest(BaseModel):
     glossario_versao: int            # chave versao de config/glossario.yaml
     arquivos_sha256: dict[str, str]  # {"prompts/adapter.j2": "<sha256>", "config/glossario.yaml": "<sha256>", ...}
     K: int                           # orçamento de retry vigente nesta execução, lido de sunontent/graph.py
+    max_concorrencia: int            # células em paralelo no fan-out, lido de sunontent/graph.py (MAX_CONCORRENCIA)
     custo_total_tokens: int
     custo_total_brl: Decimal
 ```
@@ -320,6 +321,8 @@ O run é registrado no início, antes da E0 ou da leitura da referência. `run_i
 `doc_sha256` existe porque "ata de setembro" não identifica um arquivo: o Banco Central emite de novo o PDF corrigido. Dois runs sobre "o mesmo documento" com hashes diferentes não são comparáveis, e sem o hash ninguém descobre isso.
 
 `K` entra no manifesto porque mudar o orçamento de retry muda o resultado. Um scorecard só é comparável com outro se o `K` era o mesmo.
+
+`max_concorrencia` entra no manifesto porque define quantas chamadas de LLM chegam juntas ao provider; com limite de taxa baixo, o valor muda quais células terminam em `ERRO_INFRA`.
 
 `modo` entra no manifesto porque define a entrada: no dev é o documento de referência, fixo e versionado; no normal, o documento mais recente. Consultas que medem o avaliador filtram por ele.
 
@@ -762,10 +765,11 @@ class PipelineState(BaseModel):
     # E4: rodada do gate e plano; o plano só entra aqui depois do gate.
     rodada_plano: int = 0
     plano: PlanoEditorial | None = None
-    celulas: dict[str, CelulaState] = {}           # 9 entradas depois da E4, chaveadas por celula_id
+    celulas: dict[str, CelulaState] = {}           # 9 entradas depois da E4, chaveadas por celula_id; um reducer junta as entradas devolvidas pelas células
+    contagem_celulas: dict[str, int] = {}          # fechamento: células em APROVADA, REPROVADA e ERRO_INFRA
 ```
 
-O fan-out da E5 é um subgrafo da célula, com estado mínimo (`run_id`, `celula_id`, `nivel` e `formato`), invocado 9 vezes, sob um limitador de concorrência. A célula não recebe o plano nem os claims pelo estado: lê o plano por `carregar_plano` e o FactSheet assinado por `carregar_factsheet` (`persistencia.py`). No `PipelineState`, `celulas` é um dicionário chaveado por `celula_id`, e não lista: cada célula tem a sua chave.
+O fan-out da E5 é um subgrafo da célula, com estado mínimo (`CelulaGrafoState`: `run_id` e a `CelulaState`), disparado por um `Send` por célula, com no máximo `MAX_CONCORRENCIA` (3) células em paralelo (`max_concurrency` do config). Cada célula devolve só a sua entrada de `celulas`, e o reducer `juntar_celulas` junta as 9. Depois delas, o nó `fechamento` confere que todas têm estado final e conta quantas terminaram em cada um. A célula não recebe o plano nem os claims pelo estado: lê o plano por `carregar_plano` e o FactSheet assinado por `carregar_factsheet` (`persistencia.py`). No `PipelineState`, `celulas` é um dicionário chaveado por `celula_id`, e não lista: cada célula tem a sua chave.
 
 ## Ciclo de vida de uma célula
 

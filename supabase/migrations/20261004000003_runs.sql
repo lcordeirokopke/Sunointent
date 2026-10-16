@@ -28,6 +28,7 @@ create table runs (
   glossario_versao   int not null check (glossario_versao >= 1),
   arquivos_sha256    jsonb not null,  -- {"<caminho relativo>": "<sha256>"} de prompts/, config/levels/, glossario.yaml e models.yaml
   "K"                int not null check ("K" >= 1),
+  max_concorrencia   int not null check (max_concorrencia >= 1),  -- células em paralelo no fan-out da E5 à E7
 
   -- Incrementados na mesma instrução que grava o span: with s as (insert into llm_spans ...
   -- on conflict (span_id) do nothing returning ...) update runs ... from s. Iguais à soma de llm_spans do run.

@@ -4,7 +4,7 @@ Este documento detalha a E4: como o `FactSheet` assinado vira o `PlanoEditorial`
 
 ## Estado
 
-Implementada. O grafo termina na E4: o run fecha com o plano gravado e as 9 células em `PENDENTE`.
+Implementada. A E4 grava o plano e as 9 células em `PENDENTE`; em seguida o grafo dispara as 9 células (E5 à E7, `docs/execucao.md`).
 
 ## Responsabilidade
 
@@ -151,7 +151,7 @@ O nó troca para `gemini-4-argon` só pelo `config/models.yaml`, com o preço do
 
 - A E4 entra depois da E3 com todos os claims aprovados e depois da quarentena; o plano usa só os claims do FactSheet assinado.
 - O loop do gate fica dentro do nó `adapt`, que é um nó só para os 3 níveis: cada rodada atualiza `rodada_plano` e grava a saída do planejador em `rodadas_plano` e os problemas em `validacoes_plano`.
-- O grafo termina depois da E4. As 9 células ficam em `PENDENTE` em `celulas`, e o run fecha como `concluido`.
+- Depois da E4, `disparar_celulas` envia cada uma das 9 células, em `PENDENTE` em `celulas`, ao subgrafo da célula.
 - Antes da rodada 1, o nó apaga as linhas de `rodadas_plano` e `validacoes_plano` do run e a cópia local delas.
 - O limite de rodadas é `RODADAS_PLANO` (3), em `graph.py`, passado ao nó `adapt`.
 

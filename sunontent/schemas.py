@@ -13,6 +13,7 @@ NIVEIS: tuple[str, ...] = get_args(Nivel)
 Formato = Literal["artigo", "carrossel", "roteiro"]
 FORMATOS: tuple[str, ...] = get_args(Formato)
 EstadoCelula = Literal["PENDENTE", "GERANDO", "AVALIANDO", "APROVADA", "REPROVADA", "ERRO_INFRA"]
+ESTADOS_FINAIS: tuple[str, ...] = ("APROVADA", "REPROVADA", "ERRO_INFRA")
 # E4 (docs/arquiteturas.md, Plano editorial). O planejador só usa os três motivos específicos.
 MotivoDescarte = Literal["redundante", "secundario", "exige_base_tecnica", "fora_do_foco", "metodologico"]
 MotivoPlanejador = Literal["redundante", "exige_base_tecnica", "fora_do_foco"]
@@ -266,6 +267,7 @@ class RunManifest(BaseModel):
     glossario_versao: int = Field(ge=1)
     arquivos_sha256: dict[str, str]
     K: int = Field(ge=1)
+    max_concorrencia: int = Field(ge=1)  # células em paralelo (graph.MAX_CONCORRENCIA)
     custo_total_tokens: int = 0
     custo_total_brl: Decimal = Decimal(0)
 
@@ -817,6 +819,10 @@ class SaidaPlanejador(BaseModel):
         return self
 
 
+def juntar_celulas(atual: dict[str, "CelulaState"], novas: dict[str, "CelulaState"]) -> dict[str, "CelulaState"]:
+    return {**atual, **novas}
+
+
 class PipelineState(BaseModel):
     """Estado do grafo. Cresce a cada etapa implementada (docs/arquiteturas.md, O objeto de estado)."""
 
@@ -834,4 +840,7 @@ class PipelineState(BaseModel):
     # E4: rodada do gate e plano; o plano só entra aqui depois do gate.
     rodada_plano: int = 0
     plano: PlanoEditorial | None = None
-    celulas: dict[str, CelulaState] = {}  # 9 entradas depois da E4, chaveadas por celula_id
+    # 9 entradas depois da E4, chaveadas por celula_id. As células terminam em paralelo, cada uma devolve só a sua
+    # entrada, e o reducer junta.
+    celulas: Annotated[dict[str, CelulaState], juntar_celulas] = {}
+    contagem_celulas: dict[str, int] = {}  # fechamento: quantas células em cada estado final

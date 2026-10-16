@@ -19,6 +19,7 @@ Só este módulo importa o SDK do provider (google-genai).
 """
 
 import sys
+import threading
 import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
@@ -102,6 +103,8 @@ class ClienteLLM:
         self._precos = dict(precos)
         self._cotacao = cotacao_usd_brl
         self._relogio = relogio
+        # As células rodam em threads (graph.MAX_CONCORRENCIA): as somas do run passam por esta trava.
+        self._trava_custo = threading.Lock()
         self.custo_total_tokens = 0
         self.custo_total_brl = Decimal(0)
 
@@ -152,8 +155,9 @@ class ClienteLLM:
 
         def span(inicio: float, tokens_entrada=0, tokens_saida=0, classe=None, mensagem=None) -> None:
             custo = self.custo_brl(modelo, tokens_entrada, tokens_saida)
-            self.custo_total_tokens += tokens_entrada + tokens_saida
-            self.custo_total_brl += custo
+            with self._trava_custo:
+                self.custo_total_tokens += tokens_entrada + tokens_saida
+                self.custo_total_brl += custo
             registrar_span(
                 Span(
                     span_id=str(uuid.uuid4()),

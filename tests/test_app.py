@@ -29,6 +29,13 @@ def esperar_fim(execucao_atual, limite=10.0):
         (f"run {RUN_ID} (dev)", {"tipo": "run", "run_id": RUN_ID, "modo": "dev"}),
         ("etapa leitura: iniciada", {"tipo": "etapa", "no": "leitura", "estado": "iniciada"}),
         ("etapa validate: concluída", {"tipo": "etapa", "no": "validate", "estado": "concluída"}),
+        ("celula iniciante__artigo synth 1: iniciada", {
+            "tipo": "celula", "celula_id": "iniciante__artigo", "no": "synth", "tentativa": "1", "estado": "iniciada"}),
+        ("celula avancado__roteiro router 2: concluída", {
+            "tipo": "celula", "celula_id": "avancado__roteiro", "no": "router", "tentativa": "2", "estado": "concluída"}),
+        ("celula intermediario__carrossel: REPROVADA", {
+            "tipo": "celula", "celula_id": "intermediario__carrossel", "estado": "REPROVADA"}),
+        ("celula iniciante__artigo: AVALIANDO", {"tipo": "log"}),
         ("concluído: copom_ata_281 (f03423dc2562), 7 claims", {"tipo": "concluido", "resumo": "copom_ata_281 (f03423dc2562), 7 claims"}),
         ("abortado (terminal): E3: 1 claims", {"tipo": "abortado", "classe": "terminal", "mensagem": "E3: 1 claims"}),
         ("erro (terminal): SUPABASE_URL ausente", {"tipo": "erro", "classe": "terminal", "mensagem": "SUPABASE_URL ausente"}),
@@ -114,9 +121,24 @@ def test_e4_entra_no_fluxo_do_dashboard(cliente):
     assert "adapt" in corpo["nos"]
     arestas = {(a["de"], a["para"]) for a in corpo["arestas"]}
     assert {("validate", "adapt"), ("quarentena", "adapt")} <= arestas
-    assert any(de == "adapt" and para.endswith("end__") for de, para in arestas)
     assert corpo["rodadas_plano"] == 3
     assert 'id: "E4", nos: ["adapt"]' in http.get("/static/app.js").text
+
+
+def test_grafo_abre_o_subgrafo_da_celula(cliente):
+    """Com xray, os nós da célula entram como nós do grafo, sem os pseudonós, e o fan-out liga a E4 ao synth."""
+    http, _ = cliente
+    corpo = http.get("/api/grafo").json()
+    assert {"synth", "evaluate", "router", "fechamento"} <= set(corpo["nos"])
+    assert not any(":" in no or no.startswith("__") for no in corpo["nos"])
+    arestas = {(a["de"], a["para"]) for a in corpo["arestas"]}
+    assert {("adapt", "synth"), ("synth", "evaluate"), ("evaluate", "router"), ("router", "synth"),
+            ("router", "fechamento"), ("fechamento", "__end__")} <= arestas
+    assert not any(":" in de or ":" in para for de, para in arestas)
+    assert corpo["max_concorrencia"] == 3
+    app_js = http.get("/static/app.js").text
+    for etapa, no in (("E5", "synth"), ("E6", "evaluate"), ("E7", "router")):
+        assert f'id: "{etapa}", nos: ["{no}"], celulas: true' in app_js
 
 
 def test_execucao_transmite_as_linhas_classificadas(cliente, processo_simulado):

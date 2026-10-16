@@ -10,6 +10,8 @@
 
 import json
 import os
+import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -22,7 +24,17 @@ from sunontent import retentativa
 from sunontent.llm import ClienteLLM, Preco, RespostaBruta
 from sunontent.persistencia import Coleta, ItemQuarentena
 from sunontent.retentativa import FalhaRetriavel, FalhaTerminal
-from sunontent.schemas import Chunk, DocumentoProcessado, FactSheet, Numero, Pagina, PlanoEditorial, Scorecard
+from sunontent.schemas import (
+    Chunk,
+    CelulaGrafoState,
+    CelulaState,
+    DocumentoProcessado,
+    FactSheet,
+    Numero,
+    Pagina,
+    PlanoEditorial,
+    Scorecard,
+)
 
 HOSTS_LOCAIS = {"localhost", "127.0.0.1", "::1"}
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -475,3 +487,64 @@ def cliente_falso(respostas) -> ClienteLLM:
         Decimal(5),
         raciocinio={"extractor_correcao": "low", "adapter_correcao": "low", "synthesizer_correcao": "low"},
     )
+
+
+class SubgrafoFalso:
+    """Subgrafo de uma célula no lugar do real, com os mesmos nomes de nós (synth, evaluate, router).
+
+    Cada célula termina no estado de `estados[celula_id]` (padrão APROVADA) depois de `atraso` segundos no synth.
+    `pico` é o maior número de células ao mesmo tempo entre o synth e o evaluate. Uso:
+    `monkeypatch.setattr(graph, "construir_grafo_celula", SubgrafoFalso(...).construir)`.
+    """
+
+    def __init__(self, estados: dict[str, str] | None = None, atraso: float = 0.0, excecao: Exception | None = None):
+        self.estados = estados or {}
+        self.atraso = atraso
+        self.excecao = excecao
+        self.ativas = 0
+        self.pico = 0
+        self._trava = threading.Lock()
+
+    def construir(self):
+        from langgraph.graph import END, START, StateGraph
+
+        def synth(state: CelulaGrafoState, config) -> dict:
+            if self.excecao is not None:
+                raise self.excecao
+            with self._trava:
+                self.ativas += 1
+                self.pico = max(self.pico, self.ativas)
+            time.sleep(self.atraso)
+            return {"celula": state.celula.model_copy(update={"estado": "AVALIANDO", "tentativa": 1})}
+
+        def evaluate(state: CelulaGrafoState, config) -> dict:
+            with self._trava:
+                self.ativas -= 1
+            return {}
+
+        def router(state: CelulaGrafoState, config) -> dict:
+            estado = self.estados.get(state.celula.celula_id, "APROVADA")
+            extra = {
+                "REPROVADA": {"motivo_reprovacao": "k_esgotado"},
+                "ERRO_INFRA": {"erro_classe": "terminal", "erro_mensagem": "falha simulada"},
+            }.get(estado, {})
+            return {"celula": CelulaState.model_validate({**state.celula.model_dump(), "estado": estado, **extra})}
+
+        grafo = StateGraph(CelulaGrafoState)
+        for nome, no in (("synth", synth), ("evaluate", evaluate), ("router", router)):
+            grafo.add_node(nome, no)
+        grafo.add_edge(START, "synth")
+        grafo.add_edge("synth", "evaluate")
+        grafo.add_edge("evaluate", "router")
+        grafo.add_edge("router", END)
+        return grafo.compile()
+
+
+@pytest.fixture
+def celulas_aprovadas(monkeypatch):
+    """Troca o subgrafo de célula por um que aprova as 9 sem chamar LLM; devolve o SubgrafoFalso."""
+    from sunontent import graph
+
+    falso = SubgrafoFalso()
+    monkeypatch.setattr(graph, "construir_grafo_celula", falso.construir)
+    return falso

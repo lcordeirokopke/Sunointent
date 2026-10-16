@@ -56,6 +56,7 @@ def montar(
     modo: Modo,
     fonte: Fonte,
     k: int,
+    max_concorrencia: int,
 ) -> RunManifest:
     """Lê os arquivos versionados em `raiz` e devolve o manifest sem os campos do documento."""
     raiz = Path(raiz)
@@ -106,4 +107,5 @@ def montar(
         glossario_versao=glossario["versao"],
         arquivos_sha256=dict(sorted(hashes.items())),
         K=k,
+        max_concorrencia=max_concorrencia,
     )
