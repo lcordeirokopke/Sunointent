@@ -284,7 +284,7 @@ Cada métrica tem o seu modelo de `detalhes`, gravado em `metricas.detalhes`:
 
 | Métrica | Campos de `detalhes` |
 | ------- | -------------------- |
-| `numeric_fidelity` | `numeros_varridos`, `com_marcador`, `datas_conferidas` e `desfechos` (a contagem de cada desfecho da M1) |
+| `numeric_fidelity` | `numeros_varridos`, `com_marcador`, `datas_conferidas` e `desfechos` (a contagem de cada desfecho da M1, inclusive o número em formato que o parser não lê) |
 | `text_size` | `grandeza` (`palavras` ou `caracteres`), `limite` (o limite renderizado) e `unidades` (a medida e o limite de cada unidade; no roteiro, a última é o total) |
 | `analogy_rule` | `aplicavel` (a regra vale só no Iniciante) e `termos` (cada termo acima de iniciante encontrado, com a unidade da primeira ocorrência, se há `Analogia` no plano e se há marcador na unidade) |
 | `plan_contract` | `checagens` (quantidade de slides, soma das cenas, `claim_ids` no plano e cobertura do formato, cada uma com o esperado, o obtido e se passou) |
@@ -619,6 +619,8 @@ O nível é medido pela regra de analogia (M5), pelo tamanho do artigo por níve
 
 ### As métricas
 
+As regras exatas, o valor, a faixa, os detalhes e a instrução corretiva de cada violação estão em `docs/metricas.md`.
+
 **M1. Numeric Fidelity Check (determinístico).** Extrai todo número+unidade da peça (`numeros.varrer`, o mesmo parser da E1), depois de mascarar as formas do glossário que têm dígito (`IPCA-15`), e assere que cada um que não seja data veio de um marcador, ou seja, coincide com uma posição de `Peca.numeros_usados`. Um número que não fecha reprova a célula, sem opinião de modelo nenhum. Quatro desfechos distintos, e a distinção importa para a instrução corretiva:
 
 - em `numeros_usados`: ok;
@@ -628,11 +630,13 @@ O nível é medido pela regra de analogia (M5), pelo tamanho do artigo por níve
 
 Número escrito à mão pelo modelo é violação mesmo quando o valor existe na `tabela_numeros`: todo número da peça que não seja data vem de um marcador. O marcador inválido (inexistente ou de claim fora do plano) que a montagem deixou no texto também é violação da M1. As datas com dia são conferidas contra os claims do plano; os anos e os trimestres, contra os claims do plano ou o ano da `data_documento`. Número por extenso ("dois por cento") fica para o juiz.
 
+A varredura roda em cada campo da peça: o título, a linha fina, o texto de cada unidade e o gancho visual de cada cena. O título e o texto das unidades aceitam número por marcador; na linha fina e no gancho visual nenhum número é aceito, e a instrução é remover. Um número coincide com um marcador quando o seu intervalo toca o de um `NumeroUsado` do mesmo campo e da mesma unidade. Número em formato que o parser não lê (`US$ 5`, `1.234.5`) é violação, e a varredura segue pelo resto do texto. Uma data com dia vale se um claim do plano tem o mesmo dia e mês e, com ano, o mesmo ano; quando o claim não traz o ano, vale o ano da `data_documento`. Ano, trimestre e número de reunião valem se o mesmo valor aparece como componente de data num claim do plano ou se é o ano da `data_documento`.
+
 **M2. Format Contract Check (determinístico).** Aritmética sobre o payload estruturado, com os números do contrato de formato do LevelSpec, contados por `sunontent/texto.py`. Artigo: palavras do texto das seções na faixa do nível. Carrossel: caracteres de cada slide dentro do limite do papel. Roteiro: palavras de cada cena até a duração da cena vezes `palavras_por_segundo`, e o total até `duracao_s` vezes `palavras_por_segundo`. O limite que a M2 registra é o `faixa_esperada` de `instrucoes_redator`, a mesma função que escreve o orçamento do prompt.
 
 **plan_contract (determinístico).** As regras de estrutura que dependem do LevelSpec ou do plano: quantidade de slides do carrossel, soma das cenas do roteiro até `duracao_s`, `claim_ids` de cada unidade dentro do plano do nível e cobertura do formato. A montagem da E5.3 entrega as violações já calculadas. As regras que valem para qualquer célula são validadores do schema do redator e não passam por aqui.
 
-**M5. Regra de analogia (determinístico).** Só no nível Iniciante: todo termo do glossário com `nivel_minimo` acima de iniciante encontrado no texto precisa ter uma `Analogia` no plano do nível **e** um marcador de analogia, de `analogia.marcadores` do LevelSpec do Iniciante ("é como", "funciona como", "imagine que", "na prática"), na mesma unidade (seção, slide ou cena) da primeira ocorrência do termo. Os termos são casados pela regra de `docs/glossario.md`. Termo do glossário sem analogia é violação, com o trecho exato.
+**M5. Regra de analogia (determinístico).** Só no nível Iniciante: todo termo do glossário com `nivel_minimo` acima de iniciante encontrado no texto precisa ter uma `Analogia` no plano do nível **e** um marcador de analogia, de `analogia.marcadores` do LevelSpec do Iniciante ("é como", "funciona como", "imagine que", "na prática"), na mesma unidade (seção, slide ou cena) da primeira ocorrência do termo. Os termos são casados pela regra de `docs/glossario.md`, e só no texto das unidades: o título e a linha fina não são unidades e não entram na busca. Uma expressão de analogia em qualquer ponto da unidade vale para todos os termos da unidade. Termo do glossário sem analogia no plano é violação, com o trecho exato e a instrução de trocar o termo por uma explicação simples; termo com analogia no plano e sem marcador na unidade é violação com a analogia do plano e as expressões na instrução.
 
 **M6. LLM Judge (a única parte não determinística).** Só roda se todas as anteriores passaram, uma chamada por célula, e responde **duas** perguntas, com saída estruturada e a justificativa antes do booleano, mais o nível que a peça parece ter:
 

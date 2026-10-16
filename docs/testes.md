@@ -57,6 +57,7 @@ tests/
 ├── test_glossario.py              # glossário: validação, casamento de termos, analogia e flexões
 ├── test_adaptacao.py              # E4: pré-filtro, complemento, gate, planejador e gravação
 ├── test_texto.py                  # contagem de palavras e de caracteres do texto da peça
+├── test_metrics.py                # M1, M2 e M5, sem LLM e sem banco
 ├── test_schemas.py                # schemas do redator, da peça, do scorecard e da célula
 ├── test_main_graph.py             # manifest, grafo (E0 a E4) e __main__
 ├── test_app.py                    # dashboard: linhas do terminal e API com processo e consulta simulados
@@ -68,7 +69,7 @@ tests/
 
 ## E1: leitura
 
-`test_numeros.py` fixa o parser com igualdade exata em `Decimal`: cada formato aceito (`12,5%`, `R$ 1,2 bi`, `0,50 p.p.`, `47 bps`, `1.938,6`) e cada formato recusado (`1,234.56`, `12.5%`, `1.93`, `3.1`, `0.500`), que precisa levantar `NumeroNaoPrevisto` em vez de ser interpretado. Também fixa o ordinal de período (`1º tri` é `data`, `3º lugar` é `contagem`) e o leitor de datas (`numeros.datas`): cada formato com dia vira dia, mês e ano; mês sem dia, trimestre, lei e data inválida ficam de fora; e em "19/10 e 19 de outubro" a data por extenso não pega o mês de `19/10`.
+`test_numeros.py` fixa o parser com igualdade exata em `Decimal`: cada formato aceito (`12,5%`, `R$ 1,2 bi`, `0,50 p.p.`, `47 bps`, `1.938,6`) e cada formato recusado (`1,234.56`, `12.5%`, `1.93`, `3.1`, `0.500`), que precisa levantar `NumeroNaoPrevisto` em vez de ser interpretado. Também fixa o ordinal de período (`1º tri` é `data`, `3º lugar` é `contagem`) e o leitor de datas (`numeros.datas`): cada formato com dia vira dia, mês e ano; mês sem dia, trimestre, lei e data inválida ficam de fora; e em "19/10 e 19 de outubro" a data por extenso não pega o mês de `19/10`. `numeros.datas_com_posicao` devolve as mesmas datas com o início e o fim da expressão, e `NumeroNaoPrevisto.posicao` aponta o início do trecho que `varrer` não leu.
 
 `test_extracao.py` roda a E1 de verdade sobre os três PDFs de `tests/fixtures/referencia/`:
 
@@ -243,6 +244,18 @@ Não contém testes, só infraestrutura compartilhada:
 - `RepositorioMemoria` também guarda spans (sem somar duas vezes o mesmo), validações e FactSheets, e recusa número de claim que não está em `numeros`, como o Supabase. Guarda ainda a quarentena e as decisões da revisão, com as mesmas regras: uma decisão por claim, e aceitar só com FactSheet assinado.
 - `RepositorioMemoria` guarda também as rodadas do gate com a saída do planejador, o plano e as células, recusa o plano sem FactSheet do run, recusa outro plano para o run que já tem plano e recusa `rodada` em span que não é do `adapter`. O FactSheet e o plano ficam como JSON (`model_dump(mode="json")`) e voltam por `model_validate`, como pelo Postgres; `factsheet_gravado` e `plano_gravado` são os atalhos dos testes para ler o que foi gravado.
 - `ProviderFalso` e `cliente_falso`: o LLM simulado. `resposta_plano(*claim_ids)`: resposta do planejador que usa os claims dados nos 3 níveis, com as prioridades em ordem.
+
+## Métricas
+
+`test_metrics.py` (regras em `docs/metricas.md`) roda `sunontent/metrics/` sobre peças montadas no teste, com o LevelSpec e o glossário de teste, sem LLM e sem banco. Os claims do plano são `C01` a `C04` e a `tabela_numeros` tem um número (`9,9%`) que está no documento e em nenhum claim.
+
+- **M1, os desfechos:** número de marcador passa; número escrito à mão com o valor de um claim do plano, com a instrução do marcador (o do claim que a peça usa tem preferência, e a `ordem` é a do número no claim); número do documento fora do plano; número ausente do documento; mesmo valor com outra unidade; marcador inválido que ficou no texto (sozinho e ao lado de um válido); número em formato que o parser não lê (`US$ 5`), que não impede a varredura do resto; várias violações no mesmo texto saem todas.
+- **M1, os campos:** marcador vale no título e não vale na linha fina nem no gancho visual (o número é violação com a instrução de remover); a fala da cena; marcador de uma unidade que não cobre o número de outra.
+- **M1, o glossário:** `IPCA-15` é mascarado; sem a máscara o `15 de outubro` seria lido como data sem lastro.
+- **M1, as datas:** data com dia, por extenso e com o ano do documento passam; data que nenhum claim traz, ano diferente do ano do documento, ano e trimestre sem lastro são violação; o ano do documento vale sem claim; data não conta como número varrido.
+- **M2:** artigo dentro da faixa, nos dois limites, curto e longo, com título e linha fina fora da contagem e a faixa de cada nível; carrossel com o limite de cada papel e a letra acentuada contada uma vez; roteiro com o limite de cada cena e do total, inclusive o total acima do limite com as cenas dentro; a faixa registrada traz o limite renderizado.
+- **M5:** termo com analogia no plano e marcador na mesma unidade; sem marcador; sem analogia no plano; marcador só na unidade seguinte; só a primeira ocorrência conta; marcador sem diferença de maiúscula e acento e não dentro de outra palavra; termo de nível iniciante; termo só no título; analogia `nova` ligada pela forma escrita; Intermediário e Avançado fora da regra; a unidade nomeada como seção, slide ou cena.
+- **Valor, faixa e detalhes:** o valor é o número de violações; o da `llm_judge` é `true` ou `false`; o `plan_contract` monta o resultado pelo mesmo `resultado.montar`.
 
 ## test_ingestao.py
 

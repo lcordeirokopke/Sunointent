@@ -26,7 +26,12 @@ from sunontent.schemas import Unidade
 
 
 class NumeroNaoPrevisto(ValueError):
-    """Trecho numérico em formato que o parser não interpreta."""
+    """Trecho numérico em formato que o parser não interpreta. `posicao` é o início do trecho no texto
+    varrido, quando o erro vem de `varrer`."""
+
+    def __init__(self, mensagem: str, posicao: int | None = None):
+        super().__init__(mensagem)
+        self.posicao = posicao
 
 
 @dataclass(frozen=True)
@@ -127,12 +132,13 @@ def varrer(texto: str) -> list[Encontrado]:
             continue
         if tipo == "moeda":
             raise NumeroNaoPrevisto(
-                f"moeda não prevista em {_contexto(texto, inicio)!r}: só R$ é interpretado"
+                f"moeda não prevista em {_contexto(texto, inicio)!r}: só R$ é interpretado", inicio
             )
         if tipo == "estranho":
             raise NumeroNaoPrevisto(
                 f"formato de número não previsto: {bruto!r} em {_contexto(texto, inicio)!r}. "
-                "O parser só aceita ponto de milhar e vírgula decimal (1.234,56)."
+                "O parser só aceita ponto de milhar e vírgula decimal (1.234,56).",
+                inicio,
             )
         if tipo in ("dataext", "datanum", "trimestre"):
             for parte in re.finditer(r"\d+", bruto):
@@ -206,20 +212,26 @@ _DATA_EXTENSO = re.compile(
 )
 
 
-def datas(texto: str) -> list[Data]:
-    """Datas com dia do texto: "19/10", "19/10/2026", "19 de outubro", "15 e 16 de setembro de 2026" (uma
-    Data por dia). Mês e ano sem dia ("junho de 2026", "dez/25") e trimestre ("2T26") ficam de fora."""
+def datas_com_posicao(texto: str) -> list[tuple[Data, int, int]]:
+    """As mesmas datas de `datas`, na mesma ordem, cada uma com o início e o fim (exclusivo) da expressão no
+    texto. As Datas de "15 e 16 de setembro" têm a mesma posição, a da expressão inteira."""
     achadas = []
     for m in _DATA_NUMERICA.finditer(texto):
         dia, mes = int(m.group(1)), int(m.group(2))
         ano = m.group(3)
         if 1 <= dia <= 31 and 1 <= mes <= 12:
-            achadas.append(Data(dia, mes, _ano(ano), m.group(0)))
+            achadas.append((Data(dia, mes, _ano(ano), m.group(0)), m.start(), m.end()))
     for m in _DATA_EXTENSO.finditer(texto):
         mes = _NUMERO_DO_MES[m.group(2).lower()]
         for dia in re.findall(r"\d{1,2}", m.group(1)):
-            achadas.append(Data(int(dia), mes, _ano(m.group(3)), m.group(0)))
+            achadas.append((Data(int(dia), mes, _ano(m.group(3)), m.group(0)), m.start(), m.end()))
     return achadas
+
+
+def datas(texto: str) -> list[Data]:
+    """Datas com dia do texto: "19/10", "19/10/2026", "19 de outubro", "15 e 16 de setembro de 2026" (uma
+    Data por dia). Mês e ano sem dia ("junho de 2026", "dez/25") e trimestre ("2T26") ficam de fora."""
+    return [data for data, _, _ in datas_com_posicao(texto)]
 
 
 def _ano(texto: str | None) -> int | None:

@@ -553,6 +553,7 @@ class DesfechosNumericos(BaseModel):
     fora_do_plano_no_documento: int = Field(default=0, ge=0)  # existe na tabela de números, mas em nenhum claim do plano
     ausente_do_documento: int = Field(default=0, ge=0)  # alucinação
     marcador_invalido: int = Field(default=0, ge=0)  # marcador inexistente ou de claim fora do plano
+    formato_nao_previsto: int = Field(default=0, ge=0)  # número que o parser não lê (US$ 5, 1.234.5)
     data_sem_lastro: int = Field(default=0, ge=0)  # data, ano ou trimestre que nenhum claim do plano nem a data do documento cobre
 
 

@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from sunontent.numeros import Data, NumeroNaoPrevisto, datas, interpretar, varrer
+from sunontent.numeros import Data, NumeroNaoPrevisto, datas, datas_com_posicao, interpretar, varrer
 
 
 def d(texto: str) -> Decimal:
@@ -192,3 +192,20 @@ def test_ordinal_de_periodo_abreviado_e_data():
     assert [(a.bruto, a.unidade) for a in varrer("1º tri 2028, 1º trimestre e 3º lugar")] == [
         ("1º", "data"), ("2028", "data"), ("1º", "data"), ("3º", "contagem"),
     ]
+
+
+def test_datas_com_posicao_tem_as_mesmas_datas_e_o_intervalo_da_expressao():
+    texto = "Em 15 e 16 de setembro de 2026, depois em 19/10."
+    com_posicao = datas_com_posicao(texto)
+    assert [d for d, _, _ in com_posicao] == datas(texto)
+    assert [(texto[a:b]) for _, a, b in com_posicao] == [
+        "19/10", "15 e 16 de setembro de 2026", "15 e 16 de setembro de 2026"]
+
+
+def test_numero_nao_previsto_traz_a_posicao_do_trecho():
+    with pytest.raises(NumeroNaoPrevisto) as erro:
+        varrer("A cotação foi de US$ 5 no dia.")
+    assert erro.value.posicao == 17
+    with pytest.raises(NumeroNaoPrevisto) as erro:
+        varrer("Subiu 1.234.5 pontos.")
+    assert erro.value.posicao == 6
