@@ -1,21 +1,30 @@
-versao: 4
+versao: 5
 # Snapshot fixo do modelo de cada nó (docs/arquiteturas.md, 1. Model client / router).
 # O juiz (judge) precisa ser de família diferente do extractor.
 modelos:
   extractor: gemini-3.8-flash
   adapter: gemini-3.8-flash
+  synthesizer: gemini-3.8-flash
+  judge: nvidia/nemotron-3-ultra-550b-a55b
 # Preço em US$ por 1 milhão de tokens, por snapshot. Tokens de raciocínio contam como saída.
 # Fonte: ai.google.dev/gemini-api/docs/pricing, consultado em 2026-10-12; o preço do
 # gemini-3.8-flash é promocional até 2026-12-31.
+# O juiz é cobrado pelo preço do endpoint DeepInfra do OpenRouter (único que aceita saída com schema), consultado
+# em 2026-10-15 em openrouter.ai/api/v1/models/nvidia/nemotron-3-ultra-550b-a55b/endpoints.
 precos_usd_por_milhao:
   gemini-3.8-flash:
     entrada: "0.75"
     saida: "3.75"
+  nvidia/nemotron-3-ultra-550b-a55b:
+    entrada: "0.50"
+    saida: "2.20"
 # Nível de raciocínio por chamada (minimal, low, medium ou high); chamada sem chave aqui usa o padrão
 # do modelo. A correção do extractor só ajusta claims recusados, com o motivo, e não relê o documento todo.
 # A correção do planejador (E4) só resolve os problemas do gate no plano enviado.
+# A correção do redator (E5) reescreve a peça com o relatório corretivo; o plano não muda.
 raciocinio:
   extractor_correcao: low
   adapter_correcao: low
+  synthesizer_correcao: low
 # PENDENTE: cotação USD/BRL provisória, usada só para estimar llm_spans.custo_brl e runs.custo_total_brl.
 cotacao_usd_brl: "5.40"

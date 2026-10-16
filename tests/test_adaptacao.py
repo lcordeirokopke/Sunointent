@@ -38,6 +38,7 @@ def spec(nivel, foco, priorizadas, descartaveis, max_claims):
             "roteiro": {"max_claims": 3, "duracao_s": 60, "palavras_por_segundo": 2.5, "abertura_s": 6,
                         "fechamento_s": 6},
         },
+        **({"analogia": {"marcadores": ["é como", "funciona como"]}} if nivel == "iniciante" else {}),
     })
 
 

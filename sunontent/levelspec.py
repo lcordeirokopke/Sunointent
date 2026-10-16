@@ -1,11 +1,13 @@
 """Leitura e validação de config/levels/ (docs/fluxos/plano-editorial.md, LevelSpec da E4).
 
-O LevelSpec existe só em config/levels/: o prompt e o avaliador leem o mesmo arquivo. Hoje o arquivo
-tem os campos da E4 e o contrato de formato (`peso_papel` e `formatos`), lido pela E4 (o `max_claims` do
-plano é o do artigo) e, depois, pela E5.1 e pela M2; os campos das métricas entram com a M2 a M5. Arquivo
-inválido é FalhaTerminal: o run aborta no início da E4.
+O LevelSpec existe só em config/levels/: o prompt e o avaliador leem o mesmo arquivo. O arquivo tem os campos
+da E4, o contrato de formato (`peso_papel` e `formatos`), lido pela E4 (o `max_claims` do plano é o do artigo),
+pela E5.1 e pela M2, e, no Iniciante, o bloco `analogia` com os marcadores que a M5 procura. As frases do
+prompt do redator e o limite da M2 saem da mesma função, `instrucoes_redator`. Arquivo inválido é
+FalhaTerminal: o run aborta no início da E4.
 """
 
+import warnings
 from pathlib import Path
 from typing import get_args
 
@@ -22,7 +24,7 @@ from pydantic import (
 )
 
 from sunontent.retentativa import FalhaTerminal
-from sunontent.schemas import Nivel, Tag
+from sunontent.schemas import Formato, Nivel, Tag
 
 # Única tag que corresponde a um motivo de descarte (docs/arquiteturas.md, E4.1).
 TAGS_DESCARTAVEIS_PERMITIDAS = ("metodologico",)
@@ -106,6 +108,24 @@ class Formatos(_Fechado):
         return self
 
 
+class RegraAnalogia(_Fechado):
+    """Regra da M5 (só no Iniciante): expressões que marcam uma analogia no texto, na mesma unidade da
+    primeira ocorrência do termo."""
+
+    marcadores: list[str] = Field(min_length=1)
+
+    @field_validator("marcadores")
+    @classmethod
+    def _expressoes(cls, marcadores: list[str]) -> list[str]:
+        curtos = [m for m in marcadores if len(m.split()) < 2]
+        if curtos:
+            raise ValueError(f"cada marcador tem pelo menos duas palavras (encontrado: {', '.join(map(repr, curtos))})")
+        normalizados = [" ".join(m.lower().split()) for m in marcadores]
+        if len(set(normalizados)) != len(normalizados):
+            raise ValueError("marcadores repetidos")
+        return marcadores
+
+
 class LevelSpec(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -116,6 +136,7 @@ class LevelSpec(BaseModel):
     tags_descartaveis: list[Tag]
     peso_papel: PesoPapel
     formatos: Formatos
+    analogia: RegraAnalogia | None = None
 
     @property
     def max_claims(self) -> int:
@@ -137,6 +158,14 @@ class LevelSpec(BaseModel):
             raise ValueError(f"tag em tags_priorizadas e em tags_descartaveis: {', '.join(comuns)}")
         return self
 
+    @model_validator(mode="after")
+    def _analogia_so_no_iniciante(self) -> "LevelSpec":
+        if self.nivel == "iniciante" and self.analogia is None:
+            raise ValueError("o bloco `analogia` é obrigatório no Iniciante")
+        if self.nivel != "iniciante" and self.analogia is not None:
+            raise ValueError("o bloco `analogia` só vale no Iniciante")
+        return self
+
 
 def carregar(raiz: Path, nivel: str) -> LevelSpec:
     """Lê e valida config/levels/<nivel>.yaml. `nivel` do arquivo precisa ser igual ao nome do arquivo."""
@@ -150,14 +179,83 @@ def carregar(raiz: Path, nivel: str) -> LevelSpec:
     if dados.get("nivel") != nivel:
         raise FalhaTerminal(f"{relativo}: `nivel` é {dados.get('nivel')!r}, esperado {nivel!r}")
     try:
-        return LevelSpec.model_validate(dados)
+        spec = LevelSpec.model_validate(dados)
     except ValidationError as erro:
         detalhes = "; ".join(
             f"{'.'.join(str(p) for p in e['loc']) or '(raiz)'}: {e['msg']}" for e in erro.errors()
         )
         raise FalhaTerminal(f"{relativo}: LevelSpec inválido: {detalhes}") from erro
+    carrossel = spec.formatos.carrossel
+    if carrossel.max_claims > carrossel.slides.max - 2:
+        warnings.warn(
+            f"{relativo}: carrossel.max_claims ({carrossel.max_claims}) é maior que os slides de corpo "
+            f"possíveis (slides.max - 2 = {carrossel.slides.max - 2}): um slide de corpo terá mais de um claim",
+            UserWarning,
+            stacklevel=2,
+        )
+    return spec
 
 
 def carregar_todos(raiz: Path) -> dict[str, LevelSpec]:
-    """Os 3 níveis, na ordem iniciante, intermediario e avancado."""
-    return {nivel: carregar(raiz, nivel) for nivel in get_args(Nivel)}
+    """Os 3 níveis, na ordem iniciante, intermediario e avancado. As palavras mínimas do artigo crescem com o nível."""
+    specs = {nivel: carregar(raiz, nivel) for nivel in get_args(Nivel)}
+    minimos = [specs[nivel].formatos.artigo.palavras.min for nivel in specs]
+    if minimos != sorted(minimos):
+        raise FalhaTerminal(
+            "config/levels/: formatos.artigo.palavras.min precisa crescer do Iniciante ao Avançado "
+            f"(encontrado: {', '.join(f'{n} {specs[n].formatos.artigo.palavras.min}' for n in specs)})"
+        )
+    return specs
+
+
+class InstrucoesRedator(_Fechado):
+    """O que o prompt do redator (E5.2) e a M2 leem do LevelSpec para um formato."""
+
+    orcamento: str  # o contrato do formato, em frases
+    marcadores: str  # as expressões de analogia do Iniciante, em frase; vazio nos outros níveis
+    faixa_esperada: str  # o limite renderizado, que a M2 registra no scorecard
+
+
+def _numero(valor: float) -> str:
+    """Número no formato do texto da peça: vírgula decimal, sem zero à toa."""
+    return f"{valor:g}".replace(".", ",")
+
+
+def instrucoes_redator(spec: LevelSpec, formato: Formato) -> InstrucoesRedator:
+    f = spec.formatos
+    if formato == "artigo":
+        faixa = f"de {f.artigo.palavras.min} a {f.artigo.palavras.max} palavras no texto das seções"
+        orcamento = (
+            f"Escreva o artigo com {faixa} (o título e a linha fina não entram na contagem), "
+            f"usando até {f.artigo.max_claims} claims."
+        )
+    elif formato == "carrossel":
+        c = f.carrossel
+        faixa = (
+            f"até {c.caracteres.gancho} caracteres no gancho, {c.caracteres.corpo} em cada slide de corpo "
+            f"e {c.caracteres.conclusao} na conclusão"
+        )
+        orcamento = (
+            f"Escreva de {c.slides.min} a {c.slides.max} slides, contando o gancho e a conclusão: um gancho no "
+            f"início, os slides de corpo e uma conclusão no fim, com {faixa}, usando até {c.max_claims} claims."
+        )
+    else:
+        r = f.roteiro
+        total = int(r.duracao_s * r.palavras_por_segundo)
+        faixa = (
+            f"até {_numero(r.palavras_por_segundo)} palavras por segundo em cada cena e até {total} palavras "
+            f"em {r.duracao_s} segundos"
+        )
+        orcamento = (
+            f"Escreva um roteiro de até {r.duracao_s} segundos, com {faixa}. Comece em 0 s, sem lacuna nem "
+            f"sobreposição entre as cenas: uma cena de abertura com o gancho (cerca de {r.abertura_s} s), uma "
+            f"cena por claim, até {r.max_claims} claims, e uma cena de fechamento (cerca de {r.fechamento_s} s)."
+        )
+    marcadores = ""
+    if spec.analogia is not None:
+        expressoes = ", ".join('"' + m + '"' for m in spec.analogia.marcadores)
+        marcadores = (
+            "Na primeira vez que usar um termo com analogia no plano, explique-o com a analogia na mesma seção, "
+            f"slide ou cena, usando uma destas expressões: {expressoes}."
+        )
+    return InstrucoesRedator(orcamento=orcamento, marcadores=marcadores, faixa_esperada=faixa)

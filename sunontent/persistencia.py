@@ -449,7 +449,7 @@ def reiniciar_validacoes_plano(repositorio: Repositorio, raiz_dados: Path, run_i
 
 def _gravar_celula_local(raiz_dados: Path, run_id: str, celula: CelulaState) -> Path:
     destino = Path(raiz_dados) / "runs" / run_id / "celulas" / celula.celula_id / "estado.json"
-    return _gravar_json(destino, celula.model_dump(mode="json"))
+    return _gravar_json(destino, celula.model_dump(mode="json", exclude={"peca", "scorecard"}, exclude_none=True))
 
 
 def _gravar_plano_local(raiz_dados: Path, run_id: str, plano: PlanoEditorial, celulas: list[CelulaState]) -> Path:

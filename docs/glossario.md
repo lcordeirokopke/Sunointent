@@ -1,12 +1,12 @@
 # Glossário financeiro: `config/glossario.yaml`
 
-O glossário reúne os termos técnicos das três fontes do projeto (atas do Copom, fatos relevantes da CVM e releases de resultados da B3), o nível a partir do qual cada termo dispensa explicação, as definições por nível e as analogias. É uma fonte única: o planejador da E4, a M4 e a M5 leem o mesmo arquivo, como acontece com o LevelSpec.
+O glossário reúne os termos técnicos das três fontes do projeto (atas do Copom, fatos relevantes da CVM e releases de resultados da B3), o nível a partir do qual cada termo dispensa explicação, as definições por nível e as analogias. É uma fonte única: o planejador da E4 e a M5 leem o mesmo arquivo, como acontece com o LevelSpec.
 
 O arquivo explica conceitos, nunca fatos de um documento. Os fatos vêm só do FactSheet.
 
 ## Estado
 
-O arquivo está montado e versionado no git. Todas as analogias estão em `rascunho`, à espera de revisão humana. Hoje leem o arquivo o `manifesto.py`, que registra a versão e o hash no `RunManifest`, e a E4, pelo `sunontent/glossario.py`, que também é o leitor previsto para a M4 e a M5, ainda não implementadas. Um teste lista as flexões dos termos encontradas nos claims das referências que não estão em `variantes` (`docs/testes.md`, Glossário).
+O arquivo está montado e versionado no git. Todas as analogias estão em `rascunho`, à espera de revisão humana. Hoje leem o arquivo o `manifesto.py`, que registra a versão e o hash no `RunManifest`, e a E4, pelo `sunontent/glossario.py`, que também é o leitor previsto para a M5, ainda não implementada. Um teste lista as flexões dos termos encontradas nos claims das referências que não estão em `variantes` (`docs/testes.md`, Glossário).
 
 ## Formato e campos
 
@@ -89,8 +89,7 @@ Os termos ficam agrupados por categoria, cada grupo aberto por um comentário (`
 | E4.3, complemento | no Iniciante, cada termo acima de iniciante encontrado no texto dos claims usados recebe a primeira analogia `aprovada` do termo ou, sem nenhuma aprovada, a primeira `rascunho`, com a referência `<id>#<n>`. |
 | E4.3, gate | `jargao_sem_analogia`: todo termo acima de iniciante nos claims usados do Iniciante tem analogia no plano. `analogia_invalida`: a analogia `nova` não só repete as formas do termo. `motivo_invalido`: `exige_base_tecnica` só vale para claim com termo de `nivel_minimo` acima do nível, o que nunca acontece no Avançado. `tese_invalida`: a tese do Iniciante não tem termo acima de iniciante, e as formas dos termos ficam fora da busca de números da tese (o 15 de IPCA-15). |
 | E4.3, limpeza | depois da última rodada, o claim do Iniciante com termo sem analogia sai do nível como `exige_base_tecnica`, e as analogias ficam só para os termos dos claims que restaram. |
-| M4 | casa a peça contra termos e variantes pela [regra de casamento](#casamento-no-texto); a densidade é termos técnicos únicos sobre tokens de conteúdo, com piso e teto por nível. |
-| M5 | no Iniciante, todo termo acima de iniciante encontrado no texto precisa de `Analogia` no plano e de um marcador de analogia antes da primeira ocorrência. |
+| M5 | no Iniciante, todo termo acima de iniciante encontrado no texto precisa de `Analogia` no plano e de um marcador de analogia (`analogia.marcadores` do LevelSpec do Iniciante) na mesma unidade da primeira ocorrência, casando o termo pela [regra de casamento](#casamento-no-texto). |
 | M6 | pode receber a definição do termo como referência ao julgar se a analogia está correta. |
 
 Na `Analogia` do plano, `origem` é `glossario` ou `nova`, `glossario_ref` guarda a referência `<id>#<n>`, e `revisada` é `true` só para analogia do glossário com `status: aprovada`.
@@ -99,7 +98,7 @@ O extractor (E2) não consulta o glossário: ele lê só o documento.
 
 ### Casamento no texto
 
-A E4, a M4 e a M5 usam a mesma regra para dizer se um termo aparece num texto. O casamento é por formas explícitas, sem lematizar:
+A E4 e a M5 usam a mesma regra para dizer se um termo aparece num texto. O casamento é por formas explícitas, sem lematizar:
 
 - cada forma (o `termo` e cada variante) casa como está escrita, ignorando maiúsculas e acentos, com fronteira de palavra nos dois lados;
 - a forma escrita só com maiúsculas, dígitos e sinais (sigla, como `CDI`, `IPCA-15` ou `NTN-B`) casa só com a caixa exata;

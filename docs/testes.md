@@ -53,9 +53,11 @@ tests/
 ├── test_extracao.py               # E1: leitura, normalização, chunks, metadados, números e gravação
 ├── test_extractor.py              # E2, E3, cliente LLM e cobertura com a Gemini API (marker gemini)
 ├── test_quarentena.py             # quarentena do loop E2/E3 e revisão humana
-├── test_levelspec.py              # LevelSpec da E4: leitura e validação de config/levels/
+├── test_levelspec.py              # LevelSpec: leitura e validação de config/levels/, bloco analogia, avisos e instrucoes_redator
 ├── test_glossario.py              # glossário: validação, casamento de termos, analogia e flexões
 ├── test_adaptacao.py              # E4: pré-filtro, complemento, gate, planejador e gravação
+├── test_texto.py                  # contagem de palavras e de caracteres do texto da peça
+├── test_schemas.py                # schemas do redator, da peça, do scorecard e da célula
 ├── test_main_graph.py             # manifest, grafo (E0 a E4) e __main__
 ├── test_app.py                    # dashboard: linhas do terminal e API com processo e consulta simulados
 ├── test_persistencia_supabase.py  # integração com o Supabase local
@@ -128,7 +130,7 @@ tests/
 - a regra 7 do prompt descreve todos os tipos do `TipoClaim`, inclusive `evento_corporativo`;
 - falha de infraestrutura repete com espera crescente, sem gastar o contador de parse; 4 falhas viram terminal;
 - bloqueio de conteúdo e erro 4xx são terminais, sem repetir;
-- nó sem modelo, modelo sem preço e nível de raciocínio inválido são terminais; o `config/models.yaml` do repositório tem preço para cada modelo e o raciocínio da correção;
+- nó sem modelo, modelo sem preço e nível de raciocínio inválido são terminais; o `config/models.yaml` do repositório tem preço para cada modelo (inclusive o do juiz, US$ 0,50 de entrada e US$ 2,20 de saída por milhão de tokens) e o raciocínio da correção do extractor, do planejador e do redator;
 - sem `GOOGLE_API_KEY_PRINC`, erro terminal, mesmo com a `GOOGLE_API_KEY_SEC`; o cliente monta as chaves na ordem PRINC e SEC, e a SEC só entra se estiver preenchida;
 - falha de infraestrutura ou chave recusada na PRINC passa para a SEC na mesma tentativa, sem esperar, e o span da falha leva o nome da chave;
 - cada chamada começa pela PRINC, mesmo depois de uma passagem para a SEC;
@@ -171,6 +173,14 @@ tests/
 
 `test_levelspec.py` lê os 3 arquivos de `config/levels/` e confere os valores de `docs/fluxos/plano-editorial.md`, inclusive o contrato de formato (`max_claims` por formato, palavras do artigo, slides e caracteres do carrossel, duração, palavras por segundo, abertura e fechamento do roteiro, peso do papel e versão). Cada regra de validação aborta com o caminho do arquivo: `nivel` diferente do nome do arquivo, tag fora do vocabulário, tag nas duas listas, tag descartável que não é `metodologico`, `max_claims` de cada formato abaixo de 3 ou não inteiro (`"5"`, `5.0`, `true`), `max_claims` no topo do arquivo, formato menor com mais claims que um maior, faixa invertida, carrossel com menos de 3 slides, caractere de um papel ausente, abertura e fechamento que ocupam o roteiro todo, palavras por segundo zero, peso de papel zero, campo desconhecido (no topo e num formato), campo ausente e arquivo vazio ou ausente.
 
+Os testes do bloco `analogia` e das instruções do redator conferem:
+
+- os marcadores do Iniciante, e que Intermediário e Avançado não têm o bloco;
+- `analogia` ausente no Iniciante e presente no Intermediário ou no Avançado: erro terminal; marcadores vazios, de uma palavra só, repetidos (sem maiúsculas e com espaços a mais) e campo desconhecido no bloco: erro terminal;
+- o aviso `carrossel.max_claims` maior que `slides.max - 2` (6 claims e 5 slides de corpo possíveis, num arquivo reescrito) e nenhum aviso nos três níveis atuais (4, 5 e 5, os dois últimos exatamente no limite);
+- as palavras mínimas do artigo: ordem decrescente aborta (`carregar_todos`), valores iguais passam;
+- `instrucoes_redator`: o orçamento e o limite do artigo, do carrossel e do roteiro (com `2,5` de vírgula decimal), os marcadores só no Iniciante.
+
 ### Glossário
 
 `test_glossario.py`, com um glossário pequeno montado no teste e com o do repositório:
@@ -207,6 +217,18 @@ tests/
 - as rodadas antigas do run são apagadas antes da rodada 1.
 
 `test_app.py::test_e4_entra_no_fluxo_do_dashboard` confere o nó `adapt` e as arestas `validate -> adapt`, `quarentena -> adapt` e `adapt -> END` em `/api/grafo`, `RODADAS_PLANO` em `rodadas_plano`, e a etapa E4 com o nó `adapt` no `app.js`. `test_persistencia_supabase.py::test_plano_editorial_rodadas_e_celulas` faz a gravação no Supabase local.
+
+## Contrato da peça
+
+`test_texto.py` confere `contar_palavras` e `contar_caracteres` (`sunontent/texto.py`): texto vazio e só de espaços, `R$ 1,2 bi` com 3 palavras e 9 caracteres, `IPCA-15` com 1 palavra, o travessão e a pontuação soltos que não contam, o marcador `{{C27.1}}` que ficou no texto com 1 palavra (a mesma contagem do trecho do claim que o substitui), quebras de linha e tabulação como separador e a letra acentuada decomposta com 1 caractere.
+
+`test_schemas.py` confere os schemas de `sunontent/schemas.py`:
+
+- **Saída do redator:** `SaidaArtigo` (seção sem claim, artigo sem seções, marcador na `linha_fina`), `SaidaCarrossel` (gancho no início, conclusão no fim, só corpo no meio, slide de corpo sem claim, menos de 3 slides) e `SaidaRoteiro` (primeira cena em 0 s, lacuna, sobreposição, cena sem duração, cena de claim sem claim, marcador no `gancho_visual`, menos de 3 cenas); a abertura, o fechamento, o gancho e a conclusão aceitam `claim_ids` vazio.
+- **`NumeroUsado` e `Peca`:** `campo` e `unidade_indice` coerentes (o título não tem unidade), payload de outro formato, `celula_id` que não confere, `claim_ids` diferente da união das unidades, número em unidade inexistente, tentativa 0 e a ida e volta por JSON que mantém o tipo do payload.
+- **`Violacao`:** posição opcional, `inicio` e `fim` sempre juntos e em ordem, campo e métrica fora do vocabulário.
+- **Detalhes, `MetricaResultado` e `Scorecard`:** as cinco métricas e o modelo de `detalhes` de cada uma (lido de volta do JSON pelo campo `metrica`), detalhes de outra métrica, `passou` coerente com as violações, violação de outra métrica, valor numérico e booleano, e o veredito da tentativa (`APROVADA` só com tudo dentro da faixa, `REPROVADA` só com métrica fora, `ERRO_INFRA` sem regra sobre as métricas), métrica repetida e tentativa 0.
+- **`CelulaState`:** `motivo_reprovacao` obrigatório em `REPROVADA` e proibido nos outros estados, `erro_classe` e `erro_mensagem` obrigatórios em `ERRO_INFRA` e proibidos nos outros, e peça ou scorecard de outra célula.
 
 ## conftest.py
 

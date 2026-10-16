@@ -16,7 +16,7 @@ const ETAPAS = [
   { id: "E5", nos: ["synth"], nome: "Format Synthesizer",
     descricao: "Gera as 9 peças: texto, carrossel e roteiro de vídeo para cada nível." },
   { id: "E6", nos: ["evaluate"], nome: "Hybrid Evaluator",
-    descricao: "Mede legibilidade, densidade de jargão e fidelidade factual (M1 a M6)." },
+    descricao: "Mede a fidelidade numérica, o tamanho por nível, a regra de analogia e o entailment dos claims (M1, M2, M5 e M6)." },
   { id: "E7", nos: ["router"], nome: "Router",
     descricao: "Aprova a célula, devolve para nova tentativa ou descarta conforme as métricas." },
 ];

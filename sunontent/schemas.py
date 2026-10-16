@@ -1,9 +1,10 @@
 """Contrato de dados do pipeline."""
 
+import re
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Literal, get_args
+from typing import Annotated, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -332,20 +333,376 @@ class PlanoEditorial(BaseModel):
         return next(p for p in self.niveis if p.nivel == nivel)
 
 
+# Peça final, saída do redator (E5) e avaliação (E6). Docs: docs/arquiteturas.md, Peça final e Scorecard e violação.
+
+Metrica = Literal["numeric_fidelity", "text_size", "analogy_rule", "llm_judge", "plan_contract"]
+METRICAS: tuple[str, ...] = get_args(Metrica)
+# Onde, dentro da unidade da peça, está o trecho: `texto` é o texto da seção, do slide ou a fala da cena.
+CampoPeca = Literal["titulo", "linha_fina", "texto", "gancho_visual"]
+# Campos que podem ter número com marcador (docs/arquiteturas.md, Peça final): o texto das unidades e o título.
+CampoNumero = Literal["texto", "titulo"]
+MotivoReprovacao = Literal["k_esgotado", "nao_convergencia"]
+ClasseFalha = Literal["retriavel", "terminal"]
+VereditoScorecard = Literal["APROVADA", "REPROVADA", "ERRO_INFRA"]
+
+# Marcador de número no texto do redator: {{C27.1}} é o número 1 do claim C27.
+PADRAO_MARCADOR = re.compile(r"\{\{(C\d+)\.(\d+)\}\}")
+PADRAO_ID_CLAIM = re.compile(r"^C\d+$")
+
+
+def _sem_marcador(texto: str, campo: str) -> str:
+    if PADRAO_MARCADOR.search(texto):
+        raise ValueError(f"{campo} não aceita número com marcador: o número só vale no texto das unidades e no título")
+    return texto
+
+
+class Secao(BaseModel):
+    texto: str = Field(min_length=1, description="o texto da seção; todo número que não seja data é um marcador {{Cnn.k}}")
+    claim_ids: list[str] = Field(min_length=1, description="os claims do plano que a seção usa; nunca vazio")
+
+
+class ArtigoPayload(BaseModel):
+    titulo: str = Field(min_length=1, description="o título; aceita número só por marcador {{Cnn.k}}")
+    linha_fina: str = Field(min_length=1, description="a linha fina, sem número com marcador")
+    secoes: list[Secao] = Field(min_length=1)
+
+    @field_validator("linha_fina")
+    @classmethod
+    def _linha_fina_sem_marcador(cls, valor: str) -> str:
+        return _sem_marcador(valor, "linha_fina")
+
+    def textos(self) -> list[str]:
+        return [s.texto for s in self.secoes]
+
+    def claim_ids(self) -> list[str]:
+        return _uniao([s.claim_ids for s in self.secoes])
+
+
+class Slide(BaseModel):
+    papel: Literal["gancho", "corpo", "conclusao"]
+    texto: str = Field(min_length=1)
+    claim_ids: list[str] = Field(description="vazio só no gancho e na conclusão; o slide de corpo usa pelo menos um")
+
+
+class CarrosselPayload(BaseModel):
+    slides: list[Slide] = Field(min_length=3, description="um gancho no início, slides de corpo e uma conclusão no fim")
+
+    @model_validator(mode="after")
+    def _estrutura(self) -> "CarrosselPayload":
+        papeis = [s.papel for s in self.slides]
+        if papeis[0] != "gancho" or papeis[-1] != "conclusao" or any(p != "corpo" for p in papeis[1:-1]):
+            raise ValueError(
+                "o carrossel tem exatamente um gancho no início, slides de corpo e uma conclusão no fim "
+                f"(encontrado: {', '.join(papeis)})"
+            )
+        sem_claim = [i for i, s in enumerate(self.slides) if s.papel == "corpo" and not s.claim_ids]
+        if sem_claim:
+            raise ValueError(f"o slide de corpo usa pelo menos um claim (slides {', '.join(map(str, sem_claim))})")
+        return self
+
+    def textos(self) -> list[str]:
+        return [s.texto for s in self.slides]
+
+    def claim_ids(self) -> list[str]:
+        return _uniao([s.claim_ids for s in self.slides])
+
+
+class Cena(BaseModel):
+    inicio_s: int = Field(ge=0)
+    fim_s: int = Field(ge=1)
+    fala: str = Field(min_length=1)
+    gancho_visual: str = Field(min_length=1, description="o que aparece na tela, sem número com marcador")
+    claim_ids: list[str] = Field(description="vazio só na abertura e no fechamento; a cena de claim usa pelo menos um")
+
+    @field_validator("gancho_visual")
+    @classmethod
+    def _gancho_visual_sem_marcador(cls, valor: str) -> str:
+        return _sem_marcador(valor, "gancho_visual")
+
+
+class RoteiroPayload(BaseModel):
+    cenas: list[Cena] = Field(min_length=3, description="abertura, uma cena por claim e fechamento, em ordem")
+
+    @model_validator(mode="after")
+    def _estrutura(self) -> "RoteiroPayload":
+        if self.cenas[0].inicio_s != 0:
+            raise ValueError(f"a primeira cena começa em 0 s (encontrado: {self.cenas[0].inicio_s})")
+        for i, cena in enumerate(self.cenas):
+            if cena.fim_s <= cena.inicio_s:
+                raise ValueError(f"a cena {i} termina em {cena.fim_s} s, antes de durar mais de 0 s")
+            if i and cena.inicio_s != self.cenas[i - 1].fim_s:
+                raise ValueError(
+                    f"as cenas são contíguas: a cena {i} começa em {cena.inicio_s} s e a anterior termina em "
+                    f"{self.cenas[i - 1].fim_s} s"
+                )
+        # A abertura é a primeira cena e o fechamento é a última; as do meio são de claim.
+        sem_claim = [i for i, c in enumerate(self.cenas[1:-1], start=1) if not c.claim_ids]
+        if sem_claim:
+            raise ValueError(f"a cena de claim usa pelo menos um claim (cenas {', '.join(map(str, sem_claim))})")
+        return self
+
+    def textos(self) -> list[str]:
+        return [c.fala for c in self.cenas]
+
+    def claim_ids(self) -> list[str]:
+        return _uniao([c.claim_ids for c in self.cenas])
+
+
+def _uniao(listas: list[list[str]]) -> list[str]:
+    vistos: dict[str, None] = {}
+    for lista in listas:
+        for item in lista:
+            vistos.setdefault(item, None)
+    return list(vistos)
+
+
+# Saída do redator: o payload do formato com os marcadores no texto, antes da montagem (E5.2). Schema próprio por
+# formato, separado da `Peca`; a montagem troca os marcadores e entrega o payload final.
+
+
+class SaidaArtigo(ArtigoPayload):
+    """Artigo como o redator o escreve: título e texto das seções com marcadores {{Cnn.k}}."""
+
+
+class SaidaCarrossel(CarrosselPayload):
+    """Carrossel como o redator o escreve: texto dos slides com marcadores {{Cnn.k}}."""
+
+
+class SaidaRoteiro(RoteiroPayload):
+    """Roteiro como o redator o escreve: fala das cenas com marcadores {{Cnn.k}}."""
+
+
+class NumeroUsado(BaseModel):
+    """De onde veio um número da peça: o marcador, o claim e, pelo claim, a âncora no PDF."""
+
+    campo: CampoNumero = "texto"
+    unidade_indice: int | None = Field(default=None, ge=0)  # posição da seção, slide ou cena; None no título
+    inicio: int = Field(ge=0)  # offset do número no campo, depois da troca do marcador
+    fim: int
+    claim_id: str  # o marcador {{C27.1}} é o número 1 do claim C27
+    ordem: int = Field(ge=1)  # a posição do número na lista do claim
+
+    @model_validator(mode="after")
+    def _posicao(self) -> "NumeroUsado":
+        if self.fim <= self.inicio:
+            raise ValueError(f"fim ({self.fim}) precisa ser maior que inicio ({self.inicio})")
+        if (self.campo == "titulo") != (self.unidade_indice is None):
+            raise ValueError("unidade_indice é None no título e obrigatório no texto das unidades")
+        return self
+
+
+Payload = ArtigoPayload | CarrosselPayload | RoteiroPayload
+_PAYLOAD_DO_FORMATO: dict[str, type[BaseModel]] = {
+    "artigo": ArtigoPayload, "carrossel": CarrosselPayload, "roteiro": RoteiroPayload,
+}
+
+
+class Peca(BaseModel):
+    celula_id: str
+    nivel: Nivel
+    formato: Formato
+    payload: Payload  # texto final, com os números já no lugar dos marcadores
+    claim_ids: list[str]  # união dos claim_ids das unidades
+    numeros_usados: list[NumeroUsado]
+    tentativa: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def _coerente(self) -> "Peca":
+        if self.celula_id != celula_id(self.nivel, self.formato):
+            raise ValueError(f"celula_id {self.celula_id!r} não confere com {self.nivel} e {self.formato}")
+        if type(self.payload) is not _PAYLOAD_DO_FORMATO[self.formato]:
+            raise ValueError(f"o payload de {type(self.payload).__name__} não é de uma peça {self.formato}")
+        if set(self.claim_ids) != set(self.payload.claim_ids()):
+            raise ValueError("claim_ids precisa ser a união dos claim_ids das unidades do payload")
+        unidades = len(self.payload.textos())
+        fora = [n.unidade_indice for n in self.numeros_usados if n.unidade_indice is not None and n.unidade_indice >= unidades]
+        if fora:
+            raise ValueError(f"numeros_usados aponta para unidade inexistente (índices {', '.join(map(str, fora))})")
+        return self
+
+
+class Violacao(BaseModel):
+    metrica: Metrica
+    trecho: str  # o texto exato que violou
+    esperado: str
+    obtido: str
+    instrucao_corretiva: str  # o que fazer, em linguagem imperativa
+    # Onde está o trecho: a unidade (None no título e na linha fina), o campo e o intervalo no campo.
+    unidade_indice: int | None = Field(default=None, ge=0)
+    campo: CampoPeca | None = None
+    inicio: int | None = Field(default=None, ge=0)
+    fim: int | None = None
+
+    @model_validator(mode="after")
+    def _intervalo(self) -> "Violacao":
+        if (self.inicio is None) != (self.fim is None):
+            raise ValueError("inicio e fim vêm juntos")
+        if self.inicio is not None and self.fim <= self.inicio:
+            raise ValueError(f"fim ({self.fim}) precisa ser maior que inicio ({self.inicio})")
+        return self
+
+
+# `detalhes` de cada métrica (metricas.detalhes, jsonb). Cada modelo leva o nome da métrica em `metrica`, que
+# distingue os cinco quando o jsonb é lido de volta.
+
+
+class DesfechosNumericos(BaseModel):
+    """Contagem dos desfechos da M1 (docs/arquiteturas.md, E6, M1)."""
+
+    fora_de_marcador_do_plano: int = Field(default=0, ge=0)  # mesmo valor e unidade de um número de claim do plano
+    fora_do_plano_no_documento: int = Field(default=0, ge=0)  # existe na tabela de números, mas em nenhum claim do plano
+    ausente_do_documento: int = Field(default=0, ge=0)  # alucinação
+    marcador_invalido: int = Field(default=0, ge=0)  # marcador inexistente ou de claim fora do plano
+    data_sem_lastro: int = Field(default=0, ge=0)  # data, ano ou trimestre que nenhum claim do plano nem a data do documento cobre
+
+
+class NumericFidelityDetalhes(BaseModel):
+    metrica: Literal["numeric_fidelity"] = "numeric_fidelity"
+    numeros_varridos: int = Field(ge=0)  # números que não são data, no texto final da peça
+    com_marcador: int = Field(ge=0)  # os que coincidem com uma posição de `numeros_usados`
+    datas_conferidas: int = Field(ge=0)
+    desfechos: DesfechosNumericos
+
+
+class MedidaUnidade(BaseModel):
+    unidade_indice: int | None = Field(default=None, ge=0)  # None no total do roteiro
+    papel: str | None = None  # gancho, corpo ou conclusao no carrossel
+    medida: int = Field(ge=0)
+    limite_min: int | None = None
+    limite_max: int
+    dentro: bool
+
+
+class TextSizeDetalhes(BaseModel):
+    metrica: Literal["text_size"] = "text_size"
+    grandeza: Literal["palavras", "caracteres"]
+    limite: str  # o limite renderizado do LevelSpec (InstrucoesRedator.faixa_esperada)
+    unidades: list[MedidaUnidade]  # no roteiro, a última é o total de palavras (unidade_indice None)
+
+
+class TermoAnalogia(BaseModel):
+    termo: str
+    glossario_id: str
+    unidade_indice: int | None = Field(default=None, ge=0)  # onde o termo aparece primeiro; None no título e na linha fina
+    analogia_no_plano: bool
+    marcador_na_unidade: bool
+
+
+class AnalogyRuleDetalhes(BaseModel):
+    metrica: Literal["analogy_rule"] = "analogy_rule"
+    aplicavel: bool  # a regra vale só no Iniciante
+    termos: list[TermoAnalogia]  # os termos do glossário acima de iniciante encontrados na peça
+
+
+class ChecagemContrato(BaseModel):
+    nome: Literal["quantidade_de_slides", "soma_das_cenas", "claim_ids_no_plano", "cobertura_do_formato"]
+    esperado: str
+    obtido: str
+    passou: bool
+
+
+class PlanContractDetalhes(BaseModel):
+    metrica: Literal["plan_contract"] = "plan_contract"
+    checagens: list[ChecagemContrato]
+
+
+class VeredictoAnalogia(BaseModel):
+    termo: str
+    justificativa: str  # antes do booleano, na ordem em que o juiz escreve
+    correta: bool
+
+
+class VeredictoUnidade(BaseModel):
+    unidade_indice: int = Field(ge=0)
+    justificativa: str
+    implicada: bool
+    trecho_problematico: str | None = None
+
+
+class LlmJudgeDetalhes(BaseModel):
+    metrica: Literal["llm_judge"] = "llm_judge"
+    analogias: list[VeredictoAnalogia]
+    unidades: list[VeredictoUnidade]
+    nivel_percebido: Nivel  # só informativo: alimenta a matriz de confusão de níveis
+
+
+Detalhes = Annotated[
+    NumericFidelityDetalhes | TextSizeDetalhes | AnalogyRuleDetalhes | PlanContractDetalhes | LlmJudgeDetalhes,
+    Field(discriminator="metrica"),
+]
+
+
+class MetricaResultado(BaseModel):
+    nome: Metrica
+    valor: float | bool  # número de violações (unidades fora do limite, na text_size); true ou false na llm_judge
+    faixa_esperada: str
+    passou: bool
+    violacoes: list[Violacao]
+    detalhes: Detalhes
+
+    @model_validator(mode="after")
+    def _coerente(self) -> "MetricaResultado":
+        if self.detalhes.metrica != self.nome:
+            raise ValueError(f"detalhes de {self.detalhes.metrica} na métrica {self.nome}")
+        if self.passou == bool(self.violacoes):
+            raise ValueError("passou é verdadeiro se, e somente se, a métrica não tem violações")
+        trocadas = sorted({v.metrica for v in self.violacoes if v.metrica != self.nome})
+        if trocadas:
+            raise ValueError(f"violação de {', '.join(trocadas)} na métrica {self.nome}")
+        return self
+
+
+class Scorecard(BaseModel):
+    """Resultado de uma tentativa. O veredito é da tentativa; o estado final da célula fica em `celulas`."""
+
+    celula_id: str
+    tentativa: int = Field(ge=1)
+    metricas: list[MetricaResultado]
+    veredito: VereditoScorecard
+    custo_tokens: int = Field(ge=0)
+    duracao_ms: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _veredito(self) -> "Scorecard":
+        nomes = [m.nome for m in self.metricas]
+        if len(set(nomes)) != len(nomes):
+            raise ValueError("uma métrica aparece mais de uma vez no scorecard")
+        todas_passaram = all(m.passou for m in self.metricas)
+        if self.veredito == "APROVADA" and not todas_passaram:
+            raise ValueError("APROVADA exige todas as métricas dentro da faixa")
+        if self.veredito == "REPROVADA" and todas_passaram:
+            raise ValueError("REPROVADA exige pelo menos uma métrica fora da faixa")
+        return self
+
+
 class CelulaState(BaseModel):
-    """Estado de uma das 9 células (docs/arquiteturas.md, O objeto de estado). `peca` e `scorecard`
-    entram com a E5 e a E6."""
+    """Estado de uma das 9 células (docs/arquiteturas.md, O objeto de estado)."""
 
     celula_id: str
     nivel: Nivel
     formato: Formato
-    tentativa: int = Field(default=0, ge=0)
+    peca: Peca | None = None
+    scorecard: Scorecard | None = None
+    tentativa: int = Field(default=0, ge=0)  # número da última peça gerada; 0 = nenhuma
     estado: EstadoCelula = "PENDENTE"
+    motivo_reprovacao: MotivoReprovacao | None = None  # só em REPROVADA; a tentativa que explica é `tentativa`
+    erro_classe: ClasseFalha | None = None  # só em ERRO_INFRA
+    erro_mensagem: str | None = None
 
     @model_validator(mode="after")
     def _id(self) -> "CelulaState":
         if self.celula_id != celula_id(self.nivel, self.formato):
             raise ValueError(f"celula_id {self.celula_id!r} não confere com {self.nivel} e {self.formato}")
+        for objeto in (self.peca, self.scorecard):
+            if objeto is not None and objeto.celula_id != self.celula_id:
+                raise ValueError(f"{type(objeto).__name__} de {objeto.celula_id} na célula {self.celula_id}")
+        if (self.estado == "REPROVADA") != (self.motivo_reprovacao is not None):
+            raise ValueError("motivo_reprovacao é obrigatório em REPROVADA e proibido nos outros estados")
+        erro = (self.erro_classe, self.erro_mensagem)
+        if self.estado == "ERRO_INFRA" and None in erro:
+            raise ValueError("ERRO_INFRA exige erro_classe e erro_mensagem")
+        if self.estado != "ERRO_INFRA" and erro != (None, None):
+            raise ValueError("erro_classe e erro_mensagem só valem em ERRO_INFRA")
         return self
 
 

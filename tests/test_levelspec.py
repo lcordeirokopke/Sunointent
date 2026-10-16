@@ -41,7 +41,7 @@ def test_le_os_valores_da_spec():
     assert specs["avancado"].tags_priorizadas == ["indicador_chave", "metodologico", "governanca"]
     assert [s.max_claims for s in specs.values()] == [5, 7, 9]  # o do artigo
     assert [(s.formatos.carrossel.max_claims, s.formatos.roteiro.max_claims) for s in specs.values()] == [
-        (4, 3), (5, 5), (6, 5)]
+        (4, 3), (5, 5), (5, 5)]
     assert [(s.formatos.artigo.palavras.min, s.formatos.artigo.palavras.max) for s in specs.values()] == [
         (350, 550), (450, 750), (600, 900)]
     for s in specs.values():
@@ -51,7 +51,7 @@ def test_le_os_valores_da_spec():
         assert (s.formatos.roteiro.abertura_s, s.formatos.roteiro.fechamento_s) == (6, 6)
         caracteres = s.formatos.carrossel.caracteres
         assert (caracteres.gancho, caracteres.corpo, caracteres.conclusao) == (120, 220, 160)
-        assert s.versao == 3
+    assert [s.versao for s in specs.values()] == [4, 3, 4]
     assert specs["avancado"].foco == "análise técnica e institucional"
 
 
@@ -152,3 +152,99 @@ def test_arquivo_ausente_ou_vazio(raiz):
     (raiz / "config" / "levels" / "avancado.yaml").unlink()
     with pytest.raises(FalhaTerminal, match="avancado.yaml: não foi possível ler"):
         levelspec.carregar(raiz, "avancado")
+
+
+# Bloco `analogia`, avisos, ordem entre níveis e instrucoes_redator
+
+
+def test_iniciante_le_os_marcadores_de_analogia():
+    spec = levelspec.carregar(RAIZ, "iniciante")
+    assert spec.analogia.marcadores == ["é como", "funciona como", "imagine que", "na prática"]
+    assert levelspec.carregar(RAIZ, "intermediario").analogia is None
+    assert levelspec.carregar(RAIZ, "avancado").analogia is None
+
+
+def test_analogia_obrigatoria_no_iniciante(raiz):
+    reescrever(raiz, "iniciante", analogia=None)
+    with pytest.raises(FalhaTerminal, match="`analogia` é obrigatório no Iniciante"):
+        levelspec.carregar(raiz, "iniciante")
+
+
+@pytest.mark.parametrize("nivel", ["intermediario", "avancado"])
+def test_analogia_proibida_fora_do_iniciante(raiz, nivel):
+    reescrever(raiz, nivel, analogia={"marcadores": ["é como"]})
+    with pytest.raises(FalhaTerminal, match="`analogia` só vale no Iniciante"):
+        levelspec.carregar(raiz, nivel)
+
+
+@pytest.mark.parametrize("marcadores, mensagem", [
+    ([], "marcadores"),
+    (["como"], "pelo menos duas palavras"),
+    (["é como", "É  como"], "repetidos"),
+    (["é como", " "], "pelo menos duas palavras"),
+])
+def test_marcadores_invalidos(raiz, marcadores, mensagem):
+    reescrever(raiz, "iniciante", analogia={"marcadores": marcadores})
+    with pytest.raises(FalhaTerminal, match=mensagem):
+        levelspec.carregar(raiz, "iniciante")
+
+
+def test_campo_desconhecido_no_bloco_analogia(raiz):
+    reescrever(raiz, "iniciante", analogia={"marcadores": ["é como"], "janela": 40})
+    with pytest.raises(FalhaTerminal, match="janela"):
+        levelspec.carregar(raiz, "iniciante")
+
+
+def test_aviso_quando_o_carrossel_tem_mais_claims_que_slides_de_corpo(raiz):
+    reescrever_formato(raiz, "avancado", "carrossel", max_claims=6)
+    with pytest.warns(UserWarning, match=r"carrossel.max_claims \(6\).*slides.max - 2 = 5"):
+        levelspec.carregar(raiz, "avancado")  # 6 claims e no máximo 7 slides
+
+
+def test_sem_aviso_quando_os_claims_cabem_nos_slides_de_corpo(raiz, recwarn):
+    levelspec.carregar(raiz, "iniciante")  # 4 claims, 5 slides de corpo possíveis
+    levelspec.carregar(raiz, "intermediario")  # 5 claims, exatamente 5
+    levelspec.carregar(raiz, "avancado")  # 5 claims, exatamente 5
+    assert not [w for w in recwarn if issubclass(w.category, UserWarning)]
+
+
+def test_palavras_minimas_do_artigo_crescem_com_o_nivel(raiz):
+    reescrever_formato(raiz, "intermediario", "artigo", palavras={"min": 340, "max": 750})
+    with pytest.raises(FalhaTerminal, match=r"palavras.min precisa crescer.*intermediario 340"):
+        levelspec.carregar_todos(raiz)
+
+
+def test_palavras_minimas_iguais_sao_aceitas(raiz):
+    reescrever_formato(raiz, "intermediario", "artigo", palavras={"min": 350, "max": 750})
+    assert levelspec.carregar_todos(raiz)["intermediario"].formatos.artigo.palavras.min == 350
+
+
+def test_instrucoes_do_artigo_no_iniciante():
+    spec = levelspec.carregar(RAIZ, "iniciante")
+    instrucoes = levelspec.instrucoes_redator(spec, "artigo")
+    assert instrucoes.faixa_esperada == "de 350 a 550 palavras no texto das seções"
+    assert "de 350 a 550 palavras" in instrucoes.orcamento and "usando até 5 claims" in instrucoes.orcamento
+    assert '"é como", "funciona como", "imagine que", "na prática"' in instrucoes.marcadores
+    assert "mesma seção, slide ou cena" in instrucoes.marcadores
+
+
+def test_instrucoes_do_carrossel():
+    spec = levelspec.carregar(RAIZ, "iniciante")
+    instrucoes = levelspec.instrucoes_redator(spec, "carrossel")
+    assert instrucoes.faixa_esperada == "até 120 caracteres no gancho, 220 em cada slide de corpo e 160 na conclusão"
+    assert "de 5 a 7 slides, contando o gancho e a conclusão" in instrucoes.orcamento
+    assert "usando até 4 claims" in instrucoes.orcamento
+
+
+def test_instrucoes_do_roteiro_usam_virgula_decimal():
+    spec = levelspec.carregar(RAIZ, "intermediario")
+    instrucoes = levelspec.instrucoes_redator(spec, "roteiro")
+    assert instrucoes.faixa_esperada == "até 2,5 palavras por segundo em cada cena e até 150 palavras em 60 segundos"
+    assert "cerca de 6 s" in instrucoes.orcamento and "até 5 claims" in instrucoes.orcamento
+    assert "Comece em 0 s" in instrucoes.orcamento
+
+
+@pytest.mark.parametrize("nivel", ["intermediario", "avancado"])
+def test_so_o_iniciante_tem_marcadores_nas_instrucoes(nivel):
+    spec = levelspec.carregar(RAIZ, nivel)
+    assert all(levelspec.instrucoes_redator(spec, f).marcadores == "" for f in ("artigo", "carrossel", "roteiro"))

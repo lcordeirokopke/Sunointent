@@ -470,7 +470,9 @@ def test_no_sem_modelo_ou_modelo_sem_preco_e_terminal():
 def test_config_do_repositorio_tem_preco_para_cada_modelo():
     cliente = ClienteLLM.de_config(RAIZ, ProviderFalso([]))
     assert cliente.custo_brl("gemini-3.8-flash", 1_000_000, 0) == Decimal("4.050000")
-    assert cliente._raciocinio == {"extractor_correcao": "low", "adapter_correcao": "low"}
+    assert cliente.custo_brl("nvidia/nemotron-3-ultra-550b-a55b", 1_000_000, 1_000_000) == Decimal("14.580000")
+    assert cliente._raciocinio == {
+        "extractor_correcao": "low", "adapter_correcao": "low", "synthesizer_correcao": "low"}
 
 
 def test_nivel_de_raciocinio_invalido_e_terminal():

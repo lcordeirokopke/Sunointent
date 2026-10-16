@@ -1,5 +1,5 @@
 nivel: avancado
-versao: 3
+versao: 4
 # Campos da E4 (docs/fluxos/plano-editorial.md, LevelSpec da E4). Valores de partida.
 foco: "análise técnica e institucional"
 tags_priorizadas: [indicador_chave, metodologico, governanca]
@@ -12,7 +12,7 @@ formatos:
     max_claims: 9
     palavras: {min: 600, max: 900}
   carrossel:
-    max_claims: 6
+    max_claims: 5
     slides: {min: 5, max: 7}
     caracteres: {gancho: 120, corpo: 220, conclusao: 160}
   roteiro:

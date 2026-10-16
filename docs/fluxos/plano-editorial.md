@@ -21,26 +21,36 @@ Implementada. O grafo termina na E4: o run fecha com o plano gravado e as 9 cél
 | `sunontent/nodes/adapt.py` | Nó da E4: roda pré-filtro, planejador, complemento e gate em loop, a limpeza depois da última rodada, grava as rodadas, o plano e as 9 células. Grava os spans. |
 | `sunontent/adaptacao/` | Pré-filtro, planejador (monta o prompt de `prompts/adapter.j2` e chama o modelo), complemento, gate e limpeza (`limpeza.py`). |
 | `sunontent/levelspec.py` | Leitura e validação de `config/levels/`. Usado pela E4 e, depois, pela E5 e pelas métricas. |
-| `sunontent/glossario.py` | Leitura e validação de `config/glossario.yaml`, casamento de termos e escolha da analogia do glossário. Usado pela E4 e, depois, pela M4 e pela M5. |
+| `sunontent/glossario.py` | Leitura e validação de `config/glossario.yaml`, casamento de termos e escolha da analogia do glossário. Usado pela E4 e, depois, pela M5. |
 | `prompts/adapter.j2` | Template único do planejador, parametrizado pelo LevelSpec dos 3 níveis. |
 
 ## LevelSpec da E4
 
-A E4 lê de cada `config/levels/<nivel>.yaml` os campos `foco`, `tags_priorizadas`, `tags_descartaveis` e o `max_claims` do artigo. O mesmo arquivo tem o contrato de formato (`peso_papel` e `formatos`), lido pela E5.1 e pela M2. Os campos das métricas (legibilidade, densidade e analogia) entram no LevelSpec junto com a M2 a M5.
+A E4 lê de cada `config/levels/<nivel>.yaml` os campos `foco`, `tags_priorizadas`, `tags_descartaveis` e o `max_claims` do artigo. O mesmo arquivo tem o contrato de formato (`peso_papel` e `formatos`), lido pela E5.1, pelo prompt do redator e pela M2, e, no Iniciante, o bloco `analogia`, lido pela M5.
 
 | Campo | Iniciante | Intermediário | Avançado |
 |---|---|---|---|
 | `foco` | impacto prático no bolso do leitor | alocação e tendências | análise técnica e institucional |
 | `tags_descartaveis` | `[metodologico]` | `[]` | `[]` |
 | `tags_priorizadas` | `[impacto_pratico]` | `[indicador_chave, contexto_macro]` | `[indicador_chave, metodologico, governanca]` |
-| `max_claims` (artigo, carrossel, roteiro) | 5, 4 e 3 | 7, 5 e 5 | 9, 6 e 5 |
+| `max_claims` (artigo, carrossel, roteiro) | 5, 4 e 3 | 7, 5 e 5 | 9, 5 e 5 |
 | palavras do artigo | 350 a 550 | 450 a 750 | 600 a 900 |
 
 Nos 3 níveis:
 
 - `peso_papel`: `principal` 3, `apoio` 2 e `contexto` 1, para dividir as palavras do artigo entre os claims e as palavras das cenas de claim do roteiro;
 - carrossel: de 5 a 7 slides, contando o gancho e a conclusão, com no máximo 120 caracteres no gancho, 220 em cada slide de corpo e 160 na conclusão;
-- roteiro: 60 s a 2,5 palavras por segundo (150 palavras), com uma cena de abertura (o gancho) de 6 s, uma cena por claim e uma de fechamento de 6 s.
+- roteiro: 60 s a 2,5 palavras por segundo (150 palavras), com uma cena de abertura (o gancho) de 6 s, uma cena por claim e uma de fechamento de 6 s;
+- `analogia` (só no Iniciante): `marcadores: ["é como", "funciona como", "imagine que", "na prática"]`, as expressões que a M5 procura na mesma seção, slide ou cena da primeira ocorrência de um termo com analogia.
+
+Validação do `sunontent/levelspec.py`, que recusa campo desconhecido e aborta o run com `FalhaTerminal`:
+
+- `analogia` é obrigatória no Iniciante e proibida nos outros níveis; `marcadores` não é vazio, não repete expressão e tem expressões de pelo menos duas palavras;
+- `formatos.artigo.palavras.min` cresce do Iniciante ao Avançado (350, 450 e 600);
+- `max_claims` é artigo >= carrossel >= roteiro;
+- `carrossel.max_claims` maior que `slides.max - 2` (os slides de corpo possíveis) emite um aviso (`UserWarning`) ao carregar o arquivo e não aborta; os valores atuais (4, 5 e 5 claims, com no máximo 7 slides) não emitem o aviso.
+
+`instrucoes_redator(spec, formato)` devolve um `InstrucoesRedator` com `orcamento` (o contrato do formato em frases, para o prompt do redator), `marcadores` (a frase com as expressões de analogia, vazia fora do Iniciante) e `faixa_esperada` (o limite renderizado, que a M2 registra). No artigo, a faixa conta as palavras do texto das seções; o título e a linha fina ficam de fora. O prompt e a M2 leem o limite da mesma função.
 
 Por que esses valores:
 
@@ -80,7 +90,7 @@ Glossário inválido é erro terminal: o run aborta no início da E4.
 
 O casamento segue a regra de `docs/glossario.md`, Casamento no texto: formas explícitas, sem lematizar, ignorando maiúsculas e acentos, sigla só com a caixa exata, termo `ambiguo` só pelas formas de mais de uma palavra, a forma mais longa vence, e os marcadores `{{...}}` ficam fora. Sigla é a forma escrita só com maiúsculas, dígitos e sinais (`CDI`, `IPCA-15`, `NTN-B`, `EMBI+`). Espaço e quebra de linha entre as palavras de uma forma se equivalem.
 
-O casador devolve, para um texto, cada ocorrência com o `id` do termo, a forma casada e as posições de início e fim no texto. A E4 usa os termos encontrados no texto dos claims (complemento, gate e a coluna de termos do prompt) e na tese (gate); a M4 e a M5 usam também as posições (termos únicos para a densidade, primeira ocorrência para a janela da analogia). Um filtro devolve só os termos com `nivel_minimo` acima de um nível.
+O casador devolve, para um texto, cada ocorrência com o `id` do termo, a forma casada e as posições de início e fim no texto. A E4 usa os termos encontrados no texto dos claims (complemento, gate e a coluna de termos do prompt) e na tese (gate); a M5 usa também as posições (a primeira ocorrência, para achar a unidade da analogia). Um filtro devolve só os termos com `nivel_minimo` acima de um nível.
 
 Um teste roda o casador sobre os claims dos 3 documentos de referência (`tests/fixtures/referencia/`) e lista os termos do glossário escritos com flexão que não está em `variantes`, para completar o glossário.
 

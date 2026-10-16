@@ -1,6 +1,6 @@
 """Leitura e validação de config/glossario.yaml, casamento de termos e analogia do glossário.
 
-Fonte única dos termos que pedem analogia: a E4, a M4 e a M5 leem o mesmo arquivo por este módulo e
+Fonte única dos termos que pedem analogia: a E4 e a M5 leem o mesmo arquivo por este módulo e
 casam os termos pela mesma regra (docs/glossario.md, Casamento no texto):
 - cada forma (o `termo` e cada variante) casa como está escrita, sem lematizar, ignorando maiúsculas e
   acentos, com fronteira de palavra nos dois lados; espaço e quebra de linha entre as palavras da forma
