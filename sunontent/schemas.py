@@ -729,12 +729,24 @@ class CelulaState(BaseModel):
         return self
 
 
+class FalhaCelula(BaseModel):
+    """Falha (retentativa.Falha) que a E5 ou a E6 pegou na tentativa; a E7 a grava em `celulas` como ERRO_INFRA."""
+
+    classe: ClasseFalha
+    mensagem: str
+
+
 class CelulaGrafoState(BaseModel):
     """Estado de uma célula nos nós da E5 à E7. O plano e o FactSheet são lidos do Supabase, não do estado."""
 
     run_id: str
     celula: CelulaState
     relatorio: RelatorioCorretivo | None = None  # o relatório da tentativa anterior, no retry
+    falha: FalhaCelula | None = None
+    # Da tentativa em curso, para o scorecard: tokens das chamadas de LLM (o redator e o juiz) e o instante
+    # (time.monotonic) do início da E5.
+    tokens_tentativa: int = Field(default=0, ge=0)
+    inicio_tentativa: float | None = None
 
 
 def celula_id(nivel: str, formato: str) -> str:

@@ -366,6 +366,37 @@ def test_peca_unidades_numeros_e_celula_numa_transacao(repositorio, ambiente, tm
     assert celula == ("AVALIANDO", 1)
     assert (tmp_path / "runs" / run_id / "celulas" / "iniciante__artigo" / "peca_1.json").exists()
 
+    # E6 e E7: scorecard da tentativa numa transação, lido de volta igual, e o estado final da célula.
+    from sunontent.metrics import resultado
+    from sunontent.schemas import LlmJudgeDetalhes, PlanContractDetalhes, Scorecard, Violacao
+
+    violacao = Violacao(metrica="plan_contract", trecho="C77", esperado="claim do plano", obtido="C77",
+                        instrucao_corretiva="Tire o C77.", unidade_indice=0, campo="texto", inicio=0, fim=3)
+    scorecard = Scorecard(celula_id="iniciante__artigo", tentativa=1, veredito="REPROVADA", custo_tokens=1200,
+                          duracao_ms=35, metricas=[
+                              resultado.montar(PlanContractDetalhes(checagens=[]), [violacao, violacao]),
+                              resultado.montar(LlmJudgeDetalhes(analogias=[], unidades=[], nivel_percebido="iniciante"), [])])
+    for _ in range(2):  # o mesmo scorecard de novo não grava nada
+        persistencia.gravar_scorecard(repositorio, tmp_path, run_id, scorecard)
+    with pytest.raises(FalhaTerminal, match="outro scorecard"):
+        persistencia.gravar_scorecard(repositorio, tmp_path, run_id, scorecard.model_copy(update={"duracao_ms": 1}))
+    with pytest.raises(FalhaTerminal, match="não tem peça"):
+        persistencia.gravar_scorecard(repositorio, tmp_path, run_id, scorecard.model_copy(update={"tentativa": 2}))
+    assert persistencia.carregar_scorecard(repositorio, run_id, "iniciante__artigo", 1) == scorecard
+    assert persistencia.carregar_scorecard(repositorio, run_id, "iniciante__artigo", 2) is None
+    assert (tmp_path / "runs" / run_id / "celulas" / "iniciante__artigo" / "scorecard_1.json").exists()
+
+    reprovada = avaliando.model_copy(update={"estado": "REPROVADA", "motivo_reprovacao": "k_esgotado"})
+    persistencia.atualizar_celula(repositorio, tmp_path, run_id, reprovada)
+    erro = avaliando.model_copy(update={"estado": "ERRO_INFRA", "erro_classe": "terminal", "erro_mensagem": "HTTP 400"})
+    persistencia.atualizar_celula(repositorio, tmp_path, run_id, erro)
+    _, lidas = persistencia.carregar_plano(repositorio, tmp_path, run_id)
+    assert next(c for c in lidas if c.celula_id == "iniciante__artigo") == erro.model_copy(
+        update={"peca": None, "scorecard": None, "plan_contract": None})
+    with psycopg.connect(ambiente["SUPABASE_DB_URL"]) as conexao, pytest.raises(psycopg.errors.CheckViolation):
+        conexao.execute("update celulas set estado = 'APROVADA' where run_id = %s and celula_id = 'iniciante__artigo'",
+                        (run_id,))
+
 
 def test_span_do_adapter_aceita_nivel_nulo(repositorio, ambiente, tmp_path):
     """O planejador da E4 faz 1 chamada para os 3 níveis: o span do adapter não tem nível. O extractor nunca tem."""

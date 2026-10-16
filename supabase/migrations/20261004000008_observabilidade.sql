@@ -1,4 +1,4 @@
--- Observabilidade (spans de LLM) e corpus rotulado de calibração.
+-- Observabilidade (spans de LLM).
 
 -- Span por chamada de LLM (docs/arquiteturas.md, 1. Model client / router e 6. Observability / tracing).
 -- PENDENTE: a documentação não define schema de span; colunas inferidas dos dados citados.
@@ -29,19 +29,5 @@ create table llm_spans (
 );
 
 create index llm_spans_run_idx on llm_spans (run_id, celula_id);
-
--- Corpus rotulado por nível pela equipe editorial, para calibrar as faixas do LevelSpec e montar
--- a matriz de confusão de níveis (docs/arquiteturas.md, O LevelSpec e Lacunas conhecidas).
--- PENDENTE: a documentação não define schema; colunas inferidas.
-create table corpus_rotulado (
-  id             bigint generated always as identity primary key,
-  texto          text not null,
-  nivel_rotulado nivel not null,
-  formato        formato,
-  origem         text,
-  rotulado_por   text not null,
-  metricas       jsonb,  -- valores medidos de M1 a M5 sobre o texto
-  criado_em      timestamptz not null default now()
-);
 
 -- LevelSpec, glossário, models.yaml e prompts ficam no git; o banco guarda só as versões no run.

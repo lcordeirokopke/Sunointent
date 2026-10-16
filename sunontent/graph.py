@@ -4,6 +4,10 @@ Etapas implementadas: E0 (coleta), a entrada do modo --dev (referencia), a E1 (l
 (extract), a E3 (validate), a quarentena do loop E2/E3 e a E4 (adapt). As duas entradas seguem para a E1;
 o FactSheet assinado, na E3 ou na quarentena, segue para a E4, e o grafo termina com o plano e as 9 células
 em PENDENTE.
+
+O subgrafo de uma célula (`construir_grafo_celula`), ainda sem ligação com o grafo principal, roda a E5 (synth),
+a E6 (evaluate) e a E7 (router) com o refinement loop: a falha da E5 vai direto à E7, o retry volta à E5 e o
+estado final termina o subgrafo.
 """
 
 from functools import partial
@@ -15,9 +19,12 @@ from sunontent.nodes.coleta import coleta
 from sunontent.nodes.extract import extract
 from sunontent.nodes.leitura import leitura
 from sunontent.nodes.quarentena import quarentena
+from sunontent.nodes.evaluate import evaluate
 from sunontent.nodes.referencia import referencia
+from sunontent.nodes.router import ESTADOS_FINAIS, router
+from sunontent.nodes.synth import synth
 from sunontent.nodes.validate import validate
-from sunontent.schemas import PipelineState
+from sunontent.schemas import CelulaGrafoState, PipelineState
 
 K = 2  # orçamento de retry por célula; o valor lido no início do run entra no RunManifest
 RODADAS_EXTRACAO = 3  # loop E2/E3: a extração e até 2 correções; depois disso os reprovados vão para a quarentena
@@ -56,4 +63,26 @@ def construir_grafo():
     grafo.add_conditional_edges("validate", depois_da_validacao, ["extract", "quarentena", "adapt"])
     grafo.add_edge("quarentena", "adapt")
     grafo.add_edge("adapt", END)
+    return grafo.compile()
+
+
+def depois_da_sintese(state: CelulaGrafoState) -> str:
+    """Com falha na E5, vai direto à E7; com a peça, à E6."""
+    return "router" if state.falha is not None else "evaluate"
+
+
+def depois_do_router(state: CelulaGrafoState) -> str:
+    """Estado final termina a célula; senão, o relatório corretivo volta à E5."""
+    return END if state.celula.estado in ESTADOS_FINAIS else "synth"
+
+
+def construir_grafo_celula():
+    grafo = StateGraph(CelulaGrafoState)
+    grafo.add_node("synth", synth)
+    grafo.add_node("evaluate", evaluate)
+    grafo.add_node("router", partial(router, K=K))
+    grafo.add_edge(START, "synth")
+    grafo.add_conditional_edges("synth", depois_da_sintese, ["evaluate", "router"])
+    grafo.add_edge("evaluate", "router")
+    grafo.add_conditional_edges("router", depois_do_router, ["synth", END])
     return grafo.compile()

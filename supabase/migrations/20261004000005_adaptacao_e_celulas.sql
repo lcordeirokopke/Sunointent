@@ -50,13 +50,19 @@ create table celulas (
   formato            formato not null,
   estado             estado_celula not null default 'PENDENTE',
   tentativa          int not null default 0 check (tentativa >= 0),
-  -- PENDENTE: motivo de REPROVADA (incluindo não convergência, docs/arquiteturas.md, E7. Router, Regras do loop e Ciclo de vida de uma célula)
-  -- não tem campo na documentação.
-  motivo_reprovacao  text,
+  motivo_reprovacao  motivo_reprovacao,  -- só em REPROVADA; a tentativa que explica é `tentativa`
+  erro_classe        classe_falha,       -- só em ERRO_INFRA
+  erro_mensagem      text,               -- só em ERRO_INFRA
   atualizado_em      timestamptz not null default now(),  -- escrito por persistencia.atualizar_celula
   primary key (run_id, celula_id),
-  check (celula_id = nivel::text || '__' || formato::text)
+  check (celula_id = nivel::text || '__' || formato::text),
+  check ((estado = 'REPROVADA') = (motivo_reprovacao is not null)),
+  check ((estado = 'ERRO_INFRA') = (erro_classe is not null)),
+  check ((erro_classe is null) = (erro_mensagem is null))
 );
+
+comment on column celulas.estado is
+  'APROVADA, REPROVADA e ERRO_INFRA são finais e gravados só pela E7 (docs/arquiteturas.md, E7. Router).';
 
 comment on column celulas.tentativa is
   'Número da última peça gerada (pecas.tentativa, 1-indexada). 0 = nenhuma. Atualizado na mesma transação que grava a peça.';

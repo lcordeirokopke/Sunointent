@@ -860,8 +860,8 @@ data/runs/<run_id>/
 ├── spans/<span_id>.json            # spans das etapas sem célula
 └── celulas/<celula_id>/
     ├── estado.json                 # estado e tentativa da célula
-    ├── peca.<tentativa>.json
-    ├── scorecard.<tentativa>.json  # métricas e violações da tentativa
+    ├── peca_<tentativa>.json
+    ├── scorecard_<tentativa>.json  # métricas e violações da tentativa
     └── spans/<span_id>.json
 ```
 

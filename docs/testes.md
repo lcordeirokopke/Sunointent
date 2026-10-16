@@ -1,6 +1,6 @@
 # Testes
 
-Os testes ficam em `tests/` e rodam com `pytest` a partir da raiz do repositório. Hoje cobrem a E0 (coleta dos PDFs de Copom, CVM e B3), a E1 (leitura), a E2 (extractor e ancoragem), a E3 (validador de âncoras), a E4 (LevelSpec, glossário e plano editorial), a E5 de uma célula (pacote, redator, montagem e gravação da peça), as métricas determinísticas, o cliente LLM, o manifest do run, o grafo, o `__main__`, o dashboard (`app/`) e as consultas de leitura do dashboard.
+Os testes ficam em `tests/` e rodam com `pytest` a partir da raiz do repositório. Hoje cobrem a E0 (coleta dos PDFs de Copom, CVM e B3), a E1 (leitura), a E2 (extractor e ancoragem), a E3 (validador de âncoras), a E4 (LevelSpec, glossário e plano editorial), a E5 de uma célula (pacote, redator, montagem e gravação da peça), a E6 e a E7 de uma célula (scorecard, Router e o refinement loop no subgrafo da célula), as métricas determinísticas, o cliente LLM, o manifest do run, o grafo, o `__main__`, o dashboard (`app/`) e as consultas de leitura do dashboard.
 
 ## Para que servem
 
@@ -18,7 +18,7 @@ Quase tudo é simulado. O código do projeto roda de verdade; o mundo externo (i
 | Parte | Como é simulada | Onde |
 |---|---|---|
 | Internet (BCB, CVM, B3) | `httpx.MockTransport` devolve respostas prontas de `tests/fixtures/http/`, inclusive 503, 429, timeout e 404 | `test_ingestao.py` |
-| Supabase | `RepositorioMemoria`: classe em memória com as mesmas regras do banco usadas pelo pipeline (E0 a E4), que também injeta falhas por método | `conftest.py` |
+| Supabase | `RepositorioMemoria`: classe em memória com as mesmas regras do banco usadas pelo pipeline (E0 a E7), que também injeta falhas por método | `conftest.py` |
 | Leitura do Supabase pelo dashboard | `ConsultaFalsa`: devolve runs prontos ou levanta a falha pedida | `test_app.py` |
 | Processo do pipeline iniciado pelo dashboard | script Python que escreve as mesmas linhas do `__main__.py` | `test_app.py` |
 | Storage do Supabase | `_StorageFalso`: só devolve o erro que o teste pede | `test_ingestao.py` |
@@ -60,6 +60,7 @@ tests/
 ├── test_metrics.py                # M1, M2 e M5, sem LLM e sem banco
 ├── test_schemas.py                # schemas do redator, da peça, do scorecard e da célula
 ├── test_sintese.py                # E5 de uma célula: pacote, redator (LLM simulado), montagem, plan_contract, gravação e nó
+├── test_router.py                 # E6 e E7 de uma célula: scorecard, Router, relatório corretivo e o refinement loop
 ├── test_main_graph.py             # manifest, grafo (E0 a E4) e __main__
 ├── test_app.py                    # dashboard: linhas do terminal e API com processo e consulta simulados
 ├── test_persistencia_supabase.py  # integração com o Supabase local
@@ -268,10 +269,20 @@ Não contém testes, só infraestrutura compartilhada:
 - **Pacote:** analogias presas aos claims do formato (a do IPCA sai do roteiro com o `C02`), tese, núcleo, atribuição e `data_documento`; claim do plano fora do FactSheet é `FalhaTerminal`.
 - **Prompt:** marcadores com o trecho, orçamento por claim, tese, analogias e expressões no Iniciante, nada de analogia nos outros níveis, abertura e fechamento no roteiro e, no retry, a peça anterior com os marcadores, o que está certo, as violações agrupadas pelo lugar da peça e as que ficaram de fora.
 - **Montagem:** a posição de cada número no título e nas seções confere com o trecho; o marcador inexistente, o de ordem que o claim não tem e o de claim fora do plano ficam no texto e a M1 conta os três como `marcador_invalido`; `restaurar` devolve a saída do redator; o `plan_contract` do carrossel com slides demais, claim fora do plano e claim ausente (instruções no masculino de "slide"), do carrossel curto e do roteiro que passa de 60 s, com as checagens de cada formato.
-- **Nó:** a célula termina em `AVALIANDO` com a tentativa 1, depois de uma atualização para `GERANDO`; a peça, as unidades (sem o id inventado `C99`, que fica na peça e no `plan_contract`), o número do título e a cópia local são gravados; o span leva o nível, a célula e a tentativa; o retry manda a peça anterior com o marcador inválido e o relatório, com raciocínio `low`, e grava a tentativa 2; a resposta fora do schema volta ao modelo sem consumir tentativa; sem plano, `FalhaTerminal`.
+- **Nó:** a célula termina em `AVALIANDO` com a tentativa 1, depois de uma atualização para `GERANDO`; a peça, as unidades (sem o id inventado `C99`, que fica na peça e no `plan_contract`), o número do título e a cópia local são gravados; o span leva o nível, a célula e a tentativa; o retry manda a peça anterior com o marcador inválido e o relatório, com raciocínio `low`, e grava a tentativa 2; a resposta fora do schema volta ao modelo sem consumir tentativa; sem plano, a `Falha` volta no estado (`falha`), sem a célula.
 - **Gravação:** a mesma peça de novo não grava nada, e outra peça na mesma tentativa é `FalhaTerminal`.
 
-`test_persistencia_supabase.py::test_peca_unidades_numeros_e_celula_numa_transacao` faz a gravação no Supabase local: a peça, a unidade só com o claim do run, os números do título (unidade nula) e do texto com o `campo`, a célula em `AVALIANDO`, a repetição sem efeito e a outra peça recusada.
+`test_persistencia_supabase.py::test_peca_unidades_numeros_e_celula_numa_transacao` faz a gravação no Supabase local: a peça, a unidade só com o claim do run, os números do título (unidade nula) e do texto com o `campo`, a célula em `AVALIANDO`, a repetição sem efeito e a outra peça recusada. O mesmo teste grava o scorecard da tentativa (o mesmo de novo sem efeito, outro recusado, sem peça recusado), lê de volta igual ao gravado, com o valor booleano da `llm_judge`, e grava a célula em `REPROVADA` e em `ERRO_INFRA`; o check de `celulas` recusa `APROVADA` com o erro preenchido.
+
+## E6 e E7: avaliação e refinement loop
+
+`test_router.py` (fluxo em `docs/fluxos/avaliacao.md`) roda o subgrafo da célula (`graph.construir_grafo_celula`) com o `ProviderFalso`, o repositório em memória e o plano e o FactSheet de `test_sintese.py`, na célula `intermediario__carrossel`:
+
+- **Correção de verdade:** a tentativa 1 tem um número escrito à mão (M1) e um slide de corpo acima de 220 caracteres (M2); o Router devolve a célula à E5 com o relatório; o prompt da tentativa 2 traz a peça anterior, o que passou (`analogy_rule` e `plan_contract`, com o valor), as violações por slide e as instruções; a tentativa 2 passa, e a célula termina `APROVADA` na tentativa 2, com os dois scorecards (`REPROVADA` e `APROVADA`), os tokens de cada tentativa e as cópias locais.
+- **`K` esgotado:** duas tentativas reprovadas terminam em `REPROVADA` com `k_esgotado`; aprovada na tentativa 1, o redator não é chamado de novo.
+- **Falhas:** a `Falha` do redator vira `ERRO_INFRA` com a classe e a mensagem, tentativa 0 e nada gravado; a falha na gravação do scorecard vira `ERRO_INFRA` com a peça gravada e sem scorecard; a falha no retry deixa a tentativa da última peça; sem plano, `ERRO_INFRA`; uma exceção que não é `Falha` sobe.
+- **Juiz no config:** só roda quando as 4 determinísticas passam, entra no fim do scorecard e pode reprovar, com a instrução no retry; a `Falha` do juiz grava o scorecard com veredito `ERRO_INFRA` e as 4 determinísticas.
+- **Router:** o relatório corretivo com até 5 violações por métrica e o resto em `restantes`; a não convergência (mesma contagem e contagem maior não convergem; contagem menor e métrica que passou convergem); a regra 5 não age com `K = 2` (nem lê a tentativa anterior), encerra com `nao_convergencia` com `K = 3` e, quando a tentativa melhorou, devolve o relatório sem gravar estado; scorecard de outra tentativa é bug (`ValueError`).
 
 ## test_ingestao.py
 

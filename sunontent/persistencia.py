@@ -17,9 +17,11 @@ Funções da E0 e do run (docs/fluxos/ingestao.md, docs/arquiteturas.md):
   (planos_editoriais e planos_nivel) com as 9 células em PENDENTE numa transação; data/runs/<run_id>/
   validacoes_plano/, plano.json e celulas/<celula_id>/estado.json;
 - leitura do FactSheet assinado do run, com os números de cada claim na ordem de claim_numeros;
-- atualização do estado e da tentativa de uma célula, com atualizado_em;
+- atualização do estado, da tentativa, do motivo de reprovação e do erro de uma célula, com atualizado_em;
 - E5: cada tentativa da peça (pecas, peca_unidade_claims e peca_unidade_numeros) com a atualização da célula
   numa transação; data/runs/<run_id>/celulas/<celula_id>/peca_<tentativa>.json e estado.json;
+- E6: o scorecard de cada tentativa (scorecards, metricas e violacoes) numa transação, e
+  data/runs/<run_id>/celulas/<celula_id>/scorecard_<tentativa>.json; a leitura do scorecard de uma tentativa (E7);
 - cópia local em data/sources/<fonte>/ e data/runs/<run_id>/;
 - leitura dos runs para o dashboard (app/), em conexão só de leitura (ConsultaSupabase).
 
@@ -53,6 +55,7 @@ from sunontent.schemas import (
     ProblemaPlano,
     RunManifest,
     SaidaPlanejador,
+    Scorecard,
     Span,
 )
 
@@ -202,8 +205,17 @@ class Repositorio(Protocol):
         ...
 
     def atualizar_celula(self, run_id: str, celula: CelulaState) -> None:
-        """Grava o estado e a tentativa da célula em `celulas`, com `atualizado_em = now()`. FalhaTerminal se a
-        célula não existe."""
+        """Grava o estado, a tentativa, o motivo de reprovação e o erro da célula em `celulas`, com
+        `atualizado_em = now()`. FalhaTerminal se a célula não existe."""
+        ...
+
+    def gravar_scorecard(self, run_id: str, scorecard: Scorecard) -> None:
+        """Numa transação: `scorecards`, `metricas` e `violacoes` da tentativa. Exige a peça da tentativa. O mesmo
+        scorecard já gravado não grava nada; outro na mesma tentativa é FalhaTerminal."""
+        ...
+
+    def carregar_scorecard(self, run_id: str, celula_id: str, tentativa: int) -> Scorecard | None:
+        """O scorecard gravado da tentativa, com as métricas e as violações na ordem gravada; None se não existe."""
         ...
 
     def criar_run(self, manifest: RunManifest) -> None:
@@ -504,6 +516,26 @@ def atualizar_celula(repositorio: Repositorio, raiz_dados: Path, run_id: str, ce
         f"atualização da célula {celula.celula_id} do run {run_id}",
     )
     return _gravar_celula_local(raiz_dados, run_id, celula)
+
+
+def gravar_scorecard(repositorio: Repositorio, raiz_dados: Path, run_id: str, scorecard: Scorecard) -> Path:
+    """Grava o scorecard da tentativa no Supabase e, depois, em data/runs/<run_id>/celulas/<celula_id>/
+    scorecard_<tentativa>.json."""
+    com_retentativa(
+        lambda: repositorio.gravar_scorecard(run_id, scorecard),
+        f"gravação do scorecard {scorecard.celula_id} tentativa {scorecard.tentativa} do run {run_id}",
+    )
+    destino = (
+        Path(raiz_dados) / "runs" / run_id / "celulas" / scorecard.celula_id / f"scorecard_{scorecard.tentativa}.json"
+    )
+    return _gravar_json(destino, scorecard.model_dump(mode="json"))
+
+
+def carregar_scorecard(repositorio: Repositorio, run_id: str, celula_id: str, tentativa: int) -> Scorecard | None:
+    return com_retentativa(
+        lambda: repositorio.carregar_scorecard(run_id, celula_id, tentativa),
+        f"leitura do scorecard {celula_id} tentativa {tentativa} do run {run_id}",
+    )
 
 
 def gravar_peca(repositorio: Repositorio, raiz_dados: Path, run_id: str, peca: Peca, celula: CelulaState) -> Path:
@@ -1151,7 +1183,8 @@ class RepositorioSupabase:
             ).fetchall()
             celulas = cursor.execute(
                 "select c.celula_id, c.nivel::text as nivel, c.formato::text as formato,"
-                " c.estado::text as estado, c.tentativa from celulas c where c.run_id = %s"
+                " c.estado::text as estado, c.tentativa, c.motivo_reprovacao::text as motivo_reprovacao,"
+                " c.erro_classe::text as erro_classe, c.erro_mensagem from celulas c where c.run_id = %s"
                 " order by c.nivel, c.formato",
                 (run_id,),
             ).fetchall()
@@ -1169,9 +1202,11 @@ class RepositorioSupabase:
     def _atualizar_celula(cursor, run_id: str, celula: CelulaState) -> None:
         """Update da célula num cursor aberto, para a gravação da peça usar a mesma transação."""
         alterada = cursor.execute(
-            "update celulas set estado = %s::estado_celula, tentativa = %s, atualizado_em = now()"
-            " where run_id = %s and celula_id = %s",
-            (celula.estado, celula.tentativa, run_id, celula.celula_id),
+            "update celulas set estado = %s::estado_celula, tentativa = %s,"
+            " motivo_reprovacao = %s::motivo_reprovacao, erro_classe = %s::classe_falha, erro_mensagem = %s,"
+            " atualizado_em = now() where run_id = %s and celula_id = %s",
+            (celula.estado, celula.tentativa, celula.motivo_reprovacao, celula.erro_classe, celula.erro_mensagem,
+             run_id, celula.celula_id),
         )
         if alterada.rowcount != 1:
             raise FalhaTerminal(f"célula {celula.celula_id} do run {run_id} não existe em celulas")
@@ -1230,6 +1265,90 @@ class RepositorioSupabase:
                 self._atualizar_celula(cursor, run_id, celula)
 
         self._executar(transacao)
+
+    def gravar_scorecard(self, run_id: str, scorecard: Scorecard) -> None:
+        from psycopg.types.json import Jsonb
+
+        chave = (run_id, scorecard.celula_id, scorecard.tentativa)
+
+        def transacao(conexao):
+            with conexao.transaction(), conexao.cursor() as cursor:
+                if cursor.execute(
+                    "select 1 from pecas where run_id = %s and celula_id = %s and tentativa = %s", chave
+                ).fetchone() is None:
+                    raise FalhaTerminal(
+                        f"run {run_id} não tem peça em {scorecard.celula_id} tentativa {scorecard.tentativa}"
+                    )
+                inserido = cursor.execute(
+                    "insert into scorecards (run_id, celula_id, tentativa, veredito, custo_tokens, duracao_ms)"
+                    " values (%s, %s, %s, %s::veredito, %s, %s)"
+                    " on conflict (run_id, celula_id, tentativa) do nothing returning tentativa",
+                    (*chave, scorecard.veredito, scorecard.custo_tokens, scorecard.duracao_ms),
+                ).fetchone()
+                if inserido is None:
+                    gravado = self._ler_scorecard(conexao, *chave)
+                    if gravado.model_dump(mode="json") != scorecard.model_dump(mode="json"):
+                        raise FalhaTerminal(
+                            f"run {run_id} já tem outro scorecard em {scorecard.celula_id}"
+                            f" tentativa {scorecard.tentativa}"
+                        )
+                    return
+                for m in scorecard.metricas:
+                    booleano = isinstance(m.valor, bool)
+                    (metrica_id,) = cursor.execute(
+                        "insert into metricas (run_id, celula_id, tentativa, nome, valor_num, valor_bool,"
+                        " faixa_esperada, passou, detalhes) values (%s, %s, %s, %s::metrica, %s, %s, %s, %s, %s)"
+                        " returning id",
+                        (*chave, m.nome, None if booleano else m.valor, m.valor if booleano else None,
+                         m.faixa_esperada, m.passou, Jsonb(m.detalhes.model_dump(mode="json"))),
+                    ).fetchone()
+                    cursor.executemany(
+                        "insert into violacoes (metrica_id, metrica, trecho, esperado, obtido, instrucao_corretiva,"
+                        " unidade_indice, campo, inicio, fim)"
+                        " values (%s, %s::metrica, %s, %s, %s, %s, %s, %s::campo_peca, %s, %s)",
+                        [(metrica_id, v.metrica, v.trecho, v.esperado, v.obtido, v.instrucao_corretiva,
+                          v.unidade_indice, v.campo, v.inicio, v.fim) for v in m.violacoes],
+                    )
+
+        self._executar(transacao)
+
+    @staticmethod
+    def _ler_scorecard(conexao, run_id: str, celula_id: str, tentativa: int) -> Scorecard | None:
+        from psycopg.rows import dict_row
+
+        with conexao.cursor(row_factory=dict_row) as cursor:
+            cabecalho = cursor.execute(
+                "select veredito::text as veredito, custo_tokens, duracao_ms from scorecards"
+                " where run_id = %s and celula_id = %s and tentativa = %s",
+                (run_id, celula_id, tentativa),
+            ).fetchone()
+            if cabecalho is None:
+                return None
+            metricas = cursor.execute(
+                "select id, nome::text as nome, valor_num, valor_bool, faixa_esperada, passou, detalhes from metricas"
+                " where run_id = %s and celula_id = %s and tentativa = %s order by id",
+                (run_id, celula_id, tentativa),
+            ).fetchall()
+            violacoes: dict[int, list[dict]] = {}
+            for v in cursor.execute(
+                "select metrica_id, metrica::text as metrica, trecho, esperado, obtido, instrucao_corretiva,"
+                " unidade_indice, campo::text as campo, inicio, fim from violacoes"
+                " where metrica_id = any(%s) order by id",
+                ([m["id"] for m in metricas],),
+            ).fetchall():
+                violacoes.setdefault(v.pop("metrica_id"), []).append(v)
+        return Scorecard(
+            celula_id=celula_id, tentativa=tentativa, **cabecalho,
+            metricas=[
+                {"nome": m["nome"], "valor": m["valor_bool"] if m["valor_bool"] is not None else m["valor_num"],
+                 "faixa_esperada": m["faixa_esperada"], "passou": m["passou"], "detalhes": m["detalhes"],
+                 "violacoes": violacoes.get(m["id"], [])}
+                for m in metricas
+            ],
+        )
+
+    def carregar_scorecard(self, run_id: str, celula_id: str, tentativa: int) -> Scorecard | None:
+        return self._executar(lambda conexao: self._ler_scorecard(conexao, run_id, celula_id, tentativa))
 
     def criar_run(self, manifest: RunManifest) -> None:
         from psycopg.types.json import Jsonb

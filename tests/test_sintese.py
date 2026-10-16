@@ -405,9 +405,10 @@ def test_resposta_fora_do_schema_volta_ao_modelo_sem_consumir_tentativa(com_plan
     assert celula.peca.payload.slides[1].texto == "Fato 13,75%"
 
 
-def test_no_sem_plano_e_erro_terminal(repositorio, run_id, tmp_path):
-    with pytest.raises(FalhaTerminal, match="plano editorial"):
-        synth(estado(run_id), config(repositorio, tmp_path, cliente_falso([])))
+def test_no_sem_plano_devolve_a_falha_no_estado(repositorio, run_id, tmp_path):
+    saida = synth(estado(run_id), config(repositorio, tmp_path, cliente_falso([])))
+    assert saida["falha"].classe == "terminal" and "plano editorial" in saida["falha"].mensagem
+    assert "celula" not in saida
 
 
 def test_gravar_a_mesma_peca_de_novo_nao_grava_nada_e_outra_e_erro(com_plano, run_id, tmp_path):

@@ -22,7 +22,7 @@ from sunontent import retentativa
 from sunontent.llm import ClienteLLM, Preco, RespostaBruta
 from sunontent.persistencia import Coleta, ItemQuarentena
 from sunontent.retentativa import FalhaRetriavel, FalhaTerminal
-from sunontent.schemas import Chunk, DocumentoProcessado, FactSheet, Numero, Pagina, PlanoEditorial
+from sunontent.schemas import Chunk, DocumentoProcessado, FactSheet, Numero, Pagina, PlanoEditorial, Scorecard
 
 HOSTS_LOCAIS = {"localhost", "127.0.0.1", "::1"}
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -98,6 +98,7 @@ class RepositorioMemoria:
     pecas: dict[tuple, dict] = field(default_factory=dict)
     peca_unidade_claims: dict[tuple, None] = field(default_factory=dict)
     peca_unidade_numeros: dict[tuple, dict] = field(default_factory=dict)
+    scorecards: dict[tuple, dict] = field(default_factory=dict)
 
     def registrar_run(self, run_id: str) -> None:
         self.runs[run_id] = {"coleta_id": None}
@@ -369,6 +370,26 @@ class RepositorioMemoria:
         for n in peca.numeros_usados:
             self.peca_unidade_numeros[(*chave, n.campo, n.unidade_indice, n.inicio)] = n.model_dump()
         self.celulas[(run_id, peca.celula_id)] = celula.model_copy()
+
+    def gravar_scorecard(self, run_id, scorecard) -> None:
+        """Mesmas regras do Supabase: exige a peça da tentativa; o mesmo scorecard já gravado não grava nada, outro
+        na mesma tentativa é FalhaTerminal; scorecard, métricas e violações numa transação."""
+        self._entrar("gravar_scorecard")
+        chave = (run_id, scorecard.celula_id, scorecard.tentativa)
+        if chave not in self.pecas:
+            raise FalhaTerminal(f"run {run_id} não tem peça em {scorecard.celula_id} tentativa {scorecard.tentativa}")
+        novo = scorecard.model_dump(mode="json")
+        if chave in self.scorecards:
+            if self.scorecards[chave] != novo:
+                raise FalhaTerminal(
+                    f"run {run_id} já tem outro scorecard em {scorecard.celula_id} tentativa {scorecard.tentativa}")
+            return
+        self.scorecards[chave] = novo
+
+    def carregar_scorecard(self, run_id, celula_id, tentativa):
+        self._entrar("carregar_scorecard")
+        gravado = self.scorecards.get((run_id, celula_id, tentativa))
+        return None if gravado is None else Scorecard.model_validate(gravado)
 
     def criar_run(self, manifest) -> None:
         self._entrar("criar_run")

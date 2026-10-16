@@ -26,4 +26,3 @@ alter table scorecards            enable row level security;
 alter table metricas              enable row level security;
 alter table violacoes             enable row level security;
 alter table llm_spans             enable row level security;
-alter table corpus_rotulado       enable row level security;

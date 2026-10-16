@@ -43,8 +43,17 @@ create type campo_numero as enum ('texto', 'titulo');
 -- CelulaState.estado (docs/arquiteturas.md, O objeto de estado)
 create type estado_celula as enum ('PENDENTE', 'GERANDO', 'AVALIANDO', 'APROVADA', 'REPROVADA', 'ERRO_INFRA');
 
+-- CelulaState.motivo_reprovacao (docs/arquiteturas.md, E7. Router): só na célula REPROVADA.
+create type motivo_reprovacao as enum ('k_esgotado', 'nao_convergencia');
+
 -- Scorecard.veredito (docs/arquiteturas.md, Scorecard e violação)
 create type veredito as enum ('APROVADA', 'REPROVADA', 'ERRO_INFRA');
+
+-- MetricaResultado.nome e Violacao.metrica (docs/arquiteturas.md, Scorecard e violação)
+create type metrica as enum ('numeric_fidelity', 'text_size', 'analogy_rule', 'llm_judge', 'plan_contract');
+
+-- Violacao.campo (docs/arquiteturas.md, Scorecard e violação): o campo da peça onde está o trecho.
+create type campo_peca as enum ('titulo', 'linha_fina', 'texto', 'gancho_visual');
 
 -- Modo de execução: normal (com E0) ou dev (documento de referência, --dev).
 -- Campo modo do RunManifest (docs/arquiteturas.md, Run manifest).

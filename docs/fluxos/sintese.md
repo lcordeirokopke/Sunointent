@@ -4,7 +4,7 @@ Este documento detalha a E5 de uma célula: como o plano de um nível vira a `Pe
 
 ## Estado
 
-Implementada para uma célula, com o nó `synth`, sem aresta no grafo: o grafo termina na E4. O fan-out para as 9 células, a avaliação (E6) e o Router (E7) com o retry ainda não existem.
+Implementada para uma célula, com o nó `synth`, no subgrafo da célula com a E6 e a E7 (`docs/fluxos/avaliacao.md`), que ainda não tem ligação com o grafo principal: o grafo principal termina na E4. O fan-out para as 9 células ainda não existe.
 
 ## Responsabilidade
 
@@ -82,7 +82,9 @@ O relatório corretivo é um `RelatorioCorretivo` (`sunontent/schemas.py`): `cer
 2. grava a célula em `GERANDO` por `atualizar_celula`;
 3. monta o pacote, chama o redator com a tentativa seguinte à da célula e, no retry, a peça anterior (`celula.peca`) restaurada e o relatório do estado;
 4. monta a peça e o `plan_contract`;
-5. grava a peça com a célula em `AVALIANDO` e a tentativa nova, e devolve a célula com `peca`, `tentativa`, `estado` e `plan_contract`, que a E6 junta ao scorecard.
+5. grava a peça com a célula em `AVALIANDO` e a tentativa nova, e devolve a célula com `peca`, `tentativa`, `estado` e `plan_contract`, que a E6 junta ao scorecard, os tokens das chamadas de LLM da tentativa (`tokens_tentativa`) e o início da tentativa (`inicio_tentativa`), para o scorecard.
+
+Uma `Falha` em qualquer passo não sobe do nó: vai para `falha` no estado, com a classe e a mensagem, e o subgrafo segue direto à E7, que grava a célula em `ERRO_INFRA`. A E5 não grava estado final.
 
 ## Saída
 
@@ -98,6 +100,6 @@ A mesma peça gravada de novo na mesma tentativa não grava nada; outra peça na
 ## Como falha
 
 - **Dado do claim:** número do texto do claim sem entrada na lista, ou o contrário, é `FalhaTerminal` no pacote (a E3 recusa esse claim, então só acontece com dado gravado fora do pipeline).
-- **Resposta fora do schema:** volta ao modelo pelo `llm.py`, sem consumir tentativa; esgotadas as tentativas de parse, a `Falha` sobe do nó.
-- **Provider ou gravação:** a `Falha` sobe do nó.
+- **Resposta fora do schema:** volta ao modelo pelo `llm.py`, sem consumir tentativa; esgotadas as tentativas de parse, a `Falha` vai para `falha` no estado, e a célula termina em `ERRO_INFRA`.
+- **Provider, leitura ou gravação:** a `Falha` vai para `falha` no estado, e a célula termina em `ERRO_INFRA`.
 - **Peça fora do contrato:** marcador inválido, número escrito à mão, slides demais, roteiro longo, claim fora do plano ou claim do formato ausente não interrompem a E5: a peça é gravada, e as violações ficam para a E6 (M1 e `plan_contract`).
