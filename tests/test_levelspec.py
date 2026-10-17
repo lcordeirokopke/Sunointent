@@ -51,7 +51,7 @@ def test_le_os_valores_da_spec():
         assert (s.formatos.roteiro.abertura_s, s.formatos.roteiro.fechamento_s) == (6, 6)
         caracteres = s.formatos.carrossel.caracteres
         assert (caracteres.gancho, caracteres.corpo, caracteres.conclusao) == (120, 220, 160)
-    assert [s.versao for s in specs.values()] == [5, 4, 5]
+    assert [s.versao for s in specs.values()] == [6, 6, 6]
     assert specs["intermediario"].foco == "o que o fato muda para quem já investe"
     assert specs["avancado"].foco == "análise técnica e institucional"
 
@@ -161,7 +161,8 @@ def test_arquivo_ausente_ou_vazio(raiz):
 def test_iniciante_le_os_marcadores_de_analogia():
     spec = levelspec.carregar(RAIZ, "iniciante")
     assert spec.analogia.marcadores == ["é como", "funciona como", "imagine que", "na prática"]
-    assert levelspec.carregar(RAIZ, "intermediario").analogia is None
+    assert levelspec.carregar(RAIZ, "intermediario").analogia.marcadores == [
+        "ou seja", "isto é", "quer dizer", "em outras palavras"]
     assert levelspec.carregar(RAIZ, "avancado").analogia is None
 
 
@@ -171,11 +172,15 @@ def test_analogia_obrigatoria_no_iniciante(raiz):
         levelspec.carregar(raiz, "iniciante")
 
 
-@pytest.mark.parametrize("nivel", ["intermediario", "avancado"])
-def test_analogia_proibida_fora_do_iniciante(raiz, nivel):
-    reescrever(raiz, nivel, analogia={"marcadores": ["é como"]})
-    with pytest.raises(FalhaTerminal, match="`analogia` só vale no Iniciante"):
-        levelspec.carregar(raiz, nivel)
+def test_analogia_opcional_no_intermediario(raiz):
+    reescrever(raiz, "intermediario", analogia=None)
+    assert levelspec.carregar(raiz, "intermediario").analogia is None
+
+
+def test_analogia_proibida_no_avancado(raiz):
+    reescrever(raiz, "avancado", analogia={"marcadores": ["é como"]})
+    with pytest.raises(FalhaTerminal, match="`analogia` não vale no Avançado"):
+        levelspec.carregar(raiz, "avancado")
 
 
 @pytest.mark.parametrize("marcadores, mensagem", [
@@ -245,10 +250,16 @@ def test_instrucoes_do_roteiro_usam_virgula_decimal():
     assert "Comece em 0 s" in instrucoes.orcamento
 
 
-@pytest.mark.parametrize("nivel", ["intermediario", "avancado"])
-def test_so_o_iniciante_tem_marcadores_nas_instrucoes(nivel):
-    spec = levelspec.carregar(RAIZ, nivel)
+def test_avancado_nao_tem_marcadores_nas_instrucoes():
+    spec = levelspec.carregar(RAIZ, "avancado")
     assert all(levelspec.instrucoes_redator(spec, f).marcadores == "" for f in ("artigo", "carrossel", "roteiro"))
+
+
+def test_intermediario_pede_a_explicacao_do_plano_com_os_marcadores_dele():
+    spec = levelspec.carregar(RAIZ, "intermediario")
+    frase = levelspec.instrucoes_redator(spec, "artigo").marcadores
+    assert "termo com explicação no plano" in frase
+    assert '"ou seja", "isto é", "quer dizer", "em outras palavras"' in frase
 
 
 # Bloco `legibilidade` (M3)
@@ -260,6 +271,29 @@ def test_so_o_iniciante_tem_piso_de_ifl():
     assert (piso.ifl_minimo.artigo, piso.ifl_minimo.carrossel, piso.ifl_minimo.roteiro) == (30, 45, 45)
     assert piso.frase_max_palavras == 18
     assert specs["intermediario"].legibilidade is None and specs["avancado"].legibilidade is None
+
+
+def test_sinal_de_ifl_do_artigo_encaixa_os_tres_niveis():
+    specs = levelspec.carregar_todos(RAIZ)
+    faixas = [(s.sinal_ifl.artigo.min, s.sinal_ifl.artigo.max) for s in specs.values()]
+    assert faixas == [(45, None), (27, 45), (None, 27)]
+    faixa = specs["intermediario"].sinal_ifl.artigo
+    assert faixa.contem(27) and faixa.contem(44.9) and not faixa.contem(45) and not faixa.contem(26.9)
+
+
+def test_sinal_de_ifl_com_lacuna_ou_faltando_e_invalido(raiz):
+    reescrever(raiz, "intermediario", sinal_ifl={"artigo": {"min": 30, "max": 45}})
+    with pytest.raises(FalhaTerminal, match="sinal_ifl.artigo precisa existir nos 3 níveis e se encaixar"):
+        levelspec.carregar_todos(raiz)
+    reescrever(raiz, "intermediario", sinal_ifl=None)
+    with pytest.raises(FalhaTerminal, match="sinal_ifl.artigo precisa existir"):
+        levelspec.carregar_todos(raiz)
+
+
+def test_faixa_de_sinal_de_ifl_com_min_maior_que_max_e_invalida(raiz):
+    reescrever(raiz, "intermediario", sinal_ifl={"artigo": {"min": 45, "max": 27}})
+    with pytest.raises(FalhaTerminal, match="min .* precisa ser menor que max"):
+        levelspec.carregar(raiz, "intermediario")
 
 
 def test_piso_de_ifl_pede_os_tres_formatos(raiz):

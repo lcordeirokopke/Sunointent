@@ -9,7 +9,9 @@ Completa a saída do planejador e devolve o PlanoEditorial:
 4. no Iniciante, cada termo do glossário acima de iniciante no texto dos claims usados recebe a analogia do
    glossário ou, se o termo não tem nenhuma, a analogia `nova` do planejador para esse termo. Analogia
    `nova` de termo fora da lista, de termo que já tem analogia no glossário ou de termo fora dos claims
-   usados é deixada de fora.
+   usados é deixada de fora;
+5. no Intermediário, cada termo acima de intermediario no texto dos claims usados recebe como explicação a
+   `definicao_simples` do glossário, sem chamada ao planejador.
 Também monta a lista de termos sem analogia que o planejador recebe.
 """
 
@@ -62,6 +64,18 @@ def analogias_do_iniciante(
     return analogias
 
 
+def explicacoes_do_intermediario(glossario: Glossario, claims: dict[str, Claim], claim_ids) -> list[Analogia]:
+    """Uma explicação por termo acima de intermediario no texto dos claims usados: a `definicao_simples` do
+    glossário, ligada ao termo pela forma escrita."""
+    return [
+        Analogia(
+            termo=glossario.termos[termo_id].termo, explicacao=glossario.termos[termo_id].definicao_simples,
+            origem="glossario", revisada=False,
+        )
+        for termo_id in termos_dos_claims(glossario, claims, claim_ids, "intermediario")
+    ]
+
+
 def completar(
     saida: SaidaPlanejador,
     claims: dict[str, Claim],
@@ -108,6 +122,8 @@ def completar(
                         ),
                     )
             analogias = analogias_do_iniciante(glossario, claims, [c.claim_id for c in usados], novas)
+        elif nivel == "intermediario":
+            analogias = explicacoes_do_intermediario(glossario, claims, [c.claim_id for c in usados])
         niveis.append(
             PlanoNivel(
                 nivel=nivel,

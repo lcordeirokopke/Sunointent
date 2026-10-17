@@ -17,6 +17,7 @@ from sunontent.retentativa import FalhaTerminal
 from sunontent.schemas import (
     FORMATOS,
     NIVEIS,
+    Analogia,
     Ancora,
     CelulaGrafoState,
     CelulaState,
@@ -221,6 +222,17 @@ def test_intermediario_recebe_os_termos_avancados_dos_claims_com_a_definicao():
     termo = GLOSSARIO.termos[GLOSSARIO.termo_da_forma("balanço de riscos")]
     assert [(t.termo, t.definicao, t.claim_ids) for t in p.termos_a_explicar] == [
         (termo.termo, termo.definicao_simples, ("C07",))]  # a Selic é de intermediário: não entra
+
+
+def test_termo_com_explicacao_no_plano_nao_repete_em_termos_a_explicar():
+    plano, factsheet = com_jargao()
+    termo = GLOSSARIO.termos[GLOSSARIO.termo_da_forma("balanço de riscos")]
+    plano.nivel("intermediario").analogias.append(
+        Analogia(termo=termo.termo, explicacao=termo.definicao_simples, origem="glossario", revisada=False))
+    p = pacote.montar(plano, "intermediario", "artigo", factsheet, SPECS["intermediario"], GLOSSARIO)
+    assert p.termos_a_explicar == ()
+    assert [(a.termo, a.explicacao, a.claim_ids) for a in p.analogias] == [
+        (termo.termo, termo.definicao_simples, ("C07",))]
 
 
 @pytest.mark.parametrize("nivel", ["iniciante", "avancado"])

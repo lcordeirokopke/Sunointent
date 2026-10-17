@@ -161,6 +161,17 @@ def test_analogias_do_glossario_e_nova():
     assert plano().nivel("intermediario").analogias == []
 
 
+def test_intermediario_explica_o_termo_avancado_dos_claims_com_a_definicao_simples():
+    s = saida(inter=nivel("intermediario", ["C01", "C02", "C05"]))
+    (a,) = plano(s).nivel("intermediario").analogias
+    assert (a.termo, a.origem, a.glossario_ref, a.revisada, a.explicacao) == (
+        "hiato do produto", "glossario", None, False, "Definição simples.")
+
+
+def test_avancado_nao_recebe_explicacao():
+    assert plano().nivel("avancado").analogias == []
+
+
 def test_analogia_nova_casada_pela_forma_sem_caixa_nem_acento():
     s = saida(ini=nivel("iniciante", ["C01", "C02"], analogias=[("ipca", "Termômetro.")]))
     assert [a.termo for a in plano(s).nivel("iniciante").analogias] == ["Selic", "IPCA"]
@@ -529,6 +540,15 @@ def test_limpeza_tira_a_analogia_do_termo_que_saiu_pelo_limite():
     ini = limpar(s).nivel("iniciante")
     assert [c.claim_id for c in ini.claims] == ["C01", "C02", "C03"]
     assert [a.termo for a in ini.analogias] == ["Selic", "IPCA"]  # sem o hiato do produto do C05
+
+
+def test_limpeza_tira_a_explicacao_do_intermediario_do_claim_que_saiu_pelo_limite():
+    s = saida(inter=nivel("intermediario", ["C01", "C02", "C05", "C03", "C06"]), nucleo=("C01",))
+    inter = limpar(s).nivel("intermediario")
+    assert [a.termo for a in inter.analogias] == ["hiato do produto"]
+    s = saida(inter=nivel("intermediario", ["C01", "C02", "C03", "C06", "C04", "C05"]), nucleo=("C01",))
+    inter = limpar(s).nivel("intermediario")
+    assert "C05" not in [c.claim_id for c in inter.claims] and inter.analogias == []
 
 
 def test_limpeza_redundante_com_relacionado_cortado_vira_secundario():

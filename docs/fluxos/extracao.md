@@ -140,30 +140,6 @@ Cada chamada a uma chave vira um span; o span de falha leva o nome da chave no c
 
 A retentativa interna do SDK fica desligada, para que cada tentativa passe pelo cliente e vire um span. O timeout por chamada é de 300 s.
 
-### Groq
-
-O juiz chama `https://api.groq.com/openai/v1/chat/completions` (API compatível com a da OpenAI) por `httpx`, sem SDK, com `Authorization: Bearer <GROQ_API_KEY>`. A `GROQ_API_KEY` é obrigatória (conferida pelo `__main__.py` antes de o run ser criado) e não tem reserva. O pedido leva:
-
-- `response_format` com `json_schema` e `strict: true`; o schema Pydantic vai no formato do modo estrito (`llm.schema_estrito`: todas as propriedades em `required`, `additionalProperties` falso e sem `default`);
-- `max_completion_tokens` 8.192, dentro do qual conta o raciocínio;
-- `include_reasoning: false`, para o raciocínio não voltar na resposta;
-- `reasoning_effort` (`low`, `medium` ou `high`) quando a chamada pede um nível de raciocínio (o juiz usa a chave `judge` de `config/models.yaml`).
-
-Classificação das respostas:
-
-| Resposta | Classe |
-| -------- | ------ |
-| HTTP 408, 422, 429, 498 (tier flex sem capacidade) e 5xx, timeout e erro de conexão | falha de infraestrutura, com o backoff |
-| HTTP 401 | chave recusada; sem reserva, terminal |
-| HTTP 400 com `code` `json_validate_failed` | resposta fora do schema: o `failed_generation` volta ao cliente, que repete com o erro de validação |
-| HTTP 403, 404, 413 (pedido acima do limite de tokens por minuto da organização) e os demais 4xx | terminal, com a mensagem do Groq |
-| `finish_reason` `content_filter` | conteúdo recusado, terminal |
-| `finish_reason` `length` com o conteúdo vazio (o raciocínio esgotou a saída) | resposta fora do schema, repetida com o erro de validação |
-
-Os tokens de raciocínio já vêm dentro de `completion_tokens` (com o detalhe em `completion_tokens_details.reasoning_tokens`), que é o que o span registra como saída. O Groq limita tokens e requisições por minuto e por dia por organização e por modelo; os limites da conta aparecem nos cabeçalhos `x-ratelimit-*` de cada resposta. Um pedido maior que o limite de tokens por minuto volta com 413 e não é repetido.
-
-Nível de raciocínio: a chamada pode pedir uma chave de `raciocinio` em `config/models.yaml` (`minimal`, `low`, `medium` ou `high`). Chave ausente usa o padrão do modelo. A extração usa o padrão; a correção usa `extractor_correcao`, porque corrigir um claim com o motivo dado é uma tarefa menor que ler o documento inteiro, e o raciocínio conta como saída, o token mais caro.
-
 ## Custo
 
 Cada tentativa, com sucesso ou não, vira um `Span` (`schemas.py`): nó, modelo, tokens de entrada e de saída (os de raciocínio contam como saída), custo, duração e a classe e a mensagem da falha. O custo é uma estimativa: tokens vezes o preço em US$ por milhão de `config/models.yaml`, convertido pela `cotacao_usd_brl` do mesmo arquivo. A cotação é provisória e está marcada com `PENDENTE:` no YAML. Não há teto de orçamento: o custo é registrado, não interrompe o run.

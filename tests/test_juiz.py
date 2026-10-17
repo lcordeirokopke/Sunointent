@@ -18,7 +18,7 @@ import yaml
 
 from conftest import ProviderFalso
 from sunontent import glossario as modulo_glossario
-from sunontent import llm
+from sunontent import levelspec, llm
 from sunontent.llm import ClienteLLM, Preco, RespostaBruta
 from sunontent.metrics import contexto, llm_judge, matriz_niveis
 from sunontent.retentativa import Falha, FalhaRetriavel, FalhaTerminal
@@ -385,25 +385,40 @@ def test_comando_da_matriz_le_a_consulta(monkeypatch, capsys):
 
         def niveis_estatisticos(self, run_ids):
             assert run_ids == ["r1"]
-            return [{"formato": "carrossel", "nivel": "avancado", "nivel_estatistico": "iniciante"}]
+            return [{"formato": "carrossel", "nivel": "avancado", "nivel_estatistico": "iniciante"},
+                    {"formato": "artigo", "nivel": "avancado", "nivel_estatistico": "acima_de_iniciante", "ifl": 12.0}]
 
     monkeypatch.setattr("sunontent.persistencia.criar_consulta_supabase", lambda ambiente: Consulta())
     monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **k: None)
     assert matriz_niveis.main(["r1"]) == 0
     saida = capsys.readouterr().out
     assert "carrossel: 0 de 1 no nível pedido" in saida
-    assert "carrossel: 0 de 1 no estilo certo" in saida
+    assert "carrossel: 0 de 1 no sinal certo" in saida
+    assert "artigo: 1 de 1 no sinal certo" in saida  # recalculado do ifl gravado: 12 está na faixa do Avançado
 
 
-def test_matriz_estatistica_cruza_o_nivel_pedido_e_o_lado_do_piso():
+def test_matriz_estatistica_tem_tres_niveis_no_artigo_e_dois_lados_nos_outros_formatos():
     matriz = matriz_niveis.montar_estatistica([
-        ("artigo", "iniciante", "iniciante"), ("artigo", "avancado", "acima_de_iniciante"),
-        ("artigo", "intermediario", "iniciante"),
+        ("artigo", "iniciante", "iniciante"), ("artigo", "avancado", "avancado"),
+        ("artigo", "intermediario", "avancado"),
+        ("carrossel", "iniciante", "iniciante"), ("carrossel", "avancado", "acima_de_iniciante"),
+        ("roteiro", "intermediario", "iniciante"),
     ])
-    assert matriz["artigo"]["intermediario"]["iniciante"] == 1 and matriz["roteiro"]["iniciante"]["iniciante"] == 0
-    assert matriz_niveis.acerto_estatistico(matriz) == (2, 3)
+    assert matriz["artigo"]["intermediario"]["avancado"] == 1 and matriz["roteiro"]["iniciante"]["iniciante"] == 0
+    assert set(matriz["artigo"]["iniciante"]) == set(matriz_niveis.NIVEIS) and set(matriz["carrossel"]["iniciante"]) == set(matriz_niveis.LADOS)
+    assert matriz_niveis.acerto_estatistico(matriz, "artigo") == (2, 3)
+    assert matriz_niveis.acerto_estatistico(matriz) == (4, 6)
     texto = matriz_niveis.formatar_estatistica(matriz)
-    assert "artigo: 2 de 3 no estilo certo" in texto and "acima de iniciante" in texto
+    assert "artigo: 2 de 3 no sinal certo" in texto and "acima de iniciante" in texto
+
+
+def test_sinal_do_artigo_e_recalculado_do_ifl_gravado():
+    specs = levelspec.carregar_todos(Path(__file__).resolve().parents[1])
+    linha = {"formato": "artigo", "nivel": "intermediario", "nivel_estatistico": "acima_de_iniciante", "ifl": 36.0}
+    assert matriz_niveis.sinal_da_linha(linha, specs) == "intermediario"
+    assert matriz_niveis.sinal_da_linha({**linha, "ifl": None}, specs) == "acima_de_iniciante"
+    carrossel = {**linha, "formato": "carrossel", "nivel_estatistico": "iniciante"}
+    assert matriz_niveis.sinal_da_linha(carrossel, specs) == "iniciante"
 
 
 # Calibração

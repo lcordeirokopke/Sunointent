@@ -67,7 +67,10 @@ class AnalogiaJulgada:
 
 
 def analogias_usadas(peca: Peca, plano: PlanoNivel, glossario: Glossario) -> list[AnalogiaJulgada]:
-    """As analogias do plano cujo termo aparece no texto das unidades, na ordem da primeira ocorrência."""
+    """As analogias do plano cujo termo aparece no texto das unidades, na ordem da primeira ocorrência. Só o
+    Iniciante tem analogia: as explicações do Intermediário vêm da `definicao_simples` do glossário e a M5 as confere."""
+    if plano.nivel != "iniciante":
+        return []
     do_plano = analogy_rule.analogias_do_plano(plano, glossario)
     achadas: dict[str, AnalogiaJulgada] = {}
     for campo in campos.campos_da_peca(peca.payload):

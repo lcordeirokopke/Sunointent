@@ -10,6 +10,47 @@ const ROTULO_METRICA = {
 };
 const ORDEM_METRICAS = ["numeric_fidelity", "text_size", "readability", "term_density", "analogy_rule", "llm_judge", "plan_contract"];
 
+// O que cada métrica mede e se reprova a célula (docs/metricas.md). `reprova`: "sim", "nao" ou "parcial" (com a condição).
+const NOTA_METRICAS = [
+  { nome: "numeric_fidelity", reprova: "sim",
+    texto: "Todo número da peça que não seja data vem de um marcador de um claim do plano; datas (dia, ano, trimestre, reunião) são conferidas contra os claims e o ano do documento." },
+  { nome: "text_size", reprova: "sim",
+    texto: "Palavras do artigo, caracteres de cada slide e palavras de cada cena dentro dos limites do contrato de formato do nível." },
+  { nome: "readability", reprova: "parcial", condicao: "só o piso do Iniciante",
+    texto: "Índice de Facilidade de Leitura (Flesch adaptado ao português) das unidades. Só o Iniciante tem piso por formato e reprova abaixo dele; no Intermediário e no Avançado só mede. O nível que o IFL do artigo indica (Iniciante, Intermediário ou Avançado, pelas faixas do LevelSpec) é um sinal para a matriz de confusão e nunca reprova." },
+  { nome: "term_density", reprova: "nao",
+    texto: "Ocorrências de termos do glossário acima de iniciante por 100 palavras. Só mede." },
+  { nome: "analogy_rule", reprova: "parcial", condicao: "Iniciante e Intermediário",
+    texto: "Todo termo do glossário acima do nível (acima de iniciante no Iniciante, acima de intermediário no Intermediário) tem analogia ou explicação no plano e um marcador na mesma unidade da primeira ocorrência. No Avançado não se aplica." },
+  { nome: "llm_judge", reprova: "parcial", condicao: "analogia incorreta ou unidade não implicada",
+    texto: "Um modelo de outra família julga se cada analogia explica o conceito corretamente e se cada unidade é implicada pelos claims que cita. Só roda depois que M1, M2, M3, M5 e M7 passam, e só pode reprovar." },
+  { nome: "plan_contract", reprova: "sim",
+    texto: "A estrutura da peça confere com o plano: quantidade de slides, soma das cenas, claim_ids dentro do plano do nível e cobertura do formato." },
+];
+const EFEITO_METRICA = Object.fromEntries(NOTA_METRICAS.map((n) => [n.nome, n]));
+
+function seloEfeito(nome) {
+  const n = EFEITO_METRICA[nome];
+  if (!n) return "";
+  if (n.reprova === "sim") return selo("erro", "reprova");
+  if (n.reprova === "nao") return selo("normal", "só mede");
+  return selo("dev", `reprova: ${n.condicao}`);
+}
+
+function cartaoNotasMetricas() {
+  const linhas = NOTA_METRICAS.map((n) => `<tr>
+      <td>${esc(ROTULO_METRICA[n.nome])}</td><td>${esc(n.texto)}</td><td>${seloEfeito(n.nome)}</td></tr>`).join("");
+  return `<details class="cartao"><summary><b>O que cada métrica mede e quais reprovam</b></summary>
+    <p class="nota-aviso" role="note"><span class="nota-selo">Nota</span>A célula é aprovada quando nenhuma métrica que reprova acusa violação. As métricas determinísticas (M1 a M5 e M7) rodam em toda tentativa; a M4 e o nível percebido da M6 são só informativos.</p>
+    <div class="tabela-rolagem"><table><thead><tr><th>Métrica</th><th>O que mede</th><th>Reprova?</th></tr></thead>
+    <tbody>${linhas}</tbody></table></div></details>`;
+}
+
+const NOTA_JUIZ = `<p class="nota-aviso" role="note"><span class="nota-selo">Juiz (M6)</span>
+  O juiz reprova a célula em dois casos: uma analogia do plano usada na peça não explica o conceito corretamente (é enganosa ou decorativa), ou uma unidade (seção, slide ou cena) diz algo que os claims que ela cita não sustentam: projeção apresentada como fato ou sem atribuição, causa, consequência ou comparação inventada, fato ou recomendação acrescentados, número por extenso diferente do claim (ou grandeza, período ou sujeito trocados) e contradição com um trecho. Explicação geral de conceito, pergunta retórica e transição não reprovam.
+  Aprova quando todas as analogias estão corretas e todas as unidades são implicadas pelos claims.
+  O <b>nível percebido</b> é só informativo: alimenta a matriz de confusão e não reprova nem aprova nada, então uma peça pedida como Intermediário e percebida como Avançado continua aprovada.</p>`;
+
 const vista = { celula: null, tentativa: null, nivel: "iniciante", svgs: new Map() };
 
 function celulasDe(detalhe) {
@@ -257,10 +298,24 @@ async function baixarTodos(celulaIdAlvo, formato, botao) {
   botao.disabled = false;
 }
 
-// Matrizes de confusão do run, da última tentativa de cada célula: nível pedido contra o nível percebido pelo juiz (M6)
-// e contra o estilo de Iniciante, IFL no piso e analogia na peça (M3). Só informativas.
-function cartaoConfusao(celulas) {
+const NOTA_SINAL_IFL = `<p class="nota-aviso" role="note"><span class="nota-selo">Sinal do IFL (M3)</span>
+  O IFL é um <b>sinal de nível</b>: no artigo, o nível cuja faixa de IFL contém o IFL da peça; no carrossel e no roteiro, o estilo de Iniciante (IFL no piso do Iniciante e analogia na peça), porque o limite de caracteres encurta as frases de qualquer nível.
+  O sinal só alimenta as matrizes e <b>não reprova nada</b>. O que reprova na M3 é o <b>piso de IFL do Iniciante</b>; o Intermediário e o Avançado só medem.</p>`;
+
+// Matrizes de confusão do run, da última tentativa de cada célula: nível pedido contra o nível percebido pelo juiz (M6),
+// contra o nível que o IFL do artigo indica e contra o estilo de Iniciante do carrossel e do roteiro (M3). Só informativas.
+// `faixas` são as faixas de IFL do artigo por nível (LevelSpec), que o servidor manda com o run.
+function cartaoConfusao(celulas, faixas) {
   const metricaDe = (c, nome) => ultimaTentativa(c)?.scorecard?.metricas?.find((m) => m.nome === nome);
+  const nivelDoArtigo = (c) => {
+    const d = metricaDe(c, "readability")?.detalhes;
+    if (!d) return null;
+    if (faixas && d.ifl != null) {
+      const achado = Object.entries(faixas).find(([, f]) => (f.min == null || d.ifl >= f.min) && (f.max == null || d.ifl < f.max));
+      if (achado) return achado[0];
+    }
+    return d.nivel_estatistico;
+  };
   const tabela = (titulo, colunas, valor) => {
     const conta = {};
     let total = 0;
@@ -277,18 +332,22 @@ function cartaoConfusao(celulas) {
       `<th>${r}</th>`).join("")}</tr></thead><tbody>${linhas}</tbody></table></div></div>`;
   };
   return `<div class="cartao"><h3>Matrizes de confusão de níveis</h3>
-    <p class="motivo-neutro">Da última tentativa de cada célula, nos 3 formatos juntos. Não reprovam nada.</p>
-    ${tabela("Nível percebido pelo juiz (M6)", NIVEIS, (c) => metricaDe(c, "llm_judge")?.detalhes?.nivel_percebido)}
-    ${tabela("Estilo de Iniciante pelo IFL e pela analogia (M3)",
+    ${NOTA_JUIZ}
+    ${NOTA_SINAL_IFL}
+    <p class="motivo-neutro">Da última tentativa de cada célula. Não reprovam nada.</p>
+    ${tabela("Nível percebido pelo juiz (M6), nos 3 formatos", NIVEIS, (c) => metricaDe(c, "llm_judge")?.detalhes?.nivel_percebido)}
+    ${tabela("Nível do artigo pela faixa de IFL (M3), só sinal", NIVEIS, (c) => (c.formato === "artigo" ? nivelDoArtigo(c) : null))}
+    ${tabela("Estilo de Iniciante no carrossel e no roteiro, pelo IFL e pela analogia (M3), só sinal",
       [["iniciante", "iniciante"], ["acima_de_iniciante", "acima de iniciante"]],
-      (c) => metricaDe(c, "readability")?.detalhes?.nivel_estatistico)}</div>`;
+      (c) => (c.formato === "artigo" ? null : metricaDe(c, "readability")?.detalhes?.nivel_estatistico))}</div>`;
 }
 
 // Avaliação por célula
 
 function secaoAvaliacao(d) {
   const titulo = `<h2 class="secao-titulo">Avaliação por célula</h2>
-    <p class="nota-aviso" role="note"><span class="nota-selo">Aviso</span>Escolha uma célula para ver o scorecard, a peça com as marcações, a rastreabilidade e o plano do nível.</p>`;
+    <p class="nota-aviso" role="note"><span class="nota-selo">Aviso</span>Escolha uma célula para ver o scorecard, a peça com as marcações, a rastreabilidade e o plano do nível.</p>
+    ${cartaoNotasMetricas()}`;
   const celulas = celulasDe(d);
   if (!celulas.length) return "";
   const porId = Object.fromEntries(celulas.map((c) => [c.celula_id, c]));
@@ -308,7 +367,7 @@ function secaoAvaliacao(d) {
     <table class="matriz-grade"><thead><tr><th></th>${FORMATOS.map(([, rotulo]) => `<th>${rotulo}</th>`).join("")}</tr></thead>
     <tbody>${linhas.join("")}</tbody></table></div>
     ${vista.celula && porId[vista.celula] ? detalheCelula(porId[vista.celula], d) : `<div class="vazio">Escolha uma célula da matriz.</div>`}
-    ${cartaoConfusao(celulas)}`;
+    ${cartaoConfusao(celulas, d.sinal_ifl_artigo)}`;
 }
 
 // Texto com as marcas: números do marcador (sublinhados, com o claim e a página) e violações (destacadas).
@@ -405,7 +464,9 @@ function blocoScorecard(tentativa) {
       <td>${esc(ROTULO_METRICA[m.nome] ?? m.nome)}</td>
       <td class="num">${esc(typeof m.valor === "boolean" ? (m.valor ? "sim" : "não") : m.valor)}</td>
       <td>${esc(m.faixa_esperada)}</td>
+      <td>${seloEfeito(m.nome)}</td>
       <td>${selo(m.passou ? "ok" : "erro", m.passou ? "passou" : "reprovou")}</td></tr>`).join("");
+  const juiz = metricas.some((m) => m.nome === "llm_judge");
   const violacoes = metricas.flatMap((m) => m.violacoes).map((v) => `<div class="violacao-item">
       ${selo("erro", ROTULO_METRICA[v.metrica] ?? v.metrica)}
       <b>${esc(v.trecho)}</b>
@@ -418,8 +479,9 @@ function blocoScorecard(tentativa) {
       ${metrica("Tokens do juiz", fmtInt(sc.custo_tokens))}
       ${metrica("Duração", fmtDuracao(sc.duracao_ms))}
     </div>
-    <div class="tabela-rolagem"><table><thead><tr><th>Métrica</th><th>Valor</th><th>Faixa esperada</th><th></th></tr></thead>
+    <div class="tabela-rolagem"><table><thead><tr><th>Métrica</th><th>Valor</th><th>Faixa esperada</th><th>Efeito</th><th></th></tr></thead>
     <tbody>${linhas}</tbody></table></div>
+    ${juiz ? NOTA_JUIZ : ""}
     ${violacoes ? `<h4>Violações</h4>${violacoes}` : ""}</div>`;
 }
 

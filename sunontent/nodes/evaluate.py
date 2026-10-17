@@ -40,7 +40,8 @@ def evaluate(state: CelulaGrafoState, config) -> dict:
 
     falha: Falha | None = None
     try:
-        spec = levelspec.carregar(raiz, celula.nivel)
+        specs = levelspec.carregar_todos(raiz)
+        spec = specs[celula.nivel]
         glossario = modulo_glossario.carregar(raiz)
         gravado = persistencia.carregar_plano(repositorio, raiz_dados, run_id)
         if gravado is None:
@@ -53,7 +54,7 @@ def evaluate(state: CelulaGrafoState, config) -> dict:
         metricas = [
             numeric_fidelity.avaliar(peca, claims_do_plano, factsheet.tabela_numeros, factsheet.data_documento, glossario),
             text_size.avaliar(peca, spec),
-            readability.avaliar(peca, spec, spec if celula.nivel == "iniciante" else levelspec.carregar(raiz, "iniciante")),
+            readability.avaliar(peca, spec, specs["iniciante"], specs),
             term_density.avaliar(peca, glossario),
             analogy_rule.avaliar(peca, spec, plano_nivel, glossario),
             contrato,

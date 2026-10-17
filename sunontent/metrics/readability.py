@@ -6,10 +6,13 @@ peça (seção, slide ou fala da cena; o título, a linha fina e o gancho visual
     IFL = 248,835 - 1,015 x (palavras / frases) - 84,6 x (sílabas / palavras)
 
 Palavra, sílaba e frase são as de `sunontent/texto.py`. O nível que tem piso de IFL no formato (`legibilidade` do
-LevelSpec) reprova abaixo dele; os outros só medem. O resultado também diz se a peça tem o estilo de Iniciante (IFL
-no piso do Iniciante e um marcador de analogia da M5 em alguma unidade), para a matriz de confusão estatística: o IFL
-sozinho confunde frase curta com texto de Iniciante.
+LevelSpec) reprova abaixo dele; os outros só medem. O resultado também traz o sinal de nível da peça, só informativo,
+para a matriz de confusão estatística. No artigo, é o nível cuja faixa de IFL (`sinal_ifl` do LevelSpec) contém o IFL.
+No carrossel e no roteiro, é o estilo de Iniciante (IFL no piso do Iniciante e um marcador de analogia da M5 em
+alguma unidade), porque o IFL sozinho confunde frase curta com texto de Iniciante.
 """
+
+from collections.abc import Mapping
 
 from sunontent.levelspec import LevelSpec
 from sunontent.metrics import analogy_rule, campos, resultado
@@ -32,7 +35,17 @@ def piso(spec: LevelSpec | None, formato: str) -> float | None:
     return getattr(spec.legibilidade.ifl_minimo, formato)
 
 
-def avaliar(peca: Peca, spec: LevelSpec, spec_iniciante: LevelSpec | None = None) -> MetricaResultado:
+def nivel_pelo_ifl_do_artigo(valor: float, specs: Mapping[str, LevelSpec]) -> str | None:
+    """O nível cuja faixa `sinal_ifl.artigo` contém o IFL, ou None quando os níveis não têm a faixa."""
+    for nivel, spec in specs.items():
+        if spec.sinal_ifl is not None and spec.sinal_ifl.artigo.contem(valor):
+            return nivel
+    return None
+
+
+def avaliar(
+    peca: Peca, spec: LevelSpec, spec_iniciante: LevelSpec | None = None, specs: Mapping[str, LevelSpec] | None = None
+) -> MetricaResultado:
     unidade = campos.nome_da_unidade(peca.payload)
     em = "no" if unidade == "slide" else "na"
     frases_medidas = []  # (palavras, unidade, inicio, fim, texto da unidade)
@@ -56,7 +69,9 @@ def avaliar(peca: Peca, spec: LevelSpec, spec_iniciante: LevelSpec | None = None
     meta = spec.legibilidade.frase_max_palavras if spec.legibilidade else None
     piso_iniciante = piso(spec_iniciante, peca.formato)
     estatistico = None
-    if piso_iniciante is not None and marcadores:
+    if peca.formato == "artigo":
+        estatistico = nivel_pelo_ifl_do_artigo(valor, specs) if specs else None
+    elif piso_iniciante is not None and marcadores:
         estatistico = "iniciante" if valor >= piso_iniciante and com_analogia else "acima_de_iniciante"
 
     violacoes: list[Violacao] = []

@@ -5,6 +5,7 @@ import re
 import sys
 import time
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -218,6 +219,20 @@ def test_runs_vem_da_consulta(tmp_path):
     assert detalhe["manifest"] == run and detalhe["descartados"] == 2
     # Os descartados são os reprovados na última rodada E2/E3, a do graph.py.
     assert consulta.rodadas_extracao == [graph.RODADAS_EXTRACAO] * 2
+
+
+def test_run_traz_as_faixas_de_ifl_do_artigo_do_levelspec(tmp_path):
+    http = TestClient(servidor.criar_app(Path(__file__).resolve().parents[1], execucao.Gerenciador(tmp_path),
+                                         ConsultaFalsa([{"run_id": RUN_ID, "status": "concluido"}])))
+    faixas = http.get(f"/api/runs/{RUN_ID}").json()["sinal_ifl_artigo"]
+    # sem config/levels na raiz, o dashboard segue sem as faixas
+    sem, _ = montar_cliente(tmp_path, ConsultaFalsa([{"run_id": RUN_ID, "status": "concluido"}]))
+    assert sem.get(f"/api/runs/{RUN_ID}").json()["sinal_ifl_artigo"] is None
+    assert faixas == {
+        "iniciante": {"min": 45, "max": None},
+        "intermediario": {"min": 27, "max": 45},
+        "avancado": {"min": None, "max": 27},
+    }
 
 
 def test_supabase_fora_do_ar_responde_503_com_a_mensagem(tmp_path):

@@ -1,9 +1,10 @@
 """M5. Regra de analogia (docs/arquiteturas.md, E6). Determinístico, sem LLM.
 
-Só no nível Iniciante: todo termo do glossário com `nivel_minimo` acima de iniciante, encontrado no texto das
-unidades da peça (seção, slide ou fala da cena), precisa de uma `Analogia` no plano do nível e de um marcador de
-analogia (`analogia.marcadores` do LevelSpec) na mesma unidade da primeira ocorrência do termo. O título e a linha
-fina não são unidades e não entram na busca. Os termos são casados pela regra de docs/glossario.md.
+No Iniciante e no Intermediário (níveis com o bloco `analogia` no LevelSpec): todo termo do glossário com
+`nivel_minimo` acima do nível, encontrado no texto das unidades da peça (seção, slide ou fala da cena), precisa de
+uma `Analogia` no plano do nível (no Intermediário, a explicação do plano) e de um marcador (`analogia.marcadores`
+do LevelSpec) na mesma unidade da primeira ocorrência do termo. O título e a linha fina não são unidades e não
+entram na busca. Os termos são casados pela regra de docs/glossario.md.
 """
 
 import re
@@ -39,6 +40,7 @@ def avaliar(peca: Peca, spec: LevelSpec, plano: PlanoNivel, glossario: Glossario
         return resultado.montar(AnalogyRuleDetalhes(aplicavel=False, termos=[]), [])
 
     marcadores = spec.analogia.marcadores
+    rotulo = "analogia" if spec.nivel == "iniciante" else "explicação"
     expressoes = ", ".join(f'"{m}"' for m in marcadores)
     unidade = campos.nome_da_unidade(peca.payload)
     em = "no" if unidade == "slide" else "na"
@@ -46,8 +48,10 @@ def avaliar(peca: Peca, spec: LevelSpec, plano: PlanoNivel, glossario: Glossario
     primeiras: dict[str, tuple[int, str, int, int]] = {}  # id -> (unidade, texto, inicio, fim) da primeira ocorrência
     textos = {c.unidade_indice: c.texto for c in campos.campos_da_peca(peca.payload) if c.campo == "texto"}
     for indice, texto in textos.items():
-        for o in glossario.casar(texto):
-            if glossario.termos[o.id].nivel_minimo != "iniciante":
+        ocorrencias = glossario.casar(texto)
+        acima = set(glossario.acima_de([o.id for o in ocorrencias], spec.nivel))
+        for o in ocorrencias:
+            if o.id in acima:
                 primeiras.setdefault(o.id, (indice, texto, o.inicio, o.fim))
 
     termos: list[TermoAnalogia] = []
@@ -64,15 +68,16 @@ def avaliar(peca: Peca, spec: LevelSpec, plano: PlanoNivel, glossario: Glossario
             continue
         onde = f"{em} {unidade} {indice + 1}"
         if analogia is None:
-            esperado, obtido = "analogia no plano do nível e marcador na unidade", "termo sem analogia no plano"
+            esperado = f"{rotulo} no plano do nível e marcador na unidade"
+            obtido = f"termo sem {rotulo} no plano"
             instrucao = (
-                f"O termo «{texto[inicio:fim]}» aparece {onde} sem analogia no plano: "
+                f"O termo «{texto[inicio:fim]}» aparece {onde} sem {rotulo} no plano: "
                 "substitua-o por uma explicação em palavras simples."
             )
         else:
-            esperado, obtido = f"marcador de analogia {onde}", "termo explicado sem marcador de analogia"
+            esperado, obtido = f"marcador de {rotulo} {onde}", f"termo explicado sem marcador de {rotulo}"
             instrucao = (
-                f"Explique «{texto[inicio:fim]}» {onde}, na primeira vez que o usar, com a analogia do plano "
+                f"Explique «{texto[inicio:fim]}» {onde}, na primeira vez que o usar, com a {rotulo} do plano "
                 f"({analogia.explicacao}), usando uma destas expressões: {expressoes}."
             )
         violacoes.append(Violacao(

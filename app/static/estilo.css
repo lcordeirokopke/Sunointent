@@ -573,6 +573,8 @@ h2.mono, .cartao h2, .peca-texto, .descricao { overflow-wrap: anywhere; }
 .nucleo-textos { margin: 10px 0 0; padding-left: 18px; color: var(--texto-suave); }
 .nucleo-textos li { margin: 2px 0; }
 .motivo-neutro { color: var(--texto-suave); font-size: 12px; margin-top: 4px; }
+details.cartao > summary { cursor: pointer; font-size: 15px; }
+details.cartao[open] > summary { margin-bottom: 12px; }
 details.descartes { margin-top: 14px; }
 details.descartes summary { cursor: pointer; color: var(--texto-suave); font-size: 13px; font-weight: 700; }
 details.descartes .tabela-rolagem { margin-top: 8px; }

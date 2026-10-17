@@ -1,5 +1,5 @@
 nivel: iniciante
-versao: 5
+versao: 6
 # Campos da E4 (docs/fluxos/plano-editorial.md, LevelSpec da E4). Valores de partida.
 foco: "impacto prático no bolso do leitor"
 tags_priorizadas: [impacto_pratico]
@@ -30,3 +30,7 @@ analogia:
 legibilidade:
   ifl_minimo: {artigo: 30, carrossel: 45, roteiro: 45}
   frase_max_palavras: 18
+# Sinal de nível da M3 (docs/metricas.md): faixa de IFL do artigo neste nível ({min} inclusivo, {max} exclusivo).
+# Só alimenta a matriz de confusão de níveis; não reprova nada. As faixas dos 3 níveis se encaixam.
+sinal_ifl:
+  artigo: {min: 45}

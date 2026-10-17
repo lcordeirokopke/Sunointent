@@ -304,7 +304,7 @@ class PlanoNivel(BaseModel):
     claims: list[ClaimPlanejado]  # em ordem de leitura
     tese: str  # vazia só quando a limpeza do plano tirou uma tese inválida (registrado no aviso)
     tese_claim_ids: list[str]
-    analogias: list[Analogia]  # uma por termo, a mesma nos 3 formatos do nível
+    analogias: list[Analogia]  # uma por termo, a mesma nos 3 formatos do nível; vazia no Avançado
 
 
 class PlanoEditorial(BaseModel):
@@ -593,9 +593,10 @@ class ReadabilityDetalhes(BaseModel):
     ifl_minimo: float | None = None  # o piso do nível neste formato (LevelSpec); None quando o nível só mede
     frase_max_palavras: int | None = None  # a meta de tamanho de frase do nível, quando existe
     analogia_na_peca: bool = False  # algum texto de unidade tem um marcador de analogia do Iniciante (M5)
-    # O estilo de Iniciante: IFL no piso do Iniciante no formato e analogia na peça. Alimenta a matriz de confusão
-    # estatística; None quando o Iniciante não tem piso no formato.
-    nivel_estatistico: Literal["iniciante", "acima_de_iniciante"] | None = None
+    # O sinal de nível da peça, só informativo. No artigo, o nível da faixa de IFL em que o IFL cai (`sinal_ifl` do
+    # LevelSpec); no carrossel e no roteiro, `iniciante` quando o IFL está no piso do Iniciante e há analogia na peça,
+    # senão `acima_de_iniciante`. Alimenta a matriz de confusão estatística; None sem a configuração do sinal.
+    nivel_estatistico: Literal["iniciante", "intermediario", "avancado", "acima_de_iniciante"] | None = None
 
 
 class TermoContado(BaseModel):
@@ -625,8 +626,8 @@ class TermoAnalogia(BaseModel):
 
 class AnalogyRuleDetalhes(BaseModel):
     metrica: Literal["analogy_rule"] = "analogy_rule"
-    aplicavel: bool  # a regra vale só no Iniciante
-    termos: list[TermoAnalogia]  # os termos do glossário acima de iniciante encontrados na peça
+    aplicavel: bool  # a regra vale no Iniciante e no Intermediário
+    termos: list[TermoAnalogia]  # os termos do glossário acima do nível encontrados na peça
 
 
 class ChecagemContrato(BaseModel):

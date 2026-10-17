@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app import execucao, slide_svg
-from sunontent import graph, persistencia
+from sunontent import graph, levelspec, persistencia
 from sunontent.retentativa import Falha
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -75,6 +75,16 @@ def _ler(obter_consulta, leitura):
         return leitura(obter_consulta())
     except Falha as falha:
         raise HTTPException(503, f"Supabase ({falha.classe}): {falha.mensagem}") from falha
+
+
+def _faixas_ifl_do_artigo(raiz: Path) -> dict[str, dict] | None:
+    """As faixas de IFL do artigo por nível (`sinal_ifl` do LevelSpec), para o dashboard classificar o artigo de
+    qualquer run pelo `ifl` gravado. None se o LevelSpec não pode ser lido."""
+    try:
+        specs = levelspec.carregar_todos(raiz)
+    except Falha:
+        return None
+    return {n: s.sinal_ifl.artigo.model_dump() for n, s in specs.items() if s.sinal_ifl is not None} or None
 
 
 def criar_app(raiz: Path = RAIZ, gerenciador: execucao.Gerenciador | None = None, consulta=None) -> FastAPI:
@@ -174,7 +184,7 @@ def criar_app(raiz: Path = RAIZ, gerenciador: execucao.Gerenciador | None = None
         detalhe = _ler(obter_consulta, lambda consulta: consulta.detalhar_run(run_id, rodadas_extracao=graph.RODADAS_EXTRACAO))
         if detalhe is None:
             raise HTTPException(404, f"run não encontrado: {run_id}")
-        return detalhe
+        return {**detalhe, "sinal_ifl_artigo": _faixas_ifl_do_artigo(raiz)}
 
     @app.get("/api/runs/{run_id}/carrossel/{celula_id}/{arquivo}")
     def slide(run_id: str, celula_id: str, arquivo: str, tentativa: int | None = None, baixar: bool = False):

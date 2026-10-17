@@ -385,8 +385,8 @@ ANALOGIA_SELIC = Analogia(termo="Selic", explicacao="o preço do dinheiro", orig
                           glossario_ref="selic#1", revisada=False)
 
 
-def plano_nivel(*analogias):
-    return PlanoNivel(nivel="iniciante", descartes=[], claims=[], tese="", tese_claim_ids=[], analogias=list(analogias))
+def plano_nivel(*analogias, nivel="iniciante"):
+    return PlanoNivel(nivel=nivel, descartes=[], claims=[], tese="", tese_claim_ids=[], analogias=list(analogias))
 
 
 def m5(secoes, plano=None, nivel="iniciante", glossario=GLOSSARIO):
@@ -458,10 +458,42 @@ def test_cada_termo_acima_de_iniciante_e_conferido_na_sua_unidade():
     assert [(v.trecho, v.unidade_indice) for v in r.violacoes] == [("CDI", 1)]
 
 
-@pytest.mark.parametrize("nivel", ["intermediario", "avancado"])
-def test_a_regra_vale_so_no_iniciante(nivel):
-    r = m5(["A Selic caiu e o CDI subiu."], nivel=nivel)
+def test_a_regra_nao_vale_no_avancado():
+    r = m5(["A Selic caiu e o CDI subiu."], nivel="avancado")
     assert r.passou and r.detalhes.aplicavel is False and r.detalhes.termos == []
+
+
+HIATO = Analogia(termo="hiato do produto", explicacao="Definição simples.", origem="glossario", revisada=False)
+
+
+def m5_intermediario(secoes, *explicacoes):
+    return m5(secoes, plano=plano_nivel(*explicacoes, nivel="intermediario"), nivel="intermediario")
+
+
+def test_intermediario_pede_explicacao_so_do_termo_avancado():
+    r = m5_intermediario(["A Selic e o CDI subiram, ou seja, houve alta."], HIATO)
+    assert r.passou and r.detalhes.aplicavel and r.detalhes.termos == []
+
+
+def test_intermediario_termo_avancado_com_explicacao_e_marcador():
+    r = m5_intermediario(["O hiato do produto, ou seja, a folga da economia, fechou."], HIATO)
+    assert r.passou
+    (t,) = r.detalhes.termos
+    assert (t.termo, t.analogia_no_plano, t.marcador_na_unidade) == ("hiato do produto", True, True)
+
+
+def test_intermediario_termo_avancado_sem_marcador():
+    (v,) = m5_intermediario(["O hiato do produto fechou."], HIATO).violacoes
+    assert v.trecho == "hiato do produto" and v.esperado == "marcador de explicação na seção 1"
+    assert v.instrucao_corretiva.startswith(
+        "Explique «hiato do produto» na seção 1, na primeira vez que o usar, com a explicação do plano (Definição simples.)")
+    assert '"ou seja", "isto é", "quer dizer", "em outras palavras"' in v.instrucao_corretiva
+
+
+def test_intermediario_termo_avancado_sem_explicacao_no_plano():
+    (v,) = m5_intermediario(["O hiato do produto, ou seja, a folga, fechou."]).violacoes
+    assert v.obtido == "termo sem explicação no plano"
+    assert v.instrucao_corretiva.startswith("O termo «hiato do produto» aparece na seção 1 sem explicação no plano")
 
 
 def test_carrossel_nomeia_a_unidade_como_slide():
@@ -507,7 +539,7 @@ LONGA = " ".join(["Operação societária deliberada"] * 10) + "."
 
 
 def m3(peca, nivel="iniciante"):
-    return readability.avaliar(peca, SPECS[nivel], SPECS["iniciante"])
+    return readability.avaliar(peca, SPECS[nivel], SPECS["iniciante"], SPECS)
 
 
 def test_ifl_calculado_a_mao():
@@ -552,16 +584,51 @@ def test_intermediario_e_avancado_so_medem():
         assert r.faixa_esperada == "sem limite (só mede)" and r.detalhes.ifl_minimo is None
 
 
-def test_nivel_estatistico_junta_o_piso_do_ifl_e_a_analogia():
+def como(peca, nivel):
+    return peca.model_copy(update={"nivel": nivel})
+
+
+def test_nivel_estatistico_do_carrossel_junta_o_piso_do_ifl_e_a_analogia():
     com_analogia = FACIL + " A taxa é como um preço."
-    r = m3(artigo([com_analogia]))
+    r = m3(carrossel([com_analogia, FACIL, FACIL]))
     assert r.detalhes.analogia_na_peca and r.detalhes.nivel_estatistico == "iniciante"
     # IFL alto, mas sem analogia: frase curta de outro nível não é estilo de Iniciante
-    r = m3(artigo([FACIL], nivel="intermediario"), "intermediario")
+    r = m3(como(carrossel([FACIL, FACIL, FACIL]), "intermediario"), "intermediario")
     assert not r.detalhes.analogia_na_peca and r.detalhes.nivel_estatistico == "acima_de_iniciante"
     # analogia, mas IFL abaixo do piso
-    r = m3(artigo([LONGA + " Imagine que sim."]), "avancado")
+    r = m3(como(carrossel([LONGA + " Imagine que sim.", LONGA, LONGA]), "avancado"), "avancado")
     assert r.detalhes.analogia_na_peca and r.detalhes.nivel_estatistico == "acima_de_iniciante"
+
+
+MEDIA = "A decisão do comitê sobre a taxa básica de juros considerou a inflação corrente e as expectativas dos analistas para os próximos meses."
+
+
+def test_nivel_do_artigo_vem_da_faixa_de_ifl_e_nao_da_analogia():
+    # IFL 41,6: entre 27 e 45, a faixa do Intermediário, mesmo pedido como Avançado e sem analogia
+    r = m3(artigo([MEDIA], nivel="avancado"), "avancado")
+    assert 27 <= r.detalhes.ifl < 45 and r.detalhes.nivel_estatistico == "intermediario"
+    assert not r.detalhes.analogia_na_peca
+    assert m3(artigo([FACIL])).detalhes.nivel_estatistico == "iniciante"
+    assert m3(artigo([LONGA]), "intermediario").detalhes.nivel_estatistico == "avancado"
+
+
+def test_o_sinal_do_artigo_nao_reprova_nenhum_nivel_alem_do_piso_do_iniciante():
+    for nivel in ("intermediario", "avancado"):
+        for texto in (FACIL, MEDIA, LONGA):
+            r = m3(artigo([texto], nivel=nivel), nivel)
+            assert r.passou and r.violacoes == [] and r.faixa_esperada == "sem limite (só mede)"
+    assert not m3(artigo([FACIL, LONGA])).passou  # o piso do Iniciante continua reprovando
+
+
+def test_sem_as_faixas_o_artigo_fica_sem_sinal():
+    r = readability.avaliar(artigo([FACIL]), SPECS["iniciante"], SPECS["iniciante"])
+    assert r.detalhes.nivel_estatistico is None
+
+
+def test_nivel_pelo_ifl_do_artigo_nos_cortes():
+    nivel = lambda v: readability.nivel_pelo_ifl_do_artigo(v, SPECS)
+    assert [nivel(v) for v in (80, 45, 44.9, 27, 26.9, -6)] == [
+        "iniciante", "iniciante", "intermediario", "intermediario", "avancado", "avancado"]
 
 
 def test_piso_do_carrossel_e_do_roteiro_vem_do_formato():

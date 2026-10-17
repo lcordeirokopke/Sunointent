@@ -10,7 +10,7 @@ Implementada. A E4 grava o plano e as 9 células em `PENDENTE`; em seguida o gra
 
 - **Pré-filtro (código):** por nível, separa os candidatos dos descartados por regra (`metodologico`, `origem="prefiltro"`) e marca os claims candidatos nos 3 níveis, os únicos que podem ser núcleo. Sem nenhum candidato nos 3 níveis, o run aborta antes de chamar o modelo.
 - **Planejador (LLM, 1 chamada para os 3 níveis):** escolhe o núcleo, a seleção, a ordem, o papel, a prioridade, a tese, os descartes com motivo específico e as analogias `nova`. Na correção, o prompt traz as mesmas regras e claims, o plano enviado e só a lista de problemas do gate; o modelo devolve o plano inteiro de novo, com o raciocínio `adapter_correcao`.
-- **Complemento e gate (código):** completa `atribuir_fonte`, os descartes `secundario` e as analogias do glossário, confere as 9 regras do gate e devolve só os problemas ao planejador, em até 3 rodadas.
+- **Complemento e gate (código):** completa `atribuir_fonte`, os descartes `secundario`, as analogias do glossário no Iniciante e as explicações do Intermediário, confere as 9 regras do gate e devolve só os problemas ao planejador, em até 3 rodadas.
 - **Limpeza (código):** depois da última rodada, corrige por código o que o gate ainda acusa, para que o plano que chega à E5 passe sempre no gate, e registra no `aviso` o que mudou.
 - **Gravação:** `rodadas_plano` e `validacoes_plano` por rodada, `planos_editoriais`, `planos_nivel` e as 9 linhas de `celulas` em `PENDENTE`.
 
@@ -26,7 +26,7 @@ Implementada. A E4 grava o plano e as 9 células em `PENDENTE`; em seguida o gra
 
 ## LevelSpec da E4
 
-A E4 lê de cada `config/levels/<nivel>.yaml` os campos `foco`, `tags_priorizadas`, `tags_descartaveis` e o `max_claims` do artigo. O mesmo arquivo tem o contrato de formato (`peso_papel` e `formatos`), lido pela E5.1, pelo prompt do redator e pela M2, no Iniciante, o bloco `analogia`, lido pela M5, e, no Intermediário e no Avançado, o bloco `vocabulario`, lido só pelo prompt do redator.
+A E4 lê de cada `config/levels/<nivel>.yaml` os campos `foco`, `tags_priorizadas`, `tags_descartaveis` e o `max_claims` do artigo. O mesmo arquivo tem o contrato de formato (`peso_papel` e `formatos`), lido pela E5.1, pelo prompt do redator e pela M2, no Iniciante e no Intermediário, o bloco `analogia`, lido pela M5 e pelo prompt do redator, e, no Intermediário e no Avançado, o bloco `vocabulario`, lido só pelo prompt do redator.
 
 | Campo | Iniciante | Intermediário | Avançado |
 |---|---|---|---|
@@ -41,18 +41,18 @@ Nos 3 níveis:
 - `peso_papel`: `principal` 3, `apoio` 2 e `contexto` 1, para dividir as palavras do artigo entre os claims e as palavras das cenas de claim do roteiro;
 - carrossel: de 5 a 7 slides, contando o gancho e a conclusão, com no máximo 120 caracteres no gancho, 220 em cada slide de corpo e 160 na conclusão;
 - roteiro: 60 s a 2,5 palavras por segundo (150 palavras), com uma cena de abertura (o gancho) de 6 s, uma cena por claim e uma de fechamento de 6 s;
-- `analogia` (só no Iniciante): `marcadores: ["é como", "funciona como", "imagine que", "na prática"]`, as expressões que a M5 procura na mesma seção, slide ou cena da primeira ocorrência de um termo com analogia;
+- `analogia` (Iniciante e Intermediário): `marcadores`, as expressões que a M5 procura na mesma seção, slide ou cena da primeira ocorrência de um termo com analogia ou explicação no plano. No Iniciante, `["é como", "funciona como", "imagine que", "na prática"]`; no Intermediário, `["ou seja", "isto é", "quer dizer", "em outras palavras"]`;
 - `vocabulario` (só no Intermediário e no Avançado): `explicar_acima_de`, o nível acima do qual o redator explica o termo do glossário na primeira vez que o usa. No Intermediário é `intermediario` (os termos de nível avançado são explicados); no Avançado é `avancado` (nenhum termo é explicado, e o redator escreve com o jargão técnico sem explicar).
 
 Validação do `sunontent/levelspec.py`, que recusa campo desconhecido e aborta o run com `FalhaTerminal`:
 
-- `analogia` é obrigatória no Iniciante e proibida nos outros níveis; `marcadores` não é vazio, não repete expressão e tem expressões de pelo menos duas palavras;
+- `analogia` é obrigatória no Iniciante, opcional no Intermediário e proibida no Avançado; `marcadores` não é vazio, não repete expressão e tem expressões de pelo menos duas palavras;
 - `vocabulario` é opcional e proibido no Iniciante, e `explicar_acima_de` é um nível igual ou acima do nível do arquivo;
 - `formatos.artigo.palavras.min` cresce do Iniciante ao Avançado (350, 450 e 600);
 - `max_claims` é artigo >= carrossel >= roteiro;
 - `carrossel.max_claims` maior que `slides.max - 2` (os slides de corpo possíveis) emite um aviso (`UserWarning`) ao carregar o arquivo e não aborta; os valores atuais (4, 5 e 5 claims, com no máximo 7 slides) não emitem o aviso.
 
-`instrucoes_redator(spec, formato)` devolve um `InstrucoesRedator` com `orcamento` (o contrato do formato em frases, para o prompt do redator), `marcadores` (a frase com as expressões de analogia, vazia fora do Iniciante), `legibilidade` (a meta de tamanho de frase, vazia no nível sem o bloco), `vocabulario` (a regra de vocabulário, vazia no nível sem o bloco) e `faixa_esperada` (o limite renderizado, que a M2 registra). No artigo, a faixa conta as palavras do texto das seções; o título e a linha fina ficam de fora. O prompt e a M2 leem o limite da mesma função.
+`instrucoes_redator(spec, formato)` devolve um `InstrucoesRedator` com `orcamento` (o contrato do formato em frases, para o prompt do redator), `marcadores` (a frase com as expressões de analogia ou de explicação, vazia no nível sem o bloco `analogia`), `legibilidade` (a meta de tamanho de frase, vazia no nível sem o bloco), `vocabulario` (a regra de vocabulário, vazia no nível sem o bloco) e `faixa_esperada` (o limite renderizado, que a M2 registra). No artigo, a faixa conta as palavras do texto das seções; o título e a linha fina ficam de fora. O prompt e a M2 leem o limite da mesma função.
 
 Por que esses valores:
 
@@ -100,6 +100,10 @@ Um teste roda o casador sobre os claims dos 3 documentos de referência (`tests/
 
 Para um termo, a analogia do complemento é a primeira com `status: aprovada` ou, sem nenhuma aprovada, a primeira `rascunho`, com a referência `<id>#<n>` (posição na lista, começando em 1). `revisada` é `true` só para a aprovada. Termo sem analogia no glossário vai para a lista que o planejador recebe, para criar uma analogia `nova`.
 
+### Explicação do Intermediário
+
+No Intermediário, o complemento atribui a cada termo com `nivel_minimo` acima de intermediario encontrado no texto dos claims usados a `definicao_simples` do glossário como `explicacao` da `Analogia` do plano, com `origem` `glossario`, sem `glossario_ref` e com `revisada` falso. O termo é ligado à explicação pela forma escrita. O planejador não escreve explicação para o Intermediário, e o gate não tem regra para ela, porque todo termo do glossário tem `definicao_simples`.
+
 A analogia `nova` vale para o termo da lista cujo nome casa, sem maiúsculas e sem acento, com o `termo` ou uma variante. O complemento deixa de fora a `nova` de termo fora da lista, de termo que já tem analogia no glossário e de termo fora dos claims usados. Como as analogias do glossário, a `nova` começa com "É como..." e não tem número.
 
 ## Prompt do planejador
@@ -132,7 +136,7 @@ O `redundante` compara os números por valor e unidade (`R$ 3,1 bilhões` e `R$ 
 
 ## Limpeza
 
-Se o gate ainda acusa problema depois da 3ª rodada, `sunontent/adaptacao/limpeza.py` corrige o plano na ordem de `docs/arquiteturas.md`, E4.3 (Limpeza): ids inexistentes, contraditório, núcleo, analogia `nova` inválida, jargão sem analogia, limite pela prioridade, motivo inválido, tese e prioridades. Depois o gate confere o plano de novo e precisa devolver zero problemas, aceitando só a tese vazia produzida pela limpeza.
+Se o gate ainda acusa problema depois da 3ª rodada, `sunontent/adaptacao/limpeza.py` corrige o plano na ordem de `docs/arquiteturas.md`, E4.3 (Limpeza): ids inexistentes, contraditório, núcleo, analogia `nova` inválida, jargão sem analogia, limite pela prioridade, motivo inválido, tese e prioridades; as analogias do Iniciante e as explicações do Intermediário ficam só para os termos dos claims que restaram. Depois o gate confere o plano de novo e precisa devolver zero problemas, aceitando só a tese vazia produzida pela limpeza.
 
 O `aviso` do plano é a lista das mudanças, cada uma com a regra e o nível: `[acima_do_limite] iniciante: C06 saiu pela prioridade (máximo de 5); [tese_invalida] iniciante: a tese saiu (com número)`. Sem problema depois das rodadas, o plano não tem `aviso`.
 

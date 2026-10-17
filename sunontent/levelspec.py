@@ -2,8 +2,9 @@
 
 O LevelSpec existe só em config/levels/: o prompt e o avaliador leem o mesmo arquivo. O arquivo tem os campos
 da E4, o contrato de formato (`peso_papel` e `formatos`), lido pela E4 (o `max_claims` do plano é o do artigo),
-pela E5.1 e pela M2, no Iniciante, o bloco `analogia` com os marcadores que a M5 procura, em qualquer nível, o bloco
-opcional `legibilidade` (piso do IFL por formato, lido pela M3, e meta de frase do redator) e, fora do Iniciante, o
+pela E5.1 e pela M2, no Iniciante e no Intermediário, o bloco `analogia` com os marcadores que a M5 procura, em qualquer nível, o bloco
+opcional `legibilidade` (piso do IFL por formato, lido pela M3, e meta de frase do redator), o bloco opcional
+`sinal_ifl` (faixa de IFL do artigo no nível, só um sinal para a matriz de confusão) e, fora do Iniciante, o
 bloco opcional `vocabulario` (o que o redator usa sem explicar e o que explica). As frases do
 prompt do redator e o limite da M2 saem da mesma função, `instrucoes_redator`. Arquivo inválido é
 FalhaTerminal: o run aborta no início da E4.
@@ -111,8 +112,8 @@ class Formatos(_Fechado):
 
 
 class RegraAnalogia(_Fechado):
-    """Regra da M5 (só no Iniciante): expressões que marcam uma analogia no texto, na mesma unidade da
-    primeira ocorrência do termo."""
+    """Regra da M5 (Iniciante e Intermediário): expressões que marcam a analogia ou a explicação do plano no texto,
+    na mesma unidade da primeira ocorrência do termo."""
 
     marcadores: list[str] = Field(min_length=1)
 
@@ -144,6 +145,29 @@ class RegraLegibilidade(_Fechado):
     frase_max_palavras: StrictInt = Field(ge=5)
 
 
+class FaixaIfl(_Fechado):
+    """Faixa de IFL de um nível no artigo: `min` inclusivo e `max` exclusivo, cada um opcional."""
+
+    min: StrictFloat | StrictInt | None = None
+    max: StrictFloat | StrictInt | None = None
+
+    @model_validator(mode="after")
+    def _ordem(self) -> "FaixaIfl":
+        if self.min is not None and self.max is not None and self.min >= self.max:
+            raise ValueError(f"min ({self.min}) precisa ser menor que max ({self.max})")
+        return self
+
+    def contem(self, ifl: float) -> bool:
+        return (self.min is None or ifl >= self.min) and (self.max is None or ifl < self.max)
+
+
+class SinalIfl(_Fechado):
+    """Sinal de nível pelo IFL (M3): a faixa de IFL em que o artigo do nível cai. Só alimenta a matriz de confusão
+    de níveis; não reprova nada."""
+
+    artigo: FaixaIfl
+
+
 class RegraVocabulario(_Fechado):
     """Regra de vocabulário do redator no Intermediário e no Avançado: os termos do glossário com `nivel_minimo`
     acima de `explicar_acima_de` são explicados na primeira vez que aparecem; os outros, usados sem explicar.
@@ -164,6 +188,7 @@ class LevelSpec(BaseModel):
     formatos: Formatos
     analogia: RegraAnalogia | None = None
     legibilidade: RegraLegibilidade | None = None
+    sinal_ifl: SinalIfl | None = None
     vocabulario: RegraVocabulario | None = None
 
     @property
@@ -187,11 +212,11 @@ class LevelSpec(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _analogia_so_no_iniciante(self) -> "LevelSpec":
+    def _analogia_no_iniciante_e_no_intermediario(self) -> "LevelSpec":
         if self.nivel == "iniciante" and self.analogia is None:
             raise ValueError("o bloco `analogia` é obrigatório no Iniciante")
-        if self.nivel != "iniciante" and self.analogia is not None:
-            raise ValueError("o bloco `analogia` só vale no Iniciante")
+        if self.nivel == "avancado" and self.analogia is not None:
+            raise ValueError("o bloco `analogia` não vale no Avançado, que usa o jargão sem explicar")
         return self
 
     @model_validator(mode="after")
@@ -245,14 +270,35 @@ def carregar_todos(raiz: Path) -> dict[str, LevelSpec]:
             "config/levels/: formatos.artigo.palavras.min precisa crescer do Iniciante ao Avançado "
             f"(encontrado: {', '.join(f'{n} {specs[n].formatos.artigo.palavras.min}' for n in specs)})"
         )
+    _conferir_sinal_ifl(specs)
     return specs
+
+
+def _conferir_sinal_ifl(specs: dict[str, LevelSpec]) -> None:
+    """As faixas de `sinal_ifl.artigo` dos 3 níveis, quando existem, se encaixam sem lacuna nem sobreposição: o
+    Iniciante tem só `min`, o Avançado só `max` e o `min` de um nível é o `max` do nível abaixo."""
+    if all(specs[n].sinal_ifl is None for n in specs):
+        return
+    faixas = [specs[n].sinal_ifl.artigo if specs[n].sinal_ifl else None for n in specs]
+    ini, inter, avan = faixas
+    if (
+        None in faixas
+        or ini.max is not None or ini.min is None
+        or avan.min is not None or avan.max is None
+        or inter.min is None or inter.max is None
+        or ini.min != inter.max or inter.min != avan.max
+    ):
+        raise FalhaTerminal(
+            "config/levels/: sinal_ifl.artigo precisa existir nos 3 níveis e se encaixar (o Iniciante só com min, "
+            "o Avançado só com max, e o min de cada nível igual ao max do nível abaixo)"
+        )
 
 
 class InstrucoesRedator(_Fechado):
     """O que o prompt do redator (E5.2) e a M2 leem do LevelSpec para um formato."""
 
     orcamento: str  # o contrato do formato, em frases
-    marcadores: str  # as expressões de analogia do Iniciante, em frase; vazio nos outros níveis
+    marcadores: str  # as expressões de analogia ou de explicação do nível, em frase; vazio quando o nível não tem o bloco
     faixa_esperada: str  # o limite renderizado, que a M2 registra no scorecard
     legibilidade: str  # a meta de tamanho de frase do nível, em frase; vazio quando o nível não tem
     vocabulario: str  # o que usar sem explicar e o que explicar, em frase; vazio quando o nível não tem o bloco
@@ -296,8 +342,9 @@ def instrucoes_redator(spec: LevelSpec, formato: Formato) -> InstrucoesRedator:
     marcadores = ""
     if spec.analogia is not None:
         expressoes = ", ".join('"' + m + '"' for m in spec.analogia.marcadores)
+        explicacao = "analogia" if spec.nivel == "iniciante" else "explicação"
         marcadores = (
-            "Na primeira vez que usar um termo com analogia no plano, explique-o com a analogia na mesma seção, "
+            f"Na primeira vez que usar um termo com {explicacao} no plano, explique-o com ela na mesma seção, "
             f"slide ou cena, usando uma destas expressões: {expressoes}."
         )
     legibilidade = ""
@@ -317,7 +364,7 @@ def instrucoes_redator(spec: LevelSpec, formato: Formato) -> InstrucoesRedator:
             vocabulario = (
                 "Use sem explicar o vocabulário padrão de quem investe (Selic, IPCA, CDI, dividendos, lucro líquido, "
                 "receita). Na primeira vez que usar um termo técnico de especialista, explique-o em poucas palavras "
-                'na mesma frase (um aposto, "ou seja" ou parênteses) ou troque-o pela explicação.'
+                "ou troque-o pela explicação."
             )
     return InstrucoesRedator(
         orcamento=orcamento, marcadores=marcadores, faixa_esperada=faixa, legibilidade=legibilidade,

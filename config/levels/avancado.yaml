@@ -1,5 +1,5 @@
 nivel: avancado
-versao: 5
+versao: 6
 # Campos da E4 (docs/fluxos/plano-editorial.md, LevelSpec da E4). Valores de partida.
 foco: "análise técnica e institucional"
 tags_priorizadas: [indicador_chave, metodologico, governanca]
@@ -25,3 +25,7 @@ formatos:
 # nivel_minimo acima de explicar_acima_de são explicados na primeira vez que aparecem; os outros, usados sem explicar.
 vocabulario:
   explicar_acima_de: avancado
+# Sinal de nível da M3 (docs/metricas.md): faixa de IFL do artigo neste nível ({min} inclusivo, {max} exclusivo).
+# Só alimenta a matriz de confusão de níveis; não reprova nada. As faixas dos 3 níveis se encaixam.
+sinal_ifl:
+  artigo: {max: 27}

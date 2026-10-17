@@ -185,11 +185,13 @@ def montar(
         if presos:  # a analogia acompanha os claims do formato
             analogias.append(AnalogiaDoPacote(analogia.termo, analogia.explicacao, presos))
 
+    explicados = {glossario.termo_da_forma(a.termo) for a in plano_nivel.analogias}  # já têm explicação no plano
     presos_por_termo: dict[str, list[str]] = {}
     if spec.vocabulario is not None:
         for c in do_formato:
             for termo_id in glossario.acima_de(glossario.termos_em(claims[c.id].texto), spec.vocabulario.explicar_acima_de):
-                presos_por_termo.setdefault(termo_id, []).append(c.id)
+                if termo_id not in explicados:
+                    presos_por_termo.setdefault(termo_id, []).append(c.id)
     termos_a_explicar = tuple(
         TermoDoPacote(glossario.termos[t].termo, glossario.termos[t].definicao_simples, tuple(ids))
         for t, ids in presos_por_termo.items()

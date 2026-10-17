@@ -17,13 +17,18 @@ gate, nesta ordem, e devolve a lista do que mudou (o `aviso` do plano, mostrado 
 7. motivo inválido: o descarte do planejador vira `secundario` com origem `padrao`;
 8. tese: saem os ids repetidos e os que não estão nos claims do nível; sem id, vazia, com número ou, no
    Iniciante, com termo técnico, a tese fica vazia e sem ids (a E5 não recebe tese desse nível);
-9. as prioridades são renumeradas de 1 a n, na ordem que tinham, e as analogias do Iniciante ficam só para os
-   termos dos claims que restaram.
+9. as prioridades são renumeradas de 1 a n, na ordem que tinham, e as analogias do Iniciante e as explicações do
+   Intermediário ficam só para os termos dos claims que restaram.
 Núcleo vazio é FalhaTerminal. No fim, o gate confere de novo; problema restante é FalhaTerminal.
 """
 
 from sunontent.adaptacao import gate
-from sunontent.adaptacao.complemento import TIPOS_COM_ATRIBUICAO, analogias_do_iniciante, termos_dos_claims
+from sunontent.adaptacao.complemento import (
+    TIPOS_COM_ATRIBUICAO,
+    analogias_do_iniciante,
+    explicacoes_do_intermediario,
+    termos_dos_claims,
+)
 from sunontent.adaptacao.prefiltro import Prefiltro
 from sunontent.glossario import Glossario
 from sunontent.levelspec import LevelSpec
@@ -233,6 +238,9 @@ class _Limpeza:
     def analogias_finais(self) -> None:
         p = self.niveis["iniciante"]
         p.analogias = analogias_do_iniciante(self.glossario, self.claims, self.usados("iniciante"), self.novas)
+        self.niveis["intermediario"].analogias = explicacoes_do_intermediario(
+            self.glossario, self.claims, self.usados("intermediario")
+        )
 
     def plano(self) -> PlanoEditorial:
         return PlanoEditorial(

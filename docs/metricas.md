@@ -21,7 +21,7 @@ Arquivos de apoio em `sunontent/metrics/`:
 - `resultado.py`: `montar(detalhes, violacoes, faixa_esperada="0", valor=None)` devolve o `MetricaResultado` de qualquer métrica; o `valor` só é passado pelas métricas que medem uma grandeza (M3 e M4), e as outras valem o número de violações;
 - `campos.py`: `campos_da_peca(payload)` devolve os textos da peça, um por campo, e `nome_da_unidade(payload)` devolve `seção`, `slide` ou `cena`;
 - `contexto.py`: a recuperação de contexto do juiz, com o BM25 simples (seção M6);
-- `matriz_niveis.py`: as matrizes de confusão de níveis, a do juiz e a estatística, e o comando que as imprime (seção M6, Matriz de confusão de níveis).
+- `matriz_niveis.py`: as matrizes de confusão de níveis, a do juiz e a estatística (o artigo pela faixa de IFL, o carrossel e o roteiro pelo estilo de Iniciante), e o comando que as imprime (seção M6, Matriz de confusão de níveis).
 
 Fora da pasta, as métricas usam `sunontent/texto.py` (contagem de palavras, de caracteres, de sílabas e de frases), `sunontent/numeros.py` (leitura de número e de data), `sunontent/glossario.py` (casamento de termos) e `sunontent/levelspec.py` (limites e marcadores do nível).
 
@@ -152,6 +152,19 @@ legibilidade:
 - `ifl_minimo` é o piso por formato: abaixo dele a métrica reprova. O nível sem o bloco só mede, com `faixa_esperada` `"sem limite (só mede)"`;
 - `frase_max_palavras` é a meta de tamanho de frase. Não reprova nada: `instrucoes_redator` a escreve no prompt do redator ("Escreva frases de até 18 palavras e prefira palavras curtas e comuns"), e a instrução corretiva a cita.
 
+### Sinal de nível do artigo
+
+Os três níveis têm o bloco `sinal_ifl`, a faixa de IFL em que o artigo do nível cai (`min` inclusivo e `max` exclusivo):
+
+```yaml
+sinal_ifl:
+  artigo: {min: 45}              # Iniciante
+  artigo: {min: 27, max: 45}     # Intermediário
+  artigo: {max: 27}              # Avançado
+```
+
+As faixas dos três níveis se encaixam, sem lacuna nem sobreposição, e o `carregar_todos` recusa o conjunto que não se encaixa. O sinal é **só informativo**: alimenta a matriz de confusão do artigo e nunca reprova. Na M3, o único critério que reprova é o piso de IFL do Iniciante (`ifl_minimo`); o Intermediário e o Avançado só medem, mesmo quando o IFL do artigo cai na faixa de outro nível.
+
 ### Violação
 
 Uma violação por frase, até 3, quando o IFL fica abaixo do piso: as frases mais longas entre as que passam da meta, ou só a mais longa se nenhuma passa. O `trecho` é a frase, com a posição (unidade, `campo` `texto`, intervalo na unidade).
@@ -162,15 +175,15 @@ Uma violação por frase, até 3, quando o IFL fica abaixo do piso: as frases ma
 
 ### Detalhes
 
-`ReadabilityDetalhes`: `palavras`, `silabas`, `frases`, `ifl`, `ifl_minimo` e `frase_max_palavras` (os do nível, quando existem), `analogia_na_peca` e `nivel_estatistico`.
+`ReadabilityDetalhes`: `palavras`, `silabas`, `frases`, `ifl`, `ifl_minimo` e `frase_max_palavras` (os do nível, quando existem), `analogia_na_peca` e `nivel_estatistico` (o sinal de nível).
 
 `analogia_na_peca` é verdadeiro quando o texto de alguma unidade tem um marcador de analogia do Iniciante (`analogia.marcadores`, buscado como na M5).
 
-`nivel_estatistico` é o estilo da peça: `iniciante` quando o IFL é igual ou maior que o piso do Iniciante no formato e `analogia_na_peca` é verdadeiro, `acima_de_iniciante` nos outros casos. O IFL sozinho confunde frase curta com texto de Iniciante (o limite de caracteres do slide encurta as frases do carrossel de qualquer nível), e a analogia é o que o Iniciante tem e os outros níveis não têm. Alimenta a matriz de confusão estatística (M6, Matriz de confusão de níveis). É `None` quando o Iniciante não tem piso no formato ou marcadores.
+`nivel_estatistico` é o sinal de nível da peça, só informativo. No artigo, é o nível cuja faixa de `sinal_ifl` contém o IFL (`iniciante`, `intermediario` ou `avancado`), sem olhar a analogia. No carrossel e no roteiro, é o estilo de Iniciante: `iniciante` quando o IFL é igual ou maior que o piso do Iniciante no formato e `analogia_na_peca` é verdadeiro, `acima_de_iniciante` nos outros casos; o IFL sozinho confunde frase curta com texto de Iniciante (o limite de caracteres do slide encurta as frases do carrossel de qualquer nível), e a analogia é o que o Iniciante tem e os outros níveis não têm. Alimenta a matriz de confusão estatística (M6, Matriz de confusão de níveis). É `None` quando os níveis não têm `sinal_ifl` (artigo) ou quando o Iniciante não tem piso no formato ou marcadores (carrossel e roteiro).
 
 ### O que a medida mostra
 
-Nas três fontes medidas, o IFL separa o Iniciante dos outros dois níveis no artigo, e no carrossel e no roteiro as faixas se encostam, porque o limite de caracteres encurta as frases de qualquer nível. Não separa o Intermediário do Avançado em formato nenhum. Por isso só o Iniciante tem piso e o `nivel_estatistico` junta o IFL e a analogia.
+No artigo, o IFL separa os três níveis: nos runs medidos (Copom e CVM) o Iniciante ficou em 52 a 55, o Intermediário em 34 a 39 e o Avançado entre -6 e 19,5, e as faixas de `sinal_ifl` (45 e 27) caem nas lacunas entre esses grupos. Como são poucas fontes, as faixas são um sinal e não reprovam. No carrossel e no roteiro as faixas de IFL se encostam, porque o limite de caracteres encurta as frases de qualquer nível; ali o IFL só separa o Iniciante dos outros dois, junto da analogia. Por isso só o Iniciante tem piso.
 
 ## M4. `term_density`
 
@@ -186,19 +199,21 @@ A densidade varia mais entre as fontes que entre os níveis (a ata do Copom tem 
 
 ## M5. `analogy_rule`
 
-A regra vale só no nível Iniciante. Nos outros, o resultado é `aplicavel = False`, sem termos e sem violações.
+A regra vale no Iniciante e no Intermediário, os níveis com o bloco `analogia` no LevelSpec. No Avançado, o resultado é `aplicavel = False`, sem termos e sem violações.
 
-No Iniciante, para cada termo do glossário com `nivel_minimo` acima de iniciante encontrado no texto das unidades:
+Para cada termo do glossário com `nivel_minimo` acima do nível (acima de iniciante no Iniciante, acima de intermediario no Intermediário) encontrado no texto das unidades:
 
 1. o termo é achado pela regra de casamento de `docs/glossario.md`, e só no texto das unidades (seção, slide ou fala da cena); o título, a linha fina e o gancho visual não são procurados;
 2. conta a primeira ocorrência do termo, na primeira unidade em que ele aparece;
-3. o plano do nível precisa ter uma `Analogia` para o termo: a do glossário traz a referência `<id>#<n>`, e a `nova` é ligada ao termo pela forma escrita;
-4. a mesma unidade precisa ter um marcador de analogia, uma das expressões de `analogia.marcadores` do LevelSpec do Iniciante. A busca ignora maiúsculas e acentos, exige fronteira de palavra e não tem janela: a expressão em qualquer ponto da unidade vale para todos os termos dela.
+3. o plano do nível precisa ter uma `Analogia` para o termo: a do glossário traz a referência `<id>#<n>`, a `nova` é ligada ao termo pela forma escrita e, no Intermediário, a explicação (a `definicao_simples`) é ligada pela forma escrita;
+4. a mesma unidade precisa ter um marcador de analogia, uma das expressões de `analogia.marcadores` do LevelSpec do nível (no Intermediário, "ou seja", "isto é", "quer dizer", "em outras palavras"). A busca ignora maiúsculas e acentos, exige fronteira de palavra e não tem janela: a expressão em qualquer ponto da unidade vale para todos os termos dela.
 
 | Violação | Instrução |
 | -------- | --------- |
 | termo sem `Analogia` no plano | "O termo «CDI» aparece na seção 1 sem analogia no plano: substitua-o por uma explicação em palavras simples." |
 | termo com `Analogia` e sem marcador na unidade | "Explique «Selic» na seção 1, na primeira vez que o usar, com a analogia do plano (o preço do dinheiro), usando uma destas expressões: "é como", "funciona como", "imagine que", "na prática"." |
+
+No Intermediário, as mensagens trocam "analogia" por "explicação" ("O termo «hiato do produto» aparece na seção 1 sem explicação no plano" e "Explique «hiato do produto» na seção 1, na primeira vez que o usar, com a explicação do plano (...), usando uma destas expressões: "ou seja", "isto é", "quer dizer", "em outras palavras".").
 
 A unidade é nomeada `seção`, `slide` ou `cena` conforme o formato, contada a partir de 1 no texto da instrução. Um termo gera no máximo uma violação.
 
@@ -215,7 +230,7 @@ O juiz roda uma vez por tentativa da célula, só depois de M1, M2, M3, M5 e M7 
 - **Claims:** os citados pelas unidades, com o tipo, o texto e o `literal_fonte`; o prompt avisa que projeção, condicionante e risco só aparecem atribuídos à fonte.
 - **Trechos do documento (`contexto.montar`):** para cada unidade, o chunk da âncora de cada claim citado (o que contém o início da âncora), o anterior e o seguinte, e os 3 chunks de maior sobreposição lexical com o texto da unidade entre os que ainda não entraram, por BM25 simples (k1 1,5, b 0,75, idf `ln(1 + (N - df + 0,5) / (df + 0,5))`), sobre palavras sem maiúscula, sem acento, sem as de uma letra e sem uma lista curta de palavras vazias; só chunk com nota acima de zero entra. Cada chunk vai uma vez ao prompt, na ordem do documento, e cada unidade cita os seus pelo `chunk_id`. Sem embedding.
 - **Unidades:** o texto de cada seção, slide ou cena (no roteiro, a fala e o gancho visual), com o papel do slide ou a abertura e o fechamento do roteiro, e os claims que cita. A unidade sem `claim_ids` (gancho, conclusão, abertura e fechamento) é julgada contra todos os claims da peça. O título e a linha fina do artigo vão como contexto e não são julgados.
-- **Analogias:** as do plano do nível cujo termo aparece no texto das unidades (ligadas ao termo do glossário como na M5), com a explicação do plano, a `definicao_tecnica` do glossário e a unidade da primeira ocorrência.
+- **Analogias:** só no Iniciante (as explicações do Intermediário vêm da `definicao_simples` e a M5 as confere), as do plano do nível cujo termo aparece no texto das unidades (ligadas ao termo do glossário como na M5), com a explicação do plano, a `definicao_tecnica` do glossário e a unidade da primeira ocorrência.
 - **Nível:** o `foco` de cada nível, lido do LevelSpec, e os termos do glossário encontrados em qualquer campo da peça, com o `nivel_minimo` de cada um, como evidência para o nível percebido.
 
 O nível pedido não vai ao prompt, para não influenciar o `nivel_percebido`.
@@ -248,7 +263,7 @@ A resposta segue o schema `SaidaJuiz` (`sunontent/schemas.py`): `analogias` (`te
 São duas matrizes, as duas só informativas. `sunontent/metrics/matriz_niveis.py` as monta e as formata, por formato:
 
 - **A do juiz** cruza o nível pedido e o `nivel_percebido` (`montar`, `acerto` e `formatar`). Lê a última tentativa julgada de cada célula, pela `ConsultaSupabase.niveis_percebidos`.
-- **A estatística** cruza o nível pedido e o `nivel_estatistico` da M3, o estilo da peça (IFL no piso do Iniciante e analogia na peça) (`montar_estatistica`, `acerto_estatistico` e `formatar_estatistica`). Conta como acerto o Iniciante em `iniciante` e os outros dois níveis em `acima_de_iniciante`. Lê a última tentativa de cada célula, pela `ConsultaSupabase.niveis_estatisticos`; como a M3 roda em toda tentativa, a matriz não depende de o juiz ter rodado.
+- **A estatística** cruza o nível pedido e o `nivel_estatistico` da M3, o sinal de nível da peça (`montar_estatistica`, `acerto_estatistico` e `formatar_estatistica`). No artigo, as colunas são os três níveis (a faixa de IFL em que o IFL cai) e conta como acerto o sinal igual ao nível pedido. No carrossel e no roteiro, as colunas são `iniciante` e `acima_de_iniciante` (IFL no piso do Iniciante e analogia na peça) e conta como acerto o Iniciante em `iniciante` e os outros dois níveis em `acima_de_iniciante`. É só informativa e não reprova nada. Lê a última tentativa de cada célula, pela `ConsultaSupabase.niveis_estatisticos`, que traz também o `ifl`; o sinal do artigo é calculado desse `ifl` pelas faixas atuais do LevelSpec (`sinal_da_linha`), e o `nivel_estatistico` gravado vale quando não há `ifl`. Como a M3 roda em toda tentativa, a matriz não depende de o juiz ter rodado.
 
 O comando lê o Supabase (só leitura) e imprime as duas:
 
@@ -261,6 +276,30 @@ Sem `run_id`, usa todos os runs. A calibração do juiz imprime a matriz do juiz
 ### Calibração
 
 `tests/fixtures/juiz/calibracao.yaml` tem 20 peças escritas sobre os claims das três referências, cobrindo os 3 níveis e os 3 formatos: 10 fiéis aos claims e 10 com um erro plantado numa unidade (analogia errada, causa inventada, projeção como fato e número por extenso trocado). `pytest -m judge` julga as 20 com o Groq de verdade e exige acerto de pelo menos 80% em cada grupo: peças fiéis aprovadas e peças com erro reprovadas.
+
+### Groq
+
+O juiz chama `https://api.groq.com/openai/v1/chat/completions` (API compatível com a da OpenAI) por `httpx`, sem SDK, com `Authorization: Bearer <GROQ_API_KEY>`. A `GROQ_API_KEY` é obrigatória (conferida pelo `__main__.py` antes de o run ser criado) e não tem reserva. O pedido leva:
+
+- `response_format` com `json_schema` e `strict: true`; o schema Pydantic vai no formato do modo estrito (`llm.schema_estrito`: todas as propriedades em `required`, `additionalProperties` falso e sem `default`);
+- `max_completion_tokens` 8.192, dentro do qual conta o raciocínio;
+- `include_reasoning: false`, para o raciocínio não voltar na resposta;
+- `reasoning_effort` (`low`, `medium` ou `high`) quando a chamada pede um nível de raciocínio (o juiz usa a chave `judge` de `config/models.yaml`).
+
+Classificação das respostas:
+
+| Resposta | Classe |
+| -------- | ------ |
+| HTTP 408, 422, 429, 498 (tier flex sem capacidade) e 5xx, timeout e erro de conexão | falha de infraestrutura, com o backoff |
+| HTTP 401 | chave recusada; sem reserva, terminal |
+| HTTP 400 com `code` `json_validate_failed` | resposta fora do schema: o `failed_generation` volta ao cliente, que repete com o erro de validação |
+| HTTP 403, 404, 413 (pedido acima do limite de tokens por minuto da organização) e os demais 4xx | terminal, com a mensagem do Groq |
+| `finish_reason` `content_filter` | conteúdo recusado, terminal |
+| `finish_reason` `length` com o conteúdo vazio (o raciocínio esgotou a saída) | resposta fora do schema, repetida com o erro de validação |
+
+Os tokens de raciocínio já vêm dentro de `completion_tokens` (com o detalhe em `completion_tokens_details.reasoning_tokens`), que é o que o span registra como saída. O Groq limita tokens e requisições por minuto e por dia por organização e por modelo; os limites da conta aparecem nos cabeçalhos `x-ratelimit-*` de cada resposta. Um pedido maior que o limite de tokens por minuto volta com 413 e não é repetido.
+
+Nível de raciocínio: a chamada pode pedir uma chave de `raciocinio` em `config/models.yaml` (`minimal`, `low`, `medium` ou `high`). Chave ausente usa o padrão do modelo. A extração usa o padrão; a correção usa `extractor_correcao`, porque corrigir um claim com o motivo dado é uma tarefa menor que ler o documento inteiro, e o raciocínio conta como saída, o token mais caro.
 
 ## M7. `plan_contract`
 

@@ -1313,15 +1313,16 @@ class ConsultaSupabase:
         return self._executar(consulta)
 
     def niveis_estatisticos(self, run_ids: Sequence[str] | None = None) -> list[dict]:
-        """Para a matriz de confusão estatística: o `nivel_estatistico` da M3 (`readability`) na última tentativa de
-        cada célula, com o nível pedido e o formato (`run_id`, `celula_id`, `nivel`, `formato`, `tentativa` e
-        `nivel_estatistico`). Sem `run_ids`, todos os runs. Só entram as tentativas em que o nível tem lado."""
+        """Para a matriz de confusão estatística: o `nivel_estatistico` e o `ifl` da M3 (`readability`) na última
+        tentativa de cada célula, com o nível pedido e o formato (`run_id`, `celula_id`, `nivel`, `formato`,
+        `tentativa`, `nivel_estatistico` e `ifl`). Sem `run_ids`, todos os runs. Só entram as tentativas em que o nível tem lado."""
 
         def consulta(conexao):
             filtro, parametros = ("and m.run_id = any(%s)", (list(run_ids),)) if run_ids else ("", ())
             return conexao.execute(
                 "select distinct on (m.run_id, m.celula_id) m.run_id, m.celula_id, c.nivel::text as nivel,"
-                " c.formato::text as formato, m.tentativa, m.detalhes->>'nivel_estatistico' as nivel_estatistico"
+                " c.formato::text as formato, m.tentativa, m.detalhes->>'nivel_estatistico' as nivel_estatistico,"
+                " (m.detalhes->>'ifl')::float as ifl"
                 " from metricas m join celulas c on c.run_id = m.run_id and c.celula_id = m.celula_id"
                 f" where m.nome = 'readability' and m.detalhes->>'nivel_estatistico' is not null {filtro}"
                 " order by m.run_id, m.celula_id, m.tentativa desc",

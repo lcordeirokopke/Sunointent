@@ -52,7 +52,7 @@ Todos os campos são obrigatórios. `analogias` pode ser uma lista vazia, mas n�
 
 - `iniciante`: palavra do dia a dia (inflação, juros, poupança); dispensa analogia.
 - `intermediario`: vocabulário padrão de mercado (Selic, CDI, IPCA, dividendos, JCP); pede analogia no Iniciante.
-- `avancado`: jargão pleno (forward guidance, hiato do produto, EBITDA ajustado, covenants); também pede analogia no Iniciante.
+- `avancado`: jargão pleno (forward guidance, hiato do produto, EBITDA ajustado, covenants); pede analogia no Iniciante e explicação no Intermediário (a `definicao_simples`).
 
 ### `status` da analogia
 
@@ -86,15 +86,15 @@ Os termos ficam agrupados por categoria, cada grupo aberto por um comentário (`
 |---|---|
 | `manifesto.py` | registra `versao` em `glossario_versao` e o SHA-256 do arquivo em `arquivos_sha256` do `RunManifest`. |
 | E4.2, planejador | recebe, em cada claim, os termos acima de iniciante do texto com o `nivel_minimo` de cada um, e os termos acima de iniciante encontrados no texto dos candidatos do Iniciante que não têm nenhuma analogia no glossário; cria uma analogia `nova` para os que estiverem nos claims usados. |
-| E4.3, complemento | no Iniciante, cada termo acima de iniciante encontrado no texto dos claims usados recebe a primeira analogia `aprovada` do termo ou, sem nenhuma aprovada, a primeira `rascunho`, com a referência `<id>#<n>`. |
+| E4.3, complemento | no Iniciante, cada termo acima de iniciante encontrado no texto dos claims usados recebe a primeira analogia `aprovada` do termo ou, sem nenhuma aprovada, a primeira `rascunho`, com a referência `<id>#<n>`. No Intermediário, cada termo acima de intermediario recebe a `definicao_simples`, sem referência. |
 | E4.3, gate | `jargao_sem_analogia`: todo termo acima de iniciante nos claims usados do Iniciante tem analogia no plano. `analogia_invalida`: a analogia `nova` não só repete as formas do termo. `motivo_invalido`: `exige_base_tecnica` só vale para claim com termo de `nivel_minimo` acima do nível, o que nunca acontece no Avançado. `tese_invalida`: a tese do Iniciante não tem termo acima de iniciante, e as formas dos termos ficam fora da busca de números da tese (o 15 de IPCA-15). |
-| E4.3, limpeza | depois da última rodada, o claim do Iniciante com termo sem analogia sai do nível como `exige_base_tecnica`, e as analogias ficam só para os termos dos claims que restaram. |
+| E4.3, limpeza | depois da última rodada, o claim do Iniciante com termo sem analogia sai do nível como `exige_base_tecnica`, e as analogias do Iniciante e as explicações do Intermediário ficam só para os termos dos claims que restaram. |
 | E5.1, pacote | no nível com o bloco `vocabulario` do LevelSpec (o Intermediário), lista os termos com `nivel_minimo` acima de `explicar_acima_de` encontrados no texto dos claims do formato, com a `definicao_simples`, para o redator explicar na primeira vez que usar cada um (`docs/fluxos/sintese.md`, Termos a explicar). |
 | M4 | conta as ocorrências dos termos com `nivel_minimo` acima de iniciante no texto das unidades da peça, pela [regra de casamento](#casamento-no-texto), e calcula a densidade por 100 palavras (`docs/metricas.md`, M4). |
-| M5 | no Iniciante, todo termo acima de iniciante encontrado no texto precisa de `Analogia` no plano e de um marcador de analogia (`analogia.marcadores` do LevelSpec do Iniciante) na mesma unidade da primeira ocorrência, casando o termo pela [regra de casamento](#casamento-no-texto). |
+| M5 | no Iniciante (termos acima de iniciante) e no Intermediário (termos acima de intermediario), todo termo encontrado no texto precisa de `Analogia` no plano e de um marcador (`analogia.marcadores` do LevelSpec do nível) na mesma unidade da primeira ocorrência, casando o termo pela [regra de casamento](#casamento-no-texto). |
 | M6 | recebe a `definicao_tecnica` do termo de cada analogia do plano usada na peça, como referência para julgar se a analogia está correta (`docs/metricas.md`, M6). |
 
-Na `Analogia` do plano, `origem` é `glossario` ou `nova`, `glossario_ref` guarda a referência `<id>#<n>`, e `revisada` é `true` só para analogia do glossário com `status: aprovada`.
+Na `Analogia` do plano, `origem` é `glossario` ou `nova`, `glossario_ref` guarda a referência `<id>#<n>`, e `revisada` é `true` só para analogia do glossário com `status: aprovada`. A explicação do Intermediário tem `origem` `glossario`, `glossario_ref` vazio e `revisada` falso.
 
 O extractor (E2) não consulta o glossário: ele lê só o documento.
 
