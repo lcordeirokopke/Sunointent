@@ -19,18 +19,27 @@ Pipeline de IA que recebe documentos financeiros públicos densos (ata do Copom,
 ## Arquitetura em uma página
 
 ```
-E0 coleta (ou --dev) -> E1 leitura do PDF -> E2 extractor -> E3 validador de âncoras
-                                                 ^______ até 3 rodadas ______|
-                                                              |
-                                           descarte dos claims reprovados
-                                                              |
-                                              E4 plano editorial (3 níveis)
-                                                              |
-                          fan-out: 1 subgrafo por célula, no máximo 3 em paralelo
-                          E5 redator -> E6 avaliação (M1 a M7) -> E7 Router
-                                 ^_____ retry com relatório, até K = 3 ______|
-                                                              |
-                                              fechamento: conta as 9 células
+E0 coleta (ou --dev)
+        │
+        ▼
+E1 leitura do PDF
+        │
+        ▼
+E2 extractor ──> E3 validador de âncoras
+     ▲                      │
+     └──── até 3 rodadas ───┘
+                            │
+             descarte dos claims reprovados
+                            │
+             E4 plano editorial (3 níveis)
+                            │
+   fan-out: 1 subgrafo por célula, no máximo 3 em paralelo
+                            │
+E5 redator ──> E6 avaliação (M1 a M7) ──> E7 Router
+    ▲                                          │
+    └──── retry com relatório, até K = 3 ──────┘
+                                               │
+                                fechamento: conta as 9 células
 ```
 
 - **Orquestrador:** LangGraph. **Modelos:** `gemini-3.8-flash` no extractor, no planejador e no redator; `openai/gpt-oss-120b` (Groq) no juiz, de família diferente do gerador, para o juiz não avaliar a si mesmo.

@@ -2,11 +2,13 @@
 
 ## Contexto do projeto
 
-Pipeline de IA que ingere documentos financeiros públicos densos (atas do Copom, fatos relevantes da CVM, releases de resultados da B3) e gera **9 peças por documento**: 3 níveis de audiência (Iniciante, Intermediário, Avançado/Institucional) x 3 formatos (texto analítico, carrossel, roteiro de vídeo <=60s). O diferencial não é a geração: é o **Avaliador Híbrido de Calibração e Rigor**, que confere de forma determinística a fidelidade numérica, o tamanho por nível e a regra de analogia, soma o juiz de entailment e reprocessa o que falha.
+Pipeline de IA que ingere documentos financeiros públicos densos (atas do Copom, fatos relevantes da CVM, releases de resultados da B3) e gera **9 peças por documento**: 3 níveis de audiência (Iniciante, Intermediário, Avançado/Institucional) x 3 formatos (texto analítico, carrossel, roteiro de vídeo <=60s). 
 
-Fonte de verdade do escopo: o documento de especificação do projeto, não versionado no repositório.
+O diferencial não é a geração: é o **Avaliador Híbrido de Calibração e Rigor**, que confere de forma determinística a fidelidade numérica, o tamanho por nível e a regra de analogia, soma o juiz de entailment e reprocessa o que falha.
 
-**Modo de operação:** estúdio editorial. Não há leitor logado nem personalização em runtime. O sistema gera as 9 células para todo documento e um humano lê a matriz no dashboard. Consequência de desenho: o "nível" não é uma inferência sobre uma pessoa, é uma **especificação de saída** que o pipeline precisa cumprir e provar que cumpriu.
+Fonte de verdade do escopo: o TAPI do projeto.
+
+**Modo de operação:** estúdio editorial. Não há leitor logado nem personalização em runtime. O sistema gera as 9 células para todo documento e um humano lê a matriz no dashboard. Consequência de desenho: o "nível" não é uma inferência, é uma **especificação de saída** que o pipeline precisa cumprir e provar que cumpriu.
 
 ## Decisão de arquitetura
 
@@ -995,8 +997,6 @@ A referência de uma analogia é a sua posição na lista do termo (`selic#1`). 
 ---
 
 # Trade-offs assumidos
-
-Escolher esta arquitetura não faz os problemas dela desaparecerem. Estes são os que ficam:
 
 - **Custo por documento:** 1 extração + 1 plano + 9 sínteses + até 9 juízes = **20 chamadas** no caminho feliz, mais até 2 correções do plano quando o gate acusa problema. Retry custa 1 síntese mais, no máximo, 1 juiz. Com `K=3`, cerca de 30% de falha na primeira passada (3 das 9 células) e metade delas falhando de novo na segunda (1 a 2 células), são 4 a 5 retries de 1 a 2 chamadas cada: esperar **25 a 32 chamadas**, porque o retry é isolado por célula. O teto, com as 9 células usando as 3 tentativas e o juiz em todas, é de 1 extração + 1 plano + 27 sínteses + 27 juízes = **56 chamadas**, mais até 2 correções do plano.
 - **Latência:** caminho crítico de 4 chamadas sequenciais (extração, plano, síntese, juiz), porque as 9 sínteses são paralelas. Estimativa de 30 a 60s por documento, mais retries.
