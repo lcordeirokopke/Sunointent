@@ -233,7 +233,7 @@ A troca do documento de referência é manual e intencional. Os exemplos usam a 
    REGERAR_DOCUMENTO=1 pytest tests/test_extracao.py     # PowerShell: $env:REGERAR_DOCUMENTO=1; pytest tests/test_extracao.py
    ```
 
-7. Regrave `<fonte>.claims.json` com os claims de um run real do novo documento (o `factsheet.json` de `data/runs/<run_id>/`, rodado em modo `--dev` depois do passo 3, acrescido de `run_id` e `doc_sha256`). Os testes do casador do glossário e do juiz leem esse arquivo.
+7. Regrave `<fonte>.claims.json` copiando o `factsheet.json` de `data/runs/<run_id>/` de um run `--dev` do novo documento, rodado depois do passo 3. Os testes do casador do glossário e do juiz leem desse arquivo só `doc_id`, `tipo_documento`, `emissor`, `data_documento` e `claims`; `run_id` e `doc_sha256` no topo do arquivo são opcionais.
 8. Rode `pytest` para conferir os testes da E0, da E1, da E2 e do glossário contra o novo documento e, se quiser conferir a cobertura de verdade, `pytest -m gemini -s`.
 9. Versione no git.
 

@@ -299,7 +299,7 @@ cp data/sources/copom/<doc_sha256>.<coletado_em>.json tests/fixtures/referencia/
 python -m sunontent copom --dev                    # 3. confere o hash
 ```
 
-Depois, atualize à mão `copom.anotacao.yaml` (fatos que a extração deve cobrir) e a listagem simulada em `tests/fixtures/http/copom/`, regrave o snapshot com `REGERAR_DOCUMENTO=1 pytest tests/test_extracao.py`, regrave `copom.claims.json` a partir do `factsheet.json` de um run `--dev` do novo documento, rode `pytest` e versione o resultado. O passo a passo completo está em `docs/fluxos/ingestao.md`, Como congelar um documento.
+Depois, atualize à mão `copom.anotacao.yaml` (fatos que a extração deve cobrir) e a listagem simulada em `tests/fixtures/http/copom/`, regrave o snapshot com `REGERAR_DOCUMENTO=1 pytest tests/test_extracao.py`, regrave `copom.claims.json` copiando o `factsheet.json` de um run `--dev` do novo documento, rode `pytest` e versione o resultado. O passo a passo completo está em `docs/fluxos/ingestao.md`, Como congelar um documento.
 
 ### O que fixa a reprodutibilidade
 
