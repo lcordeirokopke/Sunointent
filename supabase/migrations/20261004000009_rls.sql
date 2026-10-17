@@ -12,8 +12,6 @@ alter table numeros               enable row level security;
 alter table claims                enable row level security;
 alter table claim_numeros         enable row level security;
 alter table validacoes_ancora     enable row level security;
-alter table claims_quarentena     enable row level security;
-alter table decisoes_quarentena   enable row level security;
 alter table validacoes_plano      enable row level security;
 alter table rodadas_plano         enable row level security;
 alter table planos_editoriais     enable row level security;

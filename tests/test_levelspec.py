@@ -51,7 +51,8 @@ def test_le_os_valores_da_spec():
         assert (s.formatos.roteiro.abertura_s, s.formatos.roteiro.fechamento_s) == (6, 6)
         caracteres = s.formatos.carrossel.caracteres
         assert (caracteres.gancho, caracteres.corpo, caracteres.conclusao) == (120, 220, 160)
-    assert [s.versao for s in specs.values()] == [5, 3, 4]
+    assert [s.versao for s in specs.values()] == [5, 4, 5]
+    assert specs["intermediario"].foco == "o que o fato muda para quem já investe"
     assert specs["avancado"].foco == "análise técnica e institucional"
 
 
@@ -283,3 +284,52 @@ def test_instrucoes_trazem_a_meta_de_frase_so_no_nivel_que_a_tem():
     assert iniciante.legibilidade.startswith("Escreva frases de até 18 palavras")
     for nivel in ("intermediario", "avancado"):
         assert levelspec.instrucoes_redator(levelspec.carregar(RAIZ, nivel), "artigo").legibilidade == ""
+
+
+# Bloco `vocabulario` (prompt do redator)
+
+
+def test_intermediario_explica_o_jargao_avancado_e_o_avancado_nao_explica():
+    specs = levelspec.carregar_todos(RAIZ)
+    assert specs["iniciante"].vocabulario is None
+    assert specs["intermediario"].vocabulario.explicar_acima_de == "intermediario"
+    assert specs["avancado"].vocabulario.explicar_acima_de == "avancado"
+
+
+def test_vocabulario_proibido_no_iniciante(raiz):
+    reescrever(raiz, "iniciante", vocabulario={"explicar_acima_de": "iniciante"})
+    with pytest.raises(FalhaTerminal, match="`vocabulario` não vale no Iniciante"):
+        levelspec.carregar(raiz, "iniciante")
+
+
+def test_vocabulario_nao_explica_abaixo_do_proprio_nivel(raiz):
+    reescrever(raiz, "avancado", vocabulario={"explicar_acima_de": "intermediario"})
+    with pytest.raises(FalhaTerminal, match="explicar_acima_de"):
+        levelspec.carregar(raiz, "avancado")
+
+
+@pytest.mark.parametrize("bloco, mensagem", [
+    ({"explicar_acima_de": "especialista"}, "vocabulario.explicar_acima_de"),
+    ({"explicar_acima_de": "intermediario", "extra": 1}, "vocabulario.extra"),
+])
+def test_vocabulario_invalido(raiz, bloco, mensagem):
+    reescrever(raiz, "intermediario", vocabulario=bloco)
+    with pytest.raises(FalhaTerminal, match=mensagem):
+        levelspec.carregar(raiz, "intermediario")
+
+
+def test_nivel_sem_o_bloco_de_vocabulario_carrega(raiz):
+    reescrever(raiz, "intermediario", vocabulario=None)
+    spec = levelspec.carregar(raiz, "intermediario")
+    assert spec.vocabulario is None
+    assert levelspec.instrucoes_redator(spec, "artigo").vocabulario == ""
+
+
+def test_instrucoes_de_vocabulario_por_nivel():
+    def vocabulario(nivel):
+        return levelspec.instrucoes_redator(levelspec.carregar(RAIZ, nivel), "carrossel").vocabulario
+
+    assert vocabulario("iniciante") == ""
+    assert vocabulario("intermediario").startswith("Use sem explicar o vocabulário padrão de quem investe")
+    assert "explique-o em poucas palavras" in vocabulario("intermediario")
+    assert vocabulario("avancado").startswith("Escreva para um leitor profissional: use o jargão técnico sem explicar")

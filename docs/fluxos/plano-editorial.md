@@ -26,11 +26,11 @@ Implementada. A E4 grava o plano e as 9 células em `PENDENTE`; em seguida o gra
 
 ## LevelSpec da E4
 
-A E4 lê de cada `config/levels/<nivel>.yaml` os campos `foco`, `tags_priorizadas`, `tags_descartaveis` e o `max_claims` do artigo. O mesmo arquivo tem o contrato de formato (`peso_papel` e `formatos`), lido pela E5.1, pelo prompt do redator e pela M2, e, no Iniciante, o bloco `analogia`, lido pela M5.
+A E4 lê de cada `config/levels/<nivel>.yaml` os campos `foco`, `tags_priorizadas`, `tags_descartaveis` e o `max_claims` do artigo. O mesmo arquivo tem o contrato de formato (`peso_papel` e `formatos`), lido pela E5.1, pelo prompt do redator e pela M2, no Iniciante, o bloco `analogia`, lido pela M5, e, no Intermediário e no Avançado, o bloco `vocabulario`, lido só pelo prompt do redator.
 
 | Campo | Iniciante | Intermediário | Avançado |
 |---|---|---|---|
-| `foco` | impacto prático no bolso do leitor | alocação e tendências | análise técnica e institucional |
+| `foco` | impacto prático no bolso do leitor | o que o fato muda para quem já investe | análise técnica e institucional |
 | `tags_descartaveis` | `[metodologico]` | `[]` | `[]` |
 | `tags_priorizadas` | `[impacto_pratico]` | `[indicador_chave, contexto_macro]` | `[indicador_chave, metodologico, governanca]` |
 | `max_claims` (artigo, carrossel, roteiro) | 5, 4 e 3 | 7, 5 e 5 | 9, 5 e 5 |
@@ -41,21 +41,23 @@ Nos 3 níveis:
 - `peso_papel`: `principal` 3, `apoio` 2 e `contexto` 1, para dividir as palavras do artigo entre os claims e as palavras das cenas de claim do roteiro;
 - carrossel: de 5 a 7 slides, contando o gancho e a conclusão, com no máximo 120 caracteres no gancho, 220 em cada slide de corpo e 160 na conclusão;
 - roteiro: 60 s a 2,5 palavras por segundo (150 palavras), com uma cena de abertura (o gancho) de 6 s, uma cena por claim e uma de fechamento de 6 s;
-- `analogia` (só no Iniciante): `marcadores: ["é como", "funciona como", "imagine que", "na prática"]`, as expressões que a M5 procura na mesma seção, slide ou cena da primeira ocorrência de um termo com analogia.
+- `analogia` (só no Iniciante): `marcadores: ["é como", "funciona como", "imagine que", "na prática"]`, as expressões que a M5 procura na mesma seção, slide ou cena da primeira ocorrência de um termo com analogia;
+- `vocabulario` (só no Intermediário e no Avançado): `explicar_acima_de`, o nível acima do qual o redator explica o termo do glossário na primeira vez que o usa. No Intermediário é `intermediario` (os termos de nível avançado são explicados); no Avançado é `avancado` (nenhum termo é explicado, e o redator escreve com o jargão técnico sem explicar).
 
 Validação do `sunontent/levelspec.py`, que recusa campo desconhecido e aborta o run com `FalhaTerminal`:
 
 - `analogia` é obrigatória no Iniciante e proibida nos outros níveis; `marcadores` não é vazio, não repete expressão e tem expressões de pelo menos duas palavras;
+- `vocabulario` é opcional e proibido no Iniciante, e `explicar_acima_de` é um nível igual ou acima do nível do arquivo;
 - `formatos.artigo.palavras.min` cresce do Iniciante ao Avançado (350, 450 e 600);
 - `max_claims` é artigo >= carrossel >= roteiro;
 - `carrossel.max_claims` maior que `slides.max - 2` (os slides de corpo possíveis) emite um aviso (`UserWarning`) ao carregar o arquivo e não aborta; os valores atuais (4, 5 e 5 claims, com no máximo 7 slides) não emitem o aviso.
 
-`instrucoes_redator(spec, formato)` devolve um `InstrucoesRedator` com `orcamento` (o contrato do formato em frases, para o prompt do redator), `marcadores` (a frase com as expressões de analogia, vazia fora do Iniciante) e `faixa_esperada` (o limite renderizado, que a M2 registra). No artigo, a faixa conta as palavras do texto das seções; o título e a linha fina ficam de fora. O prompt e a M2 leem o limite da mesma função.
+`instrucoes_redator(spec, formato)` devolve um `InstrucoesRedator` com `orcamento` (o contrato do formato em frases, para o prompt do redator), `marcadores` (a frase com as expressões de analogia, vazia fora do Iniciante), `legibilidade` (a meta de tamanho de frase, vazia no nível sem o bloco), `vocabulario` (a regra de vocabulário, vazia no nível sem o bloco) e `faixa_esperada` (o limite renderizado, que a M2 registra). No artigo, a faixa conta as palavras do texto das seções; o título e a linha fina ficam de fora. O prompt e a M2 leem o limite da mesma função.
 
 Por que esses valores:
 
 - **Iniciante:** o foco é o efeito prático. Premissa e método de cálculo (no Copom, as hipóteses de câmbio, petróleo e bandeira tarifária do cenário de referência) são o que o leitor iniciante não usa, e saem por regra. `governanca` não é descartável: no fato relevante da CVM, o evento principal é societário.
-- **Intermediário:** o foco é alocação e tendências. Os números centrais e o cenário macro orientam a alocação, e as premissas do cenário também interessam, por isso nada sai por regra; o planejador corta com `exige_base_tecnica` ou `fora_do_foco`.
+- **Intermediário:** o foco é o que o fato muda para quem já investe. Não fala em tendência nem em recomendação, que o redator não pode acrescentar e o juiz reprova. Os números centrais e o cenário macro mostram o que muda, e as premissas do cenário também interessam, por isso nada sai por regra; o planejador corta com `exige_base_tecnica` ou `fora_do_foco`.
 - **Avançado:** o foco é analítico. Método e governança (hedge, alíquota efetiva, diretoria, órgãos) são material do leitor institucional.
 - **`max_claims` por formato:** o plano do nível tem os claims do artigo, o formato mais longo. O carrossel e o roteiro usam menos: o núcleo e os claims de maior `prioridade` (E5.1). No roteiro, 150 palavras menos o gancho e o fechamento deixam cerca de 120 para os claims; o Iniciante fica com 3, porque as analogias ocupam parte do texto falado. O mínimo de cada formato é 3, porque o núcleo tem até 3 claims e entra nos 3 níveis e nos 3 formatos.
 
@@ -110,6 +112,8 @@ Antes dos níveis, o prompt diz o que vem primeiro no tipo de documento, nos 3 n
 - release de resultados: os resultados centrais (receita, lucro, EBITDA), o que vai para os acionistas e os eventos corporativos de maior efeito; o detalhe de cada linha de receita e despesa vem depois;
 - fato relevante: o evento principal e o que muda para o acionista (o que recebe, o que pode fazer e até quando); as etapas operacionais do cronograma vêm depois.
 
+Depois dos níveis, o prompt diz como o Intermediário e o Avançado se diferenciam na escolha: o Intermediário fica com os fatos que mudam algo para quem já investe e deixa de fora o detalhe técnico e metodológico que não muda essa leitura; o Avançado inclui as premissas e a metodologia, o balanço de riscos, a orientação futura em detalhe e a governança.
+
 As regras do prompt são estas; o gate confere todas, menos a preferência do Iniciante no `exige_base_tecnica`, o que vem primeiro no tipo de documento e o sentido da tese, que ficam para a revisão humana na matriz do dashboard:
 
 - núcleo entre os candidatos nos 3 níveis, presente nos 3 níveis;
@@ -146,10 +150,10 @@ O nó troca para `gemini-4-argon` só pelo `config/models.yaml`, com o preço do
 
 ```
 ... validate (sem claim para corrigir) -> adapt -> END
-... quarentena                         -> adapt -> END
+... descarte                           -> adapt -> END
 ```
 
-- A E4 entra depois da E3 com todos os claims aprovados e depois da quarentena; o plano usa só os claims do FactSheet assinado.
+- A E4 entra depois da E3 com todos os claims aprovados ou depois do descarte; o plano usa só os claims do FactSheet assinado.
 - O loop do gate fica dentro do nó `adapt`, que é um nó só para os 3 níveis: cada rodada atualiza `rodada_plano` e grava a saída do planejador em `rodadas_plano` e os problemas em `validacoes_plano`.
 - Depois da E4, `disparar_celulas` envia cada uma das 9 células, em `PENDENTE` em `celulas`, ao subgrafo da célula.
 - Antes da rodada 1, o nó apaga as linhas de `rodadas_plano` e `validacoes_plano` do run e a cópia local delas.
@@ -164,7 +168,7 @@ O nó troca para `gemini-4-argon` só pelo `config/models.yaml`, com o preço do
 
 ## Terminal e dashboard
 
-- O terminal ganha as linhas `etapa adapt: iniciada` e `etapa adapt: concluída` (`docs/execucao.md`, Linhas de etapa no terminal). A linha final diz em quantas rodadas o plano ficou pronto e, com `aviso`, que o plano tem aviso: `concluído: <doc> (<hash>), 22 claims, 1 em quarentena, plano em 2 rodadas (com aviso), 10836 tokens, R$ 0.1516`.
+- O terminal ganha as linhas `etapa adapt: iniciada` e `etapa adapt: concluída` (`docs/execucao.md`, Linhas de etapa no terminal). A linha final diz em quantas rodadas o plano ficou pronto e, com `aviso`, que o plano tem aviso: `concluído: <doc> (<hash>), 22 claims, 1 descartado, plano em 2 rodadas (com aviso), 10836 tokens, R$ 0.1516`.
 - No dashboard, a E4 entra como etapa da lista do fluxo, com o nó `adapt`. A subaba da E4 e a aba Info. técnicas mostram o plano gravado (a aba Resultado mostra o plano do nível de cada célula): o núcleo, o aviso, e, por nível, a tese, os claims usados com a prioridade, as analogias e os descartes, além dos problemas do gate por rodada (`docs/fluxos/dashboard.md`, Plano editorial).
 
 ## Como falha

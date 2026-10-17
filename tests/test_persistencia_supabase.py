@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 import pytest
 
 from sunontent import persistencia
+from sunontent.graph import RODADAS_EXTRACAO
 from sunontent.ingestao import comum
 from sunontent.retentativa import FalhaTerminal
 
@@ -295,7 +296,9 @@ def test_plano_editorial_rodadas_e_celulas(repositorio, ambiente, tmp_path):
     assert persistencia.carregar_factsheet(repositorio, run_id) == factsheet
 
     # Leitura do dashboard: o plano por nível e os problemas do gate por rodada.
-    detalhe = persistencia.ConsultaSupabase(ambiente["SUPABASE_DB_URL"]).detalhar_run(run_id)
+    detalhe = persistencia.ConsultaSupabase(ambiente["SUPABASE_DB_URL"]).detalhar_run(
+        run_id, rodadas_extracao=RODADAS_EXTRACAO
+    )
     assert detalhe["plano"]["nucleo"] == ["C01"] and detalhe["plano"]["rodadas"] == 2
     assert [n["nivel"] for n in detalhe["plano"]["niveis"]] == list(NIVEIS)
     iniciante = detalhe["plano"]["niveis"][0]
@@ -388,7 +391,7 @@ def test_peca_unidades_numeros_e_celula_numa_transacao(repositorio, ambiente, tm
 
     # Leitura do dashboard: as 9 células, e na do artigo a peça, os números usados e o scorecard com a violação.
     consulta = persistencia.ConsultaSupabase(ambiente["SUPABASE_DB_URL"])
-    lidas = consulta.detalhar_run(run_id)["celulas"]
+    lidas = consulta.detalhar_run(run_id, rodadas_extracao=RODADAS_EXTRACAO)["celulas"]
     assert len(lidas) == 9
     artigo = next(c for c in lidas if c["celula_id"] == "iniciante__artigo")
     assert artigo["estado"] == "AVALIANDO" and artigo["formato"] == "artigo"
@@ -437,7 +440,9 @@ def test_span_do_adapter_aceita_nivel_nulo(repositorio, ambiente, tmp_path):
         persistencia.gravar_span(repositorio, tmp_path, span("extractor", "iniciante"))
     with pytest.raises(FalhaTerminal):  # a rodada do gate é só do adapter
         persistencia.gravar_span(repositorio, tmp_path, span("extractor").model_copy(update={"rodada": 1}))
-    detalhe = persistencia.ConsultaSupabase(ambiente["SUPABASE_DB_URL"]).detalhar_run(run_id)
+    detalhe = persistencia.ConsultaSupabase(ambiente["SUPABASE_DB_URL"]).detalhar_run(
+        run_id, rodadas_extracao=RODADAS_EXTRACAO
+    )
     assert sorted(s["rodada"] or 0 for s in detalhe["spans"]) == [0, 0, 2]
 
 
@@ -452,7 +457,9 @@ def test_run_abortado_com_a_etapa_do_erro(repositorio, ambiente):
         assert linha == ("abortado", "retriavel", "adapt")
         with pytest.raises(psycopg.errors.CheckViolation):  # etapa do erro só em run abortado
             conexao.execute("update runs set etapa_erro = 'adapt' where run_id = %s", (novo_run(ambiente["SUPABASE_DB_URL"]),))
-    resumo = persistencia.ConsultaSupabase(ambiente["SUPABASE_DB_URL"]).detalhar_run(run_id)["manifest"]
+    resumo = persistencia.ConsultaSupabase(ambiente["SUPABASE_DB_URL"]).detalhar_run(
+        run_id, rodadas_extracao=RODADAS_EXTRACAO
+    )["manifest"]
     assert resumo["etapa_erro"] == "adapt"
 
 
@@ -487,10 +494,11 @@ def test_consulta_le_o_run_completo_do_dashboard(repositorio, ambiente, tmp_path
     repositorio.concluir_run(run_id)
 
     consulta = persistencia.ConsultaSupabase(ambiente["SUPABASE_DB_URL"])
-    resumo = next(r for r in consulta.listar_runs() if r["run_id"] == run_id)
+    resumo = next(r for r in consulta.listar_runs(rodadas_extracao=RODADAS_EXTRACAO) if r["run_id"] == run_id)
     assert (resumo["status"], resumo["claims"], resumo["custo_total_tokens"]) == ("concluido", 1, 240)
+    assert resumo["descartados"] is None  # todos passaram na rodada 2: nenhum descartado
 
-    detalhe = consulta.detalhar_run(run_id)
+    detalhe = consulta.detalhar_run(run_id, rodadas_extracao=RODADAS_EXTRACAO)
     assert detalhe["manifest"]["modelos"] == {"extractor": "m"} and detalhe["manifest"]["coleta_id"] is None
     assert detalhe["documento"] == {
         "doc_id": documento.doc_id, "doc_sha256": documento.doc_sha256,
@@ -503,64 +511,28 @@ def test_consulta_le_o_run_completo_do_dashboard(repositorio, ambiente, tmp_path
     assert [n["bruto"] for n in claim["numeros"]] == ["44"] and claim["ancora"] == claims[0].ancora.model_dump()
     assert [(v["rodada"], v["claims"][0]["passou"]) for v in detalhe["validacoes"]] == [(1, False), (2, True)]
     assert len(detalhe["spans"]) == 2 and detalhe["spans"][0]["criado_em"] <= detalhe["spans"][1]["criado_em"]
-    assert consulta.detalhar_run("cvm_20261004T142205Z_ffffff") is None
+    assert consulta.detalhar_run("cvm_20261004T142205Z_ffffff", rodadas_extracao=RODADAS_EXTRACAO) is None
     balanco = consulta.balanco()
     assert any(l["status"] == "concluido" and l["fonte"] == "cvm" for l in balanco["runs"])
     assert all(i["run_id"] != run_id for i in consulta.biblioteca())
 
 
-def test_quarentena_e_revisao_humana(repositorio, ambiente, tmp_path):
-    """Número que a E1 não leu: o claim vai para a quarentena e o humano o aceita com o número."""
-    import psycopg
+def test_descartados_sao_os_reprovados_na_ultima_rodada(repositorio, ambiente, tmp_path):
+    """Só a rodada RODADAS_EXTRACAO conta: o run parado antes dela não tem descartados."""
+    descartou, _ = run_com_referencia(repositorio, ambiente["SUPABASE_DB_URL"])
+    for rodada in range(1, RODADAS_EXTRACAO + 1):
+        persistencia.gravar_validacao(
+            repositorio, tmp_path, descartou, rodada, [("C01", None if rodada > 1 else "motivo"), ("C02", "motivo")]
+        )
+    parou, _ = run_com_referencia(repositorio, ambiente["SUPABASE_DB_URL"])
+    persistencia.gravar_validacao(repositorio, tmp_path, parou, 1, [("C01", "motivo")])
 
-    from sunontent.extracao import extractor, quarentena
-    from sunontent.schemas import ClaimProposto, ClaimQuarentena, FactSheet
-
-    run_id, documento = run_com_referencia(repositorio, ambiente["SUPABASE_DB_URL"])
-    persistencia.gravar_documento_processado(repositorio, tmp_path, run_id, documento)
-    with psycopg.connect(ambiente["SUPABASE_DB_URL"]) as conexao:  # a E1 "não leu" o 44
-        conexao.execute("delete from numeros where run_id = %s and bruto = '44'", (run_id,))
-
-    informacoes = ClaimProposto(
-        id="C01", chunk_id="K01", texto="Informações adicionais sobre a Incorporação de Ações serão divulgadas.",
-        literal_fonte="Informações adicionais acerca da Incorporação de Ações serão tempestivamente", numeros=[], tipo="risco", tags=["governanca"])
-    resolucao = ClaimProposto(
-        id="C02", chunk_id="K01", texto="O fato relevante atende à Resolução CVM nº 44.",
-        literal_fonte="CVM nº 44, de 23 de agosto de 2021", numeros=["44"],
-        tipo="resultado", tags=["indicador_chave"])
-    claims, _ = extractor.ancorar(documento, {"C01": informacoes})
-    itens = [ClaimQuarentena(proposto=resolucao, motivo="o número '44' não está dentro do literal_fonte", rodada=3)]
-    for _ in range(2):  # a repetição não duplica linhas
-        persistencia.gravar_quarentena(repositorio, tmp_path, run_id, itens)
-    persistencia.gravar_factsheet(repositorio, tmp_path, run_id, FactSheet(
-        doc_id=documento.doc_id, tipo_documento=documento.tipo_documento, emissor=documento.emissor,
-        data_documento=documento.data_documento, claims=claims, tabela_numeros=documento.tabela_numeros,
-        assinado=True))
-
-    (item,) = persistencia.carregar_quarentena(repositorio, run_id)
-    assert item.claim == itens[0] and item.decisao is None
-    (sugerido,) = quarentena.preparar_revisao(repositorio, run_id, "C02").numeros
-    assert sugerido.novo and sugerido.numero.bruto == "44"
-    claim = quarentena.aceitar_da_quarentena(repositorio, tmp_path, run_id, "C02", [sugerido.numero], autor="Ana")
-    # Repetir a mesma decisão (resposta perdida e nova tentativa) não tem efeito; outra decisão é recusada.
-    repositorio.gravar_decisao_quarentena(run_id, "C02", "aceitar", "Ana", claim, [sugerido.numero])
-    with pytest.raises(FalhaTerminal, match="já foi revisado"):
-        repositorio.gravar_decisao_quarentena(run_id, "C02", "descartar", "Ana", None, [])
-
-    with psycopg.connect(ambiente["SUPABASE_DB_URL"]) as conexao:
-        origens = conexao.execute(
-            "select c.claim_id, c.origem::text, n.origem::text from claims c left join claim_numeros cn"
-            " on cn.run_id = c.run_id and cn.claim_id = c.claim_id left join numeros n on n.id = cn.numero_id"
-            " where c.run_id = %s order by c.claim_id", (run_id,)).fetchall()
-        with pytest.raises(psycopg.Error, match="imutável"):
-            conexao.execute("delete from decisoes_quarentena where run_id = %s", (run_id,))
-    assert origens == [("C01", "pipeline", None), ("C02", "humano", "humano")]
-    assert sugerido.numero in persistencia.carregar_documento_processado(repositorio, run_id).tabela_numeros
-
-    detalhe = persistencia.ConsultaSupabase(ambiente["SUPABASE_DB_URL"]).detalhar_run(run_id)
-    assert [(c["id"], c["origem"]) for c in detalhe["factsheet"]["claims"]] == [("C01", "pipeline"), ("C02", "humano")]
-    (q,) = detalhe["quarentena"]
-    assert (q["claim_id"], q["decisao"], q["autor"], q["proposto"]["id"]) == ("C02", "aceitar", "Ana", "C02")
+    consulta = persistencia.ConsultaSupabase(ambiente["SUPABASE_DB_URL"])
+    resumos = {r["run_id"]: r for r in consulta.listar_runs(rodadas_extracao=RODADAS_EXTRACAO)}
+    assert (resumos[descartou]["descartados"], resumos[parou]["descartados"]) == (1, None)
+    detalhe = consulta.detalhar_run(descartou, rodadas_extracao=RODADAS_EXTRACAO)
+    assert detalhe["descartados"] == 1
+    assert consulta.detalhar_run(parou, rodadas_extracao=RODADAS_EXTRACAO)["descartados"] == 0
 
 
 def test_consulta_nao_grava(ambiente):

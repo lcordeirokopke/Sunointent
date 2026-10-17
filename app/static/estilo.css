@@ -697,13 +697,3 @@ details.descartes .tabela-rolagem { margin-top: 8px; }
 .resultado .metrica-chip, .resultado .formato-rotulo { font-size: 12px; }
 .ajuda { margin: 4px 0 12px; color: var(--texto-suave); font-size: 12px; }
 .hash { font-family: var(--mono); font-size: 12px; word-break: break-all; }
-
-/* Revisão da quarentena */
-.revisao { display: grid; gap: 10px; margin-top: 10px; }
-.revisao textarea, .revisao input[type="text"] {
-  width: 100%; font: inherit; color: inherit; background: var(--superficie);
-  border: 1px solid var(--borda); border-radius: var(--raio-p); padding: 6px 10px;
-  box-shadow: var(--sombra);
-}
-.revisao .linha-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
-.revisao .numero-revisao { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; align-items: center; }

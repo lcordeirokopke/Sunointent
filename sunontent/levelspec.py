@@ -2,8 +2,9 @@
 
 O LevelSpec existe só em config/levels/: o prompt e o avaliador leem o mesmo arquivo. O arquivo tem os campos
 da E4, o contrato de formato (`peso_papel` e `formatos`), lido pela E4 (o `max_claims` do plano é o do artigo),
-pela E5.1 e pela M2, no Iniciante, o bloco `analogia` com os marcadores que a M5 procura, e, em qualquer nível, o bloco
-opcional `legibilidade` (piso do IFL por formato, lido pela M3, e meta de frase do redator). As frases do
+pela E5.1 e pela M2, no Iniciante, o bloco `analogia` com os marcadores que a M5 procura, em qualquer nível, o bloco
+opcional `legibilidade` (piso do IFL por formato, lido pela M3, e meta de frase do redator) e, fora do Iniciante, o
+bloco opcional `vocabulario` (o que o redator usa sem explicar e o que explica). As frases do
 prompt do redator e o limite da M2 saem da mesma função, `instrucoes_redator`. Arquivo inválido é
 FalhaTerminal: o run aborta no início da E4.
 """
@@ -25,7 +26,7 @@ from pydantic import (
 )
 
 from sunontent.retentativa import FalhaTerminal
-from sunontent.schemas import Formato, Nivel, Tag
+from sunontent.schemas import NIVEIS, Formato, Nivel, Tag
 
 # Única tag que corresponde a um motivo de descarte (docs/arquiteturas.md, E4.1).
 TAGS_DESCARTAVEIS_PERMITIDAS = ("metodologico",)
@@ -143,6 +144,14 @@ class RegraLegibilidade(_Fechado):
     frase_max_palavras: StrictInt = Field(ge=5)
 
 
+class RegraVocabulario(_Fechado):
+    """Regra de vocabulário do redator no Intermediário e no Avançado: os termos do glossário com `nivel_minimo`
+    acima de `explicar_acima_de` são explicados na primeira vez que aparecem; os outros, usados sem explicar.
+    Só o prompt do redator lê o bloco."""
+
+    explicar_acima_de: Nivel
+
+
 class LevelSpec(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -155,6 +164,7 @@ class LevelSpec(BaseModel):
     formatos: Formatos
     analogia: RegraAnalogia | None = None
     legibilidade: RegraLegibilidade | None = None
+    vocabulario: RegraVocabulario | None = None
 
     @property
     def max_claims(self) -> int:
@@ -182,6 +192,18 @@ class LevelSpec(BaseModel):
             raise ValueError("o bloco `analogia` é obrigatório no Iniciante")
         if self.nivel != "iniciante" and self.analogia is not None:
             raise ValueError("o bloco `analogia` só vale no Iniciante")
+        return self
+
+    @model_validator(mode="after")
+    def _vocabulario_fora_do_iniciante(self) -> "LevelSpec":
+        if self.vocabulario is None:
+            return self
+        if self.nivel == "iniciante":
+            raise ValueError("o bloco `vocabulario` não vale no Iniciante, que explica os termos pelo bloco `analogia`")
+        if NIVEIS.index(self.vocabulario.explicar_acima_de) < NIVEIS.index(self.nivel):
+            raise ValueError(
+                f"vocabulario.explicar_acima_de ({self.vocabulario.explicar_acima_de}) abaixo do nível ({self.nivel})"
+            )
         return self
 
 
@@ -233,6 +255,7 @@ class InstrucoesRedator(_Fechado):
     marcadores: str  # as expressões de analogia do Iniciante, em frase; vazio nos outros níveis
     faixa_esperada: str  # o limite renderizado, que a M2 registra no scorecard
     legibilidade: str  # a meta de tamanho de frase do nível, em frase; vazio quando o nível não tem
+    vocabulario: str  # o que usar sem explicar e o que explicar, em frase; vazio quando o nível não tem o bloco
 
 
 def _numero(valor: float) -> str:
@@ -283,4 +306,20 @@ def instrucoes_redator(spec: LevelSpec, formato: Formato) -> InstrucoesRedator:
             f"Escreva frases de até {spec.legibilidade.frase_max_palavras} palavras e prefira palavras curtas "
             "e comuns: a legibilidade do texto é medida."
         )
-    return InstrucoesRedator(orcamento=orcamento, marcadores=marcadores, faixa_esperada=faixa, legibilidade=legibilidade)
+    vocabulario = ""
+    if spec.vocabulario is not None:
+        if spec.vocabulario.explicar_acima_de == NIVEIS[-1]:
+            vocabulario = (
+                "Escreva para um leitor profissional: use o jargão técnico sem explicar, prefira o termo técnico à "
+                "paráfrase e não explique conceitos de mercado."
+            )
+        else:
+            vocabulario = (
+                "Use sem explicar o vocabulário padrão de quem investe (Selic, IPCA, CDI, dividendos, lucro líquido, "
+                "receita). Na primeira vez que usar um termo técnico de especialista, explique-o em poucas palavras "
+                'na mesma frase (um aposto, "ou seja" ou parênteses) ou troque-o pela explicação.'
+            )
+    return InstrucoesRedator(
+        orcamento=orcamento, marcadores=marcadores, faixa_esperada=faixa, legibilidade=legibilidade,
+        vocabulario=vocabulario,
+    )

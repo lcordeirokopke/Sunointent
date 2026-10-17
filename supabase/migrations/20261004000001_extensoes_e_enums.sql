@@ -21,13 +21,6 @@ create type unidade_numero as enum ('pct', 'pp', 'BRL', 'BRL_mi', 'x', 'contagem
 -- Claim.tipo (docs/arquiteturas.md, Claim)
 create type tipo_claim as enum ('decisao', 'projecao', 'condicionante', 'resultado', 'risco', 'evento_corporativo');
 
--- Quem produziu a linha de numeros ou claims: o pipeline (E1 e E2/E3) ou a revisão humana da
--- quarentena (docs/fluxos/extracao.md, Quarentena).
-create type origem_dado as enum ('pipeline', 'humano');
-
--- Decisão humana sobre um claim em quarentena (docs/fluxos/extracao.md, Quarentena).
-create type decisao_quarentena as enum ('aceitar', 'descartar');
-
 -- Regras do gate do plano (docs/arquiteturas.md, E4.3 Complemento e gate do plano)
 create type regra_plano as enum (
   'id_inexistente', 'contraditorio', 'nucleo_ausente', 'acima_do_limite', 'jargao_sem_analogia', 'motivo_invalido',

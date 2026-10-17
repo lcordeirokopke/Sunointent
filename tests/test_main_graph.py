@@ -386,7 +386,7 @@ VOTACAO = {
 }
 
 
-def test_claim_que_nao_converge_vai_para_a_quarentena_e_o_run_conclui(raiz, repo, capsys):
+def test_claim_que_nao_converge_e_descartado_e_o_run_conclui(raiz, repo, capsys):
     correcao = json.dumps({"claims": [ERRADO]}, ensure_ascii=False)
     llm = cliente_falso([json.dumps({"claims": [ERRADO, VOTACAO]}, ensure_ascii=False), correcao, correcao,
                          resposta_plano("C02")])
@@ -396,24 +396,23 @@ def test_claim_que_nao_converge_vai_para_a_quarentena_e_o_run_conclui(raiz, repo
     assert {chave[1] for chave in repo.validacoes} == {1, 2, 3}
     factsheet = repo.factsheet_gravado(next(iter(repo.factsheets)))
     assert factsheet.assinado and [c.id for c in factsheet.claims] == ["C02"]
-    item = repo.quarentena[(run_id, "C01")]
-    assert item.rodada == 3 and "13,75%" in item.motivo and item.proposto.literal_fonte == ERRADO["literal_fonte"]
-    local = json.loads((raiz / "data" / "runs" / run_id / "quarentena.json").read_text(encoding="utf-8"))
-    assert [i["proposto"]["id"] for i in local] == ["C01"]
+    # O motivo do descarte é a linha da última rodada em validacoes_ancora.
+    ultima = repo.validacoes[(run_id, 3, "C01")]
+    assert not ultima["passou"] and "13,75%" in ultima["motivo"]
     saida = capsys.readouterr().out
-    assert "1 claims, 1 em quarentena," in saida
-    assert etapas(saida)[-6:] == ["etapa quarentena: iniciada", "etapa quarentena: concluída",
+    assert "1 claims, 1 descartado," in saida
+    assert etapas(saida)[-6:] == ["etapa descarte: iniciada", "etapa descarte: concluída",
                                   "etapa adapt: iniciada", "etapa adapt: concluída",
                                   "etapa fechamento: iniciada", "etapa fechamento: concluída"]
 
 
-def test_sem_claim_valido_grava_a_quarentena_e_aborta(raiz, repo):
+def test_sem_claim_valido_aborta(raiz, repo):
     errado = json.dumps({"claims": [ERRADO]}, ensure_ascii=False)
     assert rodar(raiz, repo, dev=True, llm=cliente_falso([errado] * 3)) == 1
     (run_id, run), = repo.runs.items()
     assert run["status"] == "abortado" and run["erro_classe"] == "terminal"
-    assert "nenhum claim válido" in run["erro_mensagem"] and "C01" in run["erro_mensagem"]
-    assert (run_id, "C01") in repo.quarentena
+    assert "nenhum claim válido" in run["erro_mensagem"] and "1 claims descartados. C01:" in run["erro_mensagem"]
+    assert run["etapa_erro"] == "descarte"
     assert not repo.factsheets
     assert len(repo.spans) == 3
     assert manifest_local(raiz)["custo_total_tokens"] == 3600

@@ -20,7 +20,6 @@ Quase tudo é simulado. O código do projeto roda de verdade; o mundo externo (i
 | Internet (BCB, CVM, B3) | `httpx.MockTransport` devolve respostas prontas de `tests/fixtures/http/`, inclusive 503, 429, timeout e 404 | `test_ingestao.py` |
 | Supabase | `RepositorioMemoria`: classe em memória com as mesmas regras do banco usadas pelo pipeline (E0 a E7), que também injeta falhas por método | `conftest.py` |
 | Leitura do Supabase pelo dashboard | `ConsultaFalsa`: devolve runs e peças prontos ou levanta a falha pedida | `test_app.py` |
-| Gravação da revisão da quarentena pelo dashboard | `RepositorioMemoria` no lugar do `RepositorioSupabase` | `test_app.py` |
 | Processo do pipeline iniciado pelo dashboard | script Python que escreve as mesmas linhas do `__main__.py` | `test_app.py` |
 | Storage do Supabase | `_StorageFalso`: só devolve o erro que o teste pede | `test_ingestao.py` |
 | Espera do backoff | `monkeypatch` troca `retentativa._dormir` por uma lista; o teste confere o tamanho da lista e que as esperas crescem, sem esperar de verdade | `conftest.py` |
@@ -55,8 +54,7 @@ tests/
 ├── test_numeros.py                # parser de número brasileiro
 ├── test_extracao.py               # E1: leitura, normalização, chunks, metadados, números e gravação
 ├── test_extractor.py              # E2, E3, cliente LLM e cobertura com a Gemini API (marker gemini)
-├── test_quarentena.py             # quarentena do loop E2/E3 e revisão humana
-├── test_levelspec.py              # LevelSpec: leitura e validação de config/levels/, bloco analogia, avisos e instrucoes_redator
+├── test_levelspec.py              # LevelSpec: leitura e validação de config/levels/, blocos analogia e vocabulario, avisos e instrucoes_redator
 ├── test_glossario.py              # glossário: validação, casamento de termos, analogia e flexões
 ├── test_adaptacao.py              # E4: pré-filtro, complemento, gate, planejador e gravação
 ├── test_texto.py                  # contagem de palavras e de caracteres, sílabas e frases do texto da peça
@@ -67,7 +65,7 @@ tests/
 ├── test_juiz.py                   # juiz (M6): Groq, contexto, prompt, completude, violações, matriz de níveis e calibração (marker judge)
 ├── test_main_graph.py             # manifest, grafo (E0 a E4 e o fan-out com as células simuladas) e __main__
 ├── test_fanout.py                 # fan-out das 9 células: Send, max_concurrency, isolamento de falhas, fechamento, terminal e trava do custo
-├── test_app.py                    # dashboard: linhas do terminal, API, slide em SVG e revisão da quarentena, com processo, consulta e repositório simulados
+├── test_app.py                    # dashboard: linhas do terminal, API, slide em SVG e claims descartados na E3, com processo e consulta simulados
 ├── test_persistencia_supabase.py  # integração com o Supabase local
 └── fixtures/
     ├── http/                      # respostas simuladas por fonte (listagem e página de erro)
@@ -159,22 +157,13 @@ tests/
 
 ### No grafo
 
-`test_main_graph.py` confere, com o `ProviderFalso`: o FactSheet assinado e gravado, a rodada em `validacoes_ancora`, o span e o custo no run e no manifest local; o claim recusado que volta para a E2 com o motivo no prompt e é corrigido; o claim que não converge e, depois de 3 rodadas, vai para a quarentena, com o run concluído e o FactSheet assinado só com o claim válido; o run sem nenhum claim válido, que grava a quarentena e aborta; o extractor sem claims, que aborta; e o run que não começa sem a `GOOGLE_API_KEY_PRINC`, mesmo com a `GOOGLE_API_KEY_SEC` preenchida.
+`test_main_graph.py` confere, com o `ProviderFalso`: o FactSheet assinado e gravado, a rodada em `validacoes_ancora`, o span e o custo no run e no manifest local; o claim recusado que volta para a E2 com o motivo no prompt e é corrigido; o claim que não converge e, depois de 3 rodadas, é descartado, com o motivo na linha da rodada 3 em `validacoes_ancora`, o run concluído, o FactSheet assinado só com o claim válido, a linha final com `1 descartado` e as linhas da etapa `descarte`; o run sem nenhum claim válido, que aborta na etapa `descarte` sem gravar FactSheet, com a quantidade e o motivo dos descartados na mensagem; o extractor sem claims, que aborta; e o run que não começa sem a `GOOGLE_API_KEY_PRINC`, mesmo com a `GOOGLE_API_KEY_SEC` preenchida.
 
 `test_persistencia_supabase.py` confere no Supabase local o span com o custo somado uma só vez em `runs`, a rodada em `validacoes_ancora` e o `claim_numeros` ligado à sua linha em `numeros`.
 
-### Quarentena e revisão humana
+### Claims descartados
 
-`test_quarentena.py`, sobre o documento de referência do Copom:
-
-- `separar` assina o FactSheet com os válidos e põe os reprovados em quarentena, com motivo e rodada;
-- número que a E1 não leu é localizado no trecho e interpretado (valor e unidade) para confirmar; número que a E1 leu é reaproveitado;
-- formato que o `numeros.py` não interpreta pede valor e unidade a quem revisa;
-- trecho corrigido é ancorado de novo;
-- aceitar recusa número fora do trecho, bruto que não confere com o texto e número sobreposto a um que a E1 leu, e passa pelas regras da E3;
-- com o grafo: o claim cujo número a E1 não leu vai para a quarentena e o humano o aceita (o número entra em `numeros` com origem humano e a revisão seguinte o lê na tabela); o humano corrige o trecho de um claim sem âncora; descartar grava só a decisão; a segunda decisão é recusada; a revisão exige autor e claim em quarentena; aceitar que não passa na E3 não grava nada; run abortado não aceita claim.
-
-`test_persistencia_supabase.py::test_quarentena_e_revisao_humana` faz o mesmo caminho no Supabase local: a quarentena sem duplicar, a leitura do documento e da quarentena, a aceitação com número novo (`origem = humano` em `claims` e `numeros`), a mesma decisão repetida sem efeito, a outra decisão recusada, o trigger que bloqueia o delete e a leitura do dashboard.
+`test_persistencia_supabase.py::test_descartados_sao_os_reprovados_na_ultima_rodada` confere no Supabase local a contagem de descartados da `ConsultaSupabase`, em `listar_runs` e em `detalhar_run`: só os reprovados na rodada `RODADAS_EXTRACAO` contam, e o run parado antes dela não tem descartados.
 
 ## E4: plano editorial
 
@@ -189,7 +178,8 @@ Os testes do bloco `analogia` e das instruções do redator conferem:
 - o aviso `carrossel.max_claims` maior que `slides.max - 2` (6 claims e 5 slides de corpo possíveis, num arquivo reescrito) e nenhum aviso nos três níveis atuais (4, 5 e 5, os dois últimos exatamente no limite);
 - o bloco `legibilidade`: só o Iniciante o tem (piso 30, 45 e 45 e meta de 18 palavras), piso sem um dos formatos e meta abaixo de 5 palavras: erro terminal, e o nível sem o bloco carrega;
 - as palavras mínimas do artigo: ordem decrescente aborta (`carregar_todos`), valores iguais passam;
-- `instrucoes_redator`: o orçamento e o limite do artigo, do carrossel e do roteiro (com `2,5` de vírgula decimal), os marcadores e a meta de tamanho de frase só no Iniciante.
+- `instrucoes_redator`: o orçamento e o limite do artigo, do carrossel e do roteiro (com `2,5` de vírgula decimal), os marcadores e a meta de tamanho de frase só no Iniciante;
+- o bloco `vocabulario`: `explicar_acima_de` `intermediario` no Intermediário e `avancado` no Avançado, ausente no Iniciante; o bloco no Iniciante, `explicar_acima_de` abaixo do nível, nível fora do vocabulário e campo desconhecido no bloco: erro terminal; o nível sem o bloco carrega; a frase de vocabulário do Intermediário (explicar o termo de especialista) e a do Avançado (jargão sem explicar), vazia no Iniciante.
 
 ### Glossário
 
@@ -211,8 +201,8 @@ Os testes do bloco `analogia` e das instruções do redator conferem:
 - gate: o plano correto passa, e cada regra reprova: `id_inexistente` (núcleo, claims, descartes, relacionado e tese), `contraditorio` (usado e descartado, descartado pelo pré-filtro e pelo planejador, usado depois do pré-filtro, repetido nos claims, com as mensagens que citam só o que o planejador vê), `nucleo_ausente` (fora de um nível e não candidato nos 3), `acima_do_limite`, `prioridade_invalida` (repetida ou com buraco), `jargao_sem_analogia` (só no Iniciante e só para termo acima de iniciante), `analogia_invalida` (`nova` com dígito, com marcador ou que só repete o termo, inclusive por forma composta e variante; a que cita o termo com mais conteúdo passa), `motivo_invalido` (`redundante` sem relacionado, com relacionado fora dos claims ou sem todos os números e datas do descartado, comparados por valor e unidade e por dia, mês e ano, com número repetido contando duas vezes; `exige_base_tecnica` sem termo acima do nível, e sempre no Avançado) e `tese_invalida` (id não usado, tese vazia ou sem ids, número que não é data, termo técnico no Iniciante; data, termo de iniciante e o 15 de IPCA-15 passam; a tese vazia sem ids da limpeza só é aceita com `aceitar_tese_vazia`);
 - limpeza depois da última rodada: plano sem problema não muda; ids inexistentes (o `redundante` sem relacionado existente vira `secundario`, e o `aviso` cita o id que saiu da tese), contraditório, núcleo ausente incluído no fim como `apoio` e núcleo não candidato retirado, núcleo vazio aborta, analogia inválida retirada com o claim saindo do Iniciante como `exige_base_tecnica`, claim do núcleo com jargão sem analogia aborta, corte pela prioridade mantendo o núcleo, analogia do termo que saiu pelo corte retirada, redundante com relacionado cortado vira `secundario`, motivo inválido vira `secundario`, tese com número ou termo técnico fica vazia, prioridades renumeradas, e o `aviso` lista o que mudou;
 - schema do planejador: núcleo de 1 a 3, exatamente 3 níveis em ordem, analogia só no Iniciante, motivo `secundario` recusado, analogia sem termo ou sem explicação recusada e prioridade menor que 1 recusada;
-- planejador, com o `ProviderFalso`: o prompt traz o LevelSpec dos 3 níveis, os claims com onde cada um é candidato e os termos técnicos de cada um com o nível, os termos sem analogia, o que vem primeiro no tipo de documento (uma linha por tipo, `test_prompt_diz_o_que_vem_primeiro_no_tipo_de_documento`) e as regras da prioridade, do `redundante`, do `exige_base_tecnica` (com a preferência do Iniciante pelo claim com analogia), da tese e da analogia `nova`, sem a linha de versão e sem a seção de correção; a rodada 1 usa o raciocínio padrão e o span traz a rodada; a correção traz só os problemas e o plano enviado, pede `adapter_correcao` e o span traz a rodada da correção; resposta fora do schema é repetida com o erro, e 3 viram terminal;
-- gravação, com o repositório em memória: rodadas do gate sem duplicar e com a cópia local (lista vazia na rodada que passou, com a saída do planejador em toda rodada), limpeza das rodadas e das saídas, plano e 9 células em `PENDENTE` com a cópia local, o mesmo plano gravado de novo sem erro e outro plano recusado, o plano lido como uma cópia reconstruída, `atualizar_celula` com a cópia local e recusada para célula que não existe, `carregar_factsheet` com os claims da quarentena em ordem de id (C100 depois de C99), plano recusado sem FactSheet e leitura do plano que regrava a cópia local que falta.
+- planejador, com o `ProviderFalso`: o prompt traz o LevelSpec dos 3 níveis, os claims com onde cada um é candidato e os termos técnicos de cada um com o nível, os termos sem analogia, o que vem primeiro no tipo de documento (uma linha por tipo, `test_prompt_diz_o_que_vem_primeiro_no_tipo_de_documento`), como o Intermediário e o Avançado se diferenciam na escolha e as regras da prioridade, do `redundante`, do `exige_base_tecnica` (com a preferência do Iniciante pelo claim com analogia), da tese e da analogia `nova`, sem a linha de versão e sem a seção de correção; a rodada 1 usa o raciocínio padrão e o span traz a rodada; a correção traz só os problemas e o plano enviado, pede `adapter_correcao` e o span traz a rodada da correção; resposta fora do schema é repetida com o erro, e 3 viram terminal;
+- gravação, com o repositório em memória: rodadas do gate sem duplicar e com a cópia local (lista vazia na rodada que passou, com a saída do planejador em toda rodada), limpeza das rodadas e das saídas, plano e 9 células em `PENDENTE` com a cópia local, o mesmo plano gravado de novo sem erro e outro plano recusado, o plano lido como uma cópia reconstruída, `atualizar_celula` com a cópia local e recusada para célula que não existe, `carregar_factsheet` com os claims em ordem de id (C100 depois de C99), plano recusado sem FactSheet e leitura do plano que regrava a cópia local que falta.
 
 ### No grafo
 
@@ -226,7 +216,7 @@ Os testes do bloco `analogia` e das instruções do redator conferem:
 - LevelSpec ou glossário inválido abortam antes de chamar o planejador; 3 respostas fora do schema abortam o run;
 - as rodadas antigas do run são apagadas antes da rodada 1.
 
-`test_app.py::test_e4_entra_no_fluxo_do_dashboard` confere o nó `adapt` e as arestas `validate -> adapt`, `quarentena -> adapt` e `adapt -> END` em `/api/grafo`, `RODADAS_PLANO` em `rodadas_plano`, e a etapa E4 com o nó `adapt` no `app.js`. `test_persistencia_supabase.py::test_plano_editorial_rodadas_e_celulas` faz a gravação no Supabase local.
+`test_app.py::test_e4_entra_no_fluxo_do_dashboard` confere o nó `adapt` e as arestas `validate -> adapt`, `descarte -> adapt` e `adapt -> END` em `/api/grafo`, `RODADAS_PLANO` em `rodadas_plano`, e a etapa E4 com o nó `adapt` no `app.js`. `test_persistencia_supabase.py::test_plano_editorial_rodadas_e_celulas` faz a gravação no Supabase local.
 
 ## Contrato da peça
 
@@ -250,7 +240,7 @@ Não contém testes, só infraestrutura compartilhada:
 - `RepositorioMemoria`: substitui o Supabase. Guarda runs, documentos, objetos do bucket e coletas; aceita falhas injetadas por método e simula a perda de resposta depois do commit.
 - `repositorio` e `run_id`: fixtures com um run `copom_...` já registrado.
 - `referencia(fonte)`: devolve bytes e metadados do documento congelado, ou `None` se ainda não existir.
-- `RepositorioMemoria` também guarda spans (sem somar duas vezes o mesmo), validações e FactSheets, e recusa número de claim que não está em `numeros`, como o Supabase. Guarda ainda a quarentena e as decisões da revisão, com as mesmas regras: uma decisão por claim, e aceitar só com FactSheet assinado.
+- `RepositorioMemoria` também guarda spans (sem somar duas vezes o mesmo), validações e FactSheets, e recusa número de claim que não está em `numeros`, como o Supabase.
 - `RepositorioMemoria` guarda também as rodadas do gate com a saída do planejador, o plano e as células, recusa o plano sem FactSheet do run, recusa outro plano para o run que já tem plano e recusa `rodada` em span que não é do `adapter`. O FactSheet e o plano ficam como JSON (`model_dump(mode="json")`) e voltam por `model_validate`, como pelo Postgres; `factsheet_gravado` e `plano_gravado` são os atalhos dos testes para ler o que foi gravado.
 - `RepositorioMemoria` guarda também as peças de cada tentativa, as unidades com os claims e os números usados: recusa a peça de célula inexistente, outra peça na mesma tentativa, número usado que não aponta para um número de claim do run e posição repetida; grava em `peca_unidade_claims` só os claims do run; a mesma peça de novo não grava nada.
 - `SubgrafoFalso` e a fixture `celulas_aprovadas`: o subgrafo de uma célula no lugar do real, com os nós `synth`, `evaluate` e `router`, que termina cada célula no estado pedido (padrão `APROVADA`) sem chamar LLM e mede o pico de células ao mesmo tempo. `test_main_graph.py` o usa em todos os testes, para que o run passe pelas 9 células sem redator.
@@ -277,7 +267,8 @@ Não contém testes, só infraestrutura compartilhada:
 - **Marcadores:** o número vira `{{C01.1}}` e a data fica no texto; o trecho guardado é o do texto do claim (`R$ 1,2 bi`); o mesmo valor duas vezes casa com a primeira entrada livre (`{{C05.1}}` e `{{C05.2}}`); número sem entrada, entrada sem número e mesma cifra com outra unidade são `FalhaTerminal`; os marcadores válidos são os de todos os claims do plano do nível.
 - **Corte e orçamento:** o artigo usa todo o plano; o carrossel e o roteiro, o núcleo e as maiores prioridades na ordem de leitura; a faixa do artigo e os segundos e palavras do roteiro divididos pelo peso, arredondados para baixo, com o resto dos segundos na última cena de claim; o carrossel sem divisão por claim.
 - **Pacote:** analogias presas aos claims do formato (a do IPCA sai do roteiro com o `C02`), tese, núcleo, atribuição e `data_documento`; claim do plano fora do FactSheet é `FalhaTerminal`.
-- **Prompt:** marcadores com o trecho, orçamento por claim, tese, analogias e expressões no Iniciante, nada de analogia nos outros níveis, abertura e fechamento no roteiro e, no retry, a peça anterior com os marcadores, o que está certo, as violações agrupadas pelo lugar da peça e as que ficaram de fora.
+- **Termos a explicar:** no Intermediário, o termo de nível avançado dos claims do formato com a `definicao_simples` e os claims, sem os termos de nível intermediário; nenhum no Iniciante nem no Avançado; o termo de um claim cortado do formato sai do pacote.
+- **Prompt:** marcadores com o trecho, orçamento por claim, tese, analogias e expressões no Iniciante, nada de analogia nos outros níveis, a regra de vocabulário e os termos de especialista no Intermediário, o jargão sem explicar e sem lista de termos no Avançado, nada de vocabulário no Iniciante, abertura e fechamento no roteiro e, no retry, a peça anterior com os marcadores, o que está certo, as violações agrupadas pelo lugar da peça e as que ficaram de fora.
 - **Montagem:** a posição de cada número no título e nas seções confere com o trecho; o marcador inexistente, o de ordem que o claim não tem e o de claim fora do plano ficam no texto e a M1 conta os três como `marcador_invalido`; `restaurar` devolve a saída do redator; o M7 (`plan_contract`) do carrossel com slides demais, claim fora do plano e claim ausente (instruções no masculino de "slide"), do carrossel curto e do roteiro que passa de 60 s, com as checagens de cada formato.
 - **Nó:** a célula termina em `AVALIANDO` com a tentativa 1, depois de uma atualização para `GERANDO`; a peça, as unidades (sem o id inventado `C99`, que fica na peça e no M7 (`plan_contract`)), o número do título e a cópia local são gravados; o span leva o nível, a célula e a tentativa; o retry manda a peça anterior com o marcador inválido e o relatório, com raciocínio `low`, e grava a tentativa 2; a resposta fora do schema volta ao modelo sem consumir tentativa; sem plano, a `Falha` volta no estado (`falha`), sem a célula.
 - **Gravação:** a mesma peça de novo não grava nada, e outra peça na mesma tentativa é `FalhaTerminal`.
@@ -419,20 +410,20 @@ Cobre o manifest, o grafo e o `__main__`, com repositório em memória. A fixtur
 
 ## test_app.py
 
-Cobre o dashboard sem rodar o pipeline e sem banco: o processo é trocado por um script Python que escreve as mesmas linhas do `__main__.py`, a `ConsultaSupabase` por uma `ConsultaFalsa` que devolve runs e peças prontos ou levanta a falha pedida, e o `RepositorioSupabase` da revisão pelo `RepositorioMemoria`. As consultas de verdade são testadas em `test_persistencia_supabase.py`.
+Cobre o dashboard sem rodar o pipeline e sem banco: o processo é trocado por um script Python que escreve as mesmas linhas do `__main__.py` e a `ConsultaSupabase` por uma `ConsultaFalsa` que devolve runs e peças prontos ou levanta a falha pedida. As consultas de verdade são testadas em `test_persistencia_supabase.py`.
 
 - `test_classifica_as_linhas_do_main`: `run`, `etapa`, `concluído`, `abortado` e `erro` viram eventos com os campos extraídos; o resto é `log`.
 - `test_comando_do_pipeline`: o comando é `python -m sunontent [fonte] [--dev]`; fonte desconhecida é recusada.
 - `test_grafo_vem_do_graph_py`: `/api/grafo` devolve os nós e as arestas de `construir_grafo()`, inclusive `validate -> extract`.
 - `test_execucao_transmite_as_linhas_classificadas`: a execução recusa uma segunda enquanto roda, separa stdout e stderr, termina com o evento `fim` e o SSE devolve todos os eventos em ordem.
 - `test_fonte_desconhecida_e_recusada`, `test_parar_sem_execucao_e_recusado` e `test_run_inexistente_responde_404`: respostas 422, 409 e 404.
-- `test_runs_vem_da_consulta`: `/api/runs` e `/api/runs/<run_id>` devolvem o que a consulta devolve.
+- `test_runs_vem_da_consulta`: `/api/runs` e `/api/runs/<run_id>` devolvem o que a consulta devolve, com `descartados`, e o servidor passa `graph.RODADAS_EXTRACAO` às duas leituras.
 - `test_supabase_fora_do_ar_responde_503_com_a_mensagem`: uma `Falha` do banco vira 503 com a mensagem, nas duas rotas.
 - `test_quebra_de_linha_nao_muda_o_texto_e_cabe_na_largura`, `test_palavra_maior_que_a_caixa_fica_sozinha_na_linha` e `test_espacos_repetidos_e_quebras_de_linha_valem_um_espaco`: em cada papel (gancho, corpo e conclusão), juntar as linhas com um espaço devolve exatamente o `Slide.texto`, nenhuma linha de mais de uma palavra passa da largura da caixa (medida com o `.ttf` pelo Pillow), a palavra maior que a caixa fica sozinha e a sequência de espaços vale um espaço.
 - `test_svg_tem_o_texto_em_tspans_e_os_metadados`, `test_svg_escapa_o_texto_sem_mudar_as_palavras`, `test_texto_que_nao_cabe_na_altura_da_caixa_sai_com_aviso` e `test_nome_do_arquivo_do_slide`: o SVG tem 1080 x 1350, o texto em `<tspan>` dentro de `<text>`, `celula_id`, tentativa, posição, papel e `claim_ids` no `<metadata>`, `&` e `<` escapados sem mudar as palavras, e o aviso de estouro de altura.
 - `test_rota_devolve_o_svg_do_slide_da_ultima_tentativa`, `test_rota_baixa_com_o_nome_do_arquivo_e_aceita_a_tentativa`, `test_rota_responde_404_para_o_que_nao_existe` e `test_rota_do_slide_responde_503_com_o_banco_fora_do_ar`: a rota do slide usa a última tentativa ou a pedida, `baixar=true` devolve o mesmo arquivo com o nome `<celula_id>_t<tentativa>_slide<n>.svg` como anexo, slide fora do carrossel, célula sem peça ou de outro formato é 404, e falha do banco é 503.
-- `test_pagina_carrega_a_fonte_e_as_abas_da_sidebar`: a página tem as seis abas da sidebar na ordem (Início, Resultado, Fluxo, Quarentena, Info. técnicas, Histórico), serve os quatro scripts e a Inter e a licença.
-- `test_revisao_sugere_o_numero_e_aceita_o_claim`, `test_revisao_recusa_valor_incompleto_e_aceita_o_informado` e `test_revisao_descarta_e_recusa_o_que_nao_esta_na_quarentena`: com um run de verdade com claim em quarentena no repositório em memória, a sugestão de número vem do código, aceitar e descartar gravam com o autor `dashboard` (e a cópia em `data/runs/<run_id>/revisoes/`), valor sem unidade ou número a mais é 422, claim fora da quarentena ou já revisado é 409 e claim que não passa na E3 é 422 sem gravar nada.
+- `test_pagina_carrega_a_fonte_e_as_abas_da_sidebar`: a página tem as cinco abas da sidebar na ordem (Início, Resultado, Fluxo, Info. técnicas, Histórico), serve os três scripts e a Inter e a licença.
+- `test_dashboard_mostra_os_descartados_sem_revisao`: a página tem só as cinco abas e nenhum script de revisão; o Início, o resumo do run e o Histórico mostram os claims descartados na E3; a E3 do Fluxo cobre os nós `validate` e `descarte`; as únicas rotas que não são de leitura iniciam e param o pipeline.
 
 ## test_persistencia_supabase.py
 
@@ -446,6 +437,7 @@ Integração com o Supabase local do CLI (`supabase start`, que roda o Postgres,
 - `test_documento_que_nao_e_o_do_run_e_recusado`: a FK composta de `documentos_processados` recusa a saída da E1 de um documento que não é o vinculado ao run.
 - `test_consulta_le_o_run_completo_do_dashboard`: grava um run `--dev` completo (documento de referência, saída da E1, dois spans, duas rodadas de validação, FactSheet assinado) e confere o que a `ConsultaSupabase` devolve ao dashboard: o resumo com claims e tokens, o documento resumido, o claim com números e âncora, as rodadas em ordem e os spans em ordem de gravação. Roda as consultas contra o schema das migrations: uma coluna renomeada ou removida quebra aqui.
 - `test_peca_unidades_numeros_e_celula_numa_transacao`: além da gravação da peça e do scorecard, confere a leitura do dashboard (`detalhar_run` com as 9 células, e na do artigo a peça, os números usados em ordem e o scorecard com as violações e a posição; `peca` com a última tentativa e com uma tentativa que não existe).
+- `test_descartados_sao_os_reprovados_na_ultima_rodada`: descrito na seção da E2 e E3.
 - `test_consulta_nao_grava`: a conexão da consulta recusa um `delete` (transação só de leitura).
 
 ## Como rodar

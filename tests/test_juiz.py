@@ -299,6 +299,8 @@ def test_prompt_traz_claims_trechos_unidades_e_definicao_sem_o_nivel_pedido():
     assert "- avancado (foco: análise técnica e institucional)" in prompt
     assert "- Selic: intermediario" in prompt and "- Copom: intermediario" in prompt
     assert "`justificativa_nivel`" in prompt
+    assert "explica em poucas palavras só o jargão de especialista tende ao intermediário" in prompt
+    assert "explica também o vocabulário padrão, com analogia ou palavras simples, tende ao iniciante" in prompt
 
 
 def test_juiz_aprova_quando_tudo_e_implicado_e_registra_o_nivel_percebido():

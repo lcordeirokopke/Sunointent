@@ -1,6 +1,7 @@
 """Testes do dashboard (app/): classificação das linhas e API com processo e consulta simulados."""
 
 import json
+import re
 import sys
 import time
 import xml.etree.ElementTree as ET
@@ -9,9 +10,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import execucao, servidor, slide_svg
+from sunontent import graph
 from sunontent.retentativa import FalhaRetriavel
-from test_main_graph import DECISAO, ERRADO, raiz, repo  # noqa: F401 (fixtures raiz e repo)
-from test_quarentena import e1_sem_selic, rodar_com_quarentena  # noqa: F401 (fixture e função auxiliar)
 
 RUN_ID = "copom_20261006T150000Z_aaaaaa"
 
@@ -88,6 +88,7 @@ class ConsultaFalsa:
         self.falha = falha
         self.pecas = [dict(p) for p in pecas]
         self.pedidos_de_peca = []
+        self.rodadas_extracao = []  # o `rodadas_extracao` de cada leitura de runs
 
     def peca(self, run_id, celula_id, tentativa=None):
         self.pedidos_de_peca.append((run_id, celula_id, tentativa))
@@ -98,7 +99,8 @@ class ConsultaFalsa:
             gravadas = [p for p in gravadas if p["tentativa"] == tentativa]
         return max(gravadas, key=lambda p: p["tentativa"], default=None)
 
-    def listar_runs(self):
+    def listar_runs(self, *, rodadas_extracao):
+        self.rodadas_extracao.append(rodadas_extracao)
         if self.falha:
             raise self.falha
         return list(self.runs.values())
@@ -113,12 +115,13 @@ class ConsultaFalsa:
             raise self.falha
         return [{"run_id": p["run_id"], "celula_id": p["celula_id"]} for p in self.pecas]
 
-    def detalhar_run(self, run_id):
+    def detalhar_run(self, run_id, *, rodadas_extracao):
+        self.rodadas_extracao.append(rodadas_extracao)
         if self.falha:
             raise self.falha
         run = self.runs.get(run_id)
         return None if run is None else {"manifest": run, "documento": None, "factsheet": None,
-                                         "validacoes": [], "spans": []}
+                                         "validacoes": [], "descartados": run.get("descartados"), "spans": []}
 
 
 def montar_cliente(tmp_path, consulta):
@@ -153,7 +156,7 @@ def test_e4_entra_no_fluxo_do_dashboard(cliente):
     corpo = http.get("/api/grafo").json()
     assert "adapt" in corpo["nos"]
     arestas = {(a["de"], a["para"]) for a in corpo["arestas"]}
-    assert {("validate", "adapt"), ("quarentena", "adapt")} <= arestas
+    assert {("validate", "adapt"), ("descarte", "adapt")} <= arestas
     assert corpo["rodadas_plano"] == 3
     assert 'id: "E4", nos: ["adapt"]' in http.get("/static/app.js").text
 
@@ -207,10 +210,14 @@ def test_run_inexistente_responde_404(cliente):
 
 
 def test_runs_vem_da_consulta(tmp_path):
-    run = {"run_id": RUN_ID, "status": "concluido"}
-    http, _ = montar_cliente(tmp_path, ConsultaFalsa([run]))
+    run = {"run_id": RUN_ID, "status": "concluido", "descartados": 2}
+    consulta = ConsultaFalsa([run])
+    http, _ = montar_cliente(tmp_path, consulta)
     assert http.get("/api/runs").json() == [run]
-    assert http.get(f"/api/runs/{RUN_ID}").json()["manifest"] == run
+    detalhe = http.get(f"/api/runs/{RUN_ID}").json()
+    assert detalhe["manifest"] == run and detalhe["descartados"] == 2
+    # Os descartados são os reprovados na última rodada E2/E3, a do graph.py.
+    assert consulta.rodadas_extracao == [graph.RODADAS_EXTRACAO] * 2
 
 
 def test_supabase_fora_do_ar_responde_503_com_a_mensagem(tmp_path):
@@ -359,59 +366,34 @@ def test_pagina_carrega_a_fonte_e_as_abas_da_sidebar(cliente):
     for arquivo in ("Inter-Regular.ttf", "Inter-Bold.ttf", "Inter-OFL.txt"):
         assert http.get(f"/static/fontes/{arquivo}").status_code == 200
     pagina = http.get("/").text
-    abas = ["inicio", "resultado", "fluxo", "quarentena", "tecnicas", "historico"]
+    abas = ["inicio", "resultado", "fluxo", "tecnicas", "historico"]
     posicoes = [pagina.index(f'data-aba="{aba}"') for aba in abas]
     assert posicoes == sorted(posicoes)
     assert 'data-aba="matriz"' not in pagina
-    for script in ("resultado", "tecnicas", "revisao", "app"):
+    for script in ("resultado", "tecnicas", "app"):
         assert f"/static/{script}.js" in pagina
         assert http.get(f"/static/{script}.js").status_code == 200
 
 
-# Revisão da quarentena
+# Claims descartados na E3
 
 
-def cliente_de_revisao(raiz, repo):
-    return TestClient(servidor.criar_app(raiz, execucao.Gerenciador(raiz), ConsultaFalsa(), repo))
-
-
-@pytest.mark.usefixtures("celulas_aprovadas")
-def test_revisao_sugere_o_numero_e_aceita_o_claim(raiz, repo, e1_sem_selic):
-    run_id = rodar_com_quarentena(raiz, repo, DECISAO, DECISAO)
-    http = cliente_de_revisao(raiz, repo)
-    preparo = http.get(f"/api/runs/{run_id}/quarentena/C01/preparo").json()
-    (numero,) = preparo["numeros"]
-    assert numero["novo"] and numero["numero"] == {"valor": "13.75", "unidade": "pct"}
-    assert preparo["literal_fonte"] == DECISAO["literal_fonte"]
-    resposta = http.post(f"/api/runs/{run_id}/quarentena/C01/aceitar", json={})
-    assert resposta.status_code == 200 and resposta.json() == {"claim_id": "C01", "decisao": "aceitar"}
-    assert repo.decisoes_quarentena[(run_id, "C01")] == {"decisao": "aceitar", "autor": "dashboard"}
-    assert repo.claims_humanos[(run_id, "C01")].id == "C01"
-    assert (raiz / "data" / "runs" / run_id / "revisoes" / "C01.json").exists()
-    assert http.post(f"/api/runs/{run_id}/quarentena/C01/descartar").status_code == 409
-
-
-@pytest.mark.usefixtures("celulas_aprovadas")
-def test_revisao_recusa_valor_incompleto_e_aceita_o_informado(raiz, repo, e1_sem_selic):
-    run_id = rodar_com_quarentena(raiz, repo, DECISAO, DECISAO)
-    http = cliente_de_revisao(raiz, repo)
-    caminho = f"/api/runs/{run_id}/quarentena/C01/aceitar"
-    assert http.post(caminho, json={"numeros": [{"valor": "13,75"}]}).status_code == 422  # falta a unidade
-    assert http.post(caminho, json={"numeros": [{"valor": "x", "unidade": "pct"}]}).status_code == 422
-    assert http.post(caminho, json={"numeros": [{}, {}]}).status_code == 422  # um número só no claim
-    assert not repo.decisoes_quarentena
-    assert http.post(caminho, json={"numeros": [{"valor": "13,75", "unidade": "pct"}]}).status_code == 200
-    assert repo.decisoes_quarentena[(run_id, "C01")]["autor"] == "dashboard"
-
-
-@pytest.mark.usefixtures("celulas_aprovadas")
-def test_revisao_descarta_e_recusa_o_que_nao_esta_na_quarentena(raiz, repo):
-    run_id = rodar_com_quarentena(raiz, repo, ERRADO, ERRADO)
-    http = cliente_de_revisao(raiz, repo)
-    assert http.post(f"/api/runs/{run_id}/quarentena/C02/descartar").status_code == 409
-    assert http.post(f"/api/runs/{run_id}/quarentena/C01/aceitar", json={}).status_code == 422
-    assert not repo.decisoes_quarentena
-    descartado = http.post(f"/api/runs/{run_id}/quarentena/C01/descartar")
-    assert descartado.json() == {"claim_id": "C01", "decisao": "descartar"}
-    assert repo.decisoes_quarentena[(run_id, "C01")] == {"decisao": "descartar", "autor": "dashboard"}
-    assert http.get(f"/api/runs/{run_id}/quarentena/C01/preparo").status_code == 409
+def test_dashboard_mostra_os_descartados_sem_revisao(cliente):
+    """Sem aba, script nem rota de revisão; Início, Resultado e Histórico mostram os descartados."""
+    http, _ = cliente
+    pagina = http.get("/").text
+    assert "revisao.js" not in pagina and http.get("/static/revisao.js").status_code == 404
+    assert set(re.findall(r'data-aba="(\w+)"', pagina)) == {"inicio", "resultado", "fluxo", "tecnicas", "historico"}
+    assert 'metrica("Claims descartados na E3", fmtInt(d.descartados))' in http.get("/static/resultado.js").text
+    app_js = http.get("/static/app.js").text
+    assert "fmtInt(ultimo.descartados)" in app_js and "fmtInt(r.descartados)" in app_js
+    assert 'id: "E3", nos: ["validate", "descarte"]' in app_js
+    assert 'const ABAS = ["inicio", "resultado", "fluxo", "tecnicas", "historico"];' in app_js
+    # As únicas rotas que mudam algo são as que iniciam e param o pipeline; nenhuma grava no banco.
+    rotas = {(m, r.path) for r in http.app.routes for m in getattr(r, "methods", ())}
+    assert {(m, caminho) for m, caminho in rotas if m != "GET" and m != "HEAD"} == {
+        ("POST", "/api/execucao"), ("POST", "/api/execucao/parar")
+    }
+    assert {caminho for _, caminho in rotas if caminho.startswith("/api/runs/{run_id}/")} == {
+        "/api/runs/{run_id}/carrossel/{celula_id}/{arquivo}", "/api/runs/{run_id}/pecas/{celula_id}"
+    }

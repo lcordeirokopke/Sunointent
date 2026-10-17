@@ -127,3 +127,10 @@ def validar(documento: DocumentoProcessado, factsheet: FactSheet) -> dict[str, s
         if motivo is not None:
             reprovados[claim.id] = motivo
     return reprovados
+
+
+def descartar_reprovados(factsheet: FactSheet, correcoes: dict[str, str]) -> FactSheet:
+    """Depois da última rodada E2/E3: o FactSheet assinado só com os claims fora de `correcoes`. O motivo de
+    cada descartado já está na linha da rodada em validacoes_ancora."""
+    validos = [c for c in factsheet.claims if c.id not in correcoes]
+    return factsheet.model_copy(update={"claims": validos, "assinado": True})

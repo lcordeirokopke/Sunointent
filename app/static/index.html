@@ -29,10 +29,6 @@
         <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><path d="M9 6h4a2 2 0 0 1 2 2v7"/></svg>
         <span>Fluxo</span>
       </button>
-      <button type="button" role="tab" class="aba" data-aba="quarentena" aria-selected="false">
-        <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="M12 8v5M12 16.5v.01"/></svg>
-        <span>Quarentena</span>
-      </button>
       <button type="button" role="tab" class="aba" data-aba="tecnicas" aria-selected="false">
         <svg class="icone" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>
         <span>Info. técnicas</span>
@@ -114,19 +110,6 @@
       <div class="subpainel" id="subpainel"></div>
     </section>
 
-    <!-- Quarentena -->
-    <section class="painel" id="painel-quarentena" role="tabpanel" hidden>
-      <header class="painel-cabecalho">
-        <h2>Quarentena</h2>
-        <p>Aqui ficam os claims que o extrator propôs e que a validação de âncoras e números reprovou até a última rodada do loop da extração. Eles não entram no FactSheet enquanto uma pessoa não decidir: <b>aceitar</b> (o código recalcula a âncora e os números, e o claim entra no FactSheet) ou <b>descartar</b> (a decisão fica gravada). Se a lista estiver vazia, o run não teve claims reprovados.</p>
-      </header>
-      <div class="barra-resultado">
-        <label for="sel-run-quarentena" class="rotulo">Run</label>
-        <select id="sel-run-quarentena"></select>
-      </div>
-      <div id="quarentena"></div>
-    </section>
-
     <!-- Informações técnicas -->
     <section class="painel" id="painel-tecnicas" role="tabpanel" hidden>
       <header class="painel-cabecalho">
@@ -163,7 +146,6 @@
   <script src="/static/resultado.js"></script>
   <script src="/static/inicio.js"></script>
   <script src="/static/tecnicas.js"></script>
-  <script src="/static/revisao.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

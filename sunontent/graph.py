@@ -1,9 +1,9 @@
 """Monta o grafo LangGraph. A ordem das etapas, o fan-out e o retry ficam só aqui.
 
 Etapas implementadas: E0 (coleta), a entrada do modo --dev (referencia), a E1 (leitura), a E2
-(extract), a E3 (validate), a quarentena do loop E2/E3, a E4 (adapt) e, depois dela, o fan-out das 9 células e o
-fechamento do run. As duas entradas seguem para a E1; o FactSheet assinado, na E3 ou na quarentena, segue para
-a E4.
+(extract), a E3 (validate), o descarte do loop E2/E3, a E4 (adapt) e, depois dela, o fan-out das 9 células e o
+fechamento do run. As duas entradas seguem para a E1; o FactSheet assinado, na E3 ou no descarte, segue para a
+E4.
 
 O subgrafo de uma célula (`construir_grafo_celula`) roda a E5 (synth), a E6 (evaluate) e a E7 (router) com o
 refinement loop: a falha da E5 vai direto à E7, o retry volta à E5 e o estado final termina o subgrafo. Depois da
@@ -19,10 +19,10 @@ from langgraph.types import Send
 
 from sunontent.nodes.adapt import adapt
 from sunontent.nodes.coleta import coleta
+from sunontent.nodes.descarte import descarte
 from sunontent.nodes.extract import extract
 from sunontent.nodes.fechamento import fechamento
 from sunontent.nodes.leitura import leitura
-from sunontent.nodes.quarentena import quarentena
 from sunontent.nodes.evaluate import evaluate
 from sunontent.nodes.referencia import referencia
 from sunontent.nodes.router import router
@@ -31,7 +31,7 @@ from sunontent.nodes.validate import validate
 from sunontent.schemas import ESTADOS_FINAIS, CelulaGrafoState, PipelineState
 
 K = 3  # orçamento de tentativas por célula (a primeira e até 2 correções); o valor lido no início do run entra no RunManifest
-RODADAS_EXTRACAO = 3  # loop E2/E3: a extração e até 2 correções; depois disso os reprovados vão para a quarentena
+RODADAS_EXTRACAO = 3  # loop E2/E3: a extração e até 2 correções; depois disso os reprovados são descartados
 RODADAS_PLANO = 3  # gate da E4, dentro do nó adapt: o plano e até 2 correções; depois disso o plano segue com aviso
 MAX_CONCORRENCIA = 3  # células em paralelo no fan-out; o valor lido no início do run entra no RunManifest
 
@@ -42,13 +42,13 @@ def escolher_entrada(state: PipelineState) -> str:
 
 
 def depois_da_validacao(state: PipelineState) -> str:
-    """Sem claim reprovado, segue para a E4; com reprovado, volta à E2 até RODADAS_EXTRACAO e depois vai para a
-    quarentena."""
+    """Sem claim reprovado, segue para a E4; com reprovado, volta à E2 até RODADAS_EXTRACAO e depois vai para o
+    descarte."""
     if not state.correcoes:
         return "adapt"
     if state.rodada < RODADAS_EXTRACAO:
         return "extract"
-    return "quarentena"
+    return "descarte"
 
 
 def config_execucao(configuravel: dict) -> dict:
@@ -75,7 +75,7 @@ def construir_grafo():
     grafo.add_node("leitura", leitura)
     grafo.add_node("extract", extract)
     grafo.add_node("validate", validate)
-    grafo.add_node("quarentena", quarentena)
+    grafo.add_node("descarte", descarte)
     grafo.add_node("adapt", partial(adapt, rodadas=RODADAS_PLANO))
     grafo.add_node("celula", celula)
     grafo.add_node("fechamento", fechamento)
@@ -84,8 +84,8 @@ def construir_grafo():
     grafo.add_edge("referencia", "leitura")
     grafo.add_edge("leitura", "extract")
     grafo.add_edge("extract", "validate")
-    grafo.add_conditional_edges("validate", depois_da_validacao, ["extract", "quarentena", "adapt"])
-    grafo.add_edge("quarentena", "adapt")
+    grafo.add_conditional_edges("validate", depois_da_validacao, ["extract", "descarte", "adapt"])
+    grafo.add_edge("descarte", "adapt")
     grafo.add_conditional_edges("adapt", disparar_celulas, ["celula"])
     grafo.add_edge("celula", "fechamento")
     grafo.add_edge("fechamento", END)

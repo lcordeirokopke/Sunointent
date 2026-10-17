@@ -204,6 +204,37 @@ def test_claim_do_plano_fora_do_factsheet_e_erro_terminal():
         pacote_de("intermediario", "artigo", plano)
 
 
+
+def com_jargao():
+    """O plano e o FactSheet com um claim que tem um termo de nível avançado (balanço de riscos) e a Selic."""
+    extra = claim("C07", "O Copom avaliou o balanço de riscos e manteve a Selic.")
+    factsheet = FACTSHEET.model_copy(update={"claims": [*CLAIMS, extra]})
+    plano = PLANO.model_copy(deep=True)
+    for nivel in plano.niveis:
+        nivel.claims.append(planejado("C07", "contexto", len(nivel.claims) + 1))
+    return plano, factsheet
+
+
+def test_intermediario_recebe_os_termos_avancados_dos_claims_com_a_definicao():
+    plano, factsheet = com_jargao()
+    p = pacote.montar(plano, "intermediario", "artigo", factsheet, SPECS["intermediario"], GLOSSARIO)
+    termo = GLOSSARIO.termos[GLOSSARIO.termo_da_forma("balanço de riscos")]
+    assert [(t.termo, t.definicao, t.claim_ids) for t in p.termos_a_explicar] == [
+        (termo.termo, termo.definicao_simples, ("C07",))]  # a Selic é de intermediário: não entra
+
+
+@pytest.mark.parametrize("nivel", ["iniciante", "avancado"])
+def test_iniciante_e_avancado_nao_recebem_termos_a_explicar(nivel):
+    plano, factsheet = com_jargao()
+    assert pacote.montar(plano, nivel, "artigo", factsheet, SPECS[nivel], GLOSSARIO).termos_a_explicar == ()
+
+
+def test_termo_a_explicar_acompanha_os_claims_do_formato():
+    plano, factsheet = com_jargao()  # C07 tem a menor prioridade e sai pelo corte do roteiro
+    p = pacote.montar(plano, "intermediario", "roteiro", factsheet, SPECS["intermediario"], GLOSSARIO)
+    assert "C07" not in p.claim_ids and p.termos_a_explicar == ()
+
+
 # E5.2 Redator
 
 
@@ -229,6 +260,31 @@ def test_prompt_fora_do_iniciante_nao_tem_analogia_e_roteiro_tem_abertura():
     assert "frases de até" not in prompt
     assert "Abertura: 6 s" in prompt
     assert "Ciclo de cortes." in prompt
+
+
+def test_prompt_do_intermediario_traz_a_regra_de_vocabulario_e_os_termos_de_especialista():
+    plano, factsheet = com_jargao()
+    p = pacote.montar(plano, "intermediario", "artigo", factsheet, SPECS["intermediario"], GLOSSARIO)
+    prompt = redator.montar_prompt(RAIZ, p, SPECS["intermediario"])
+    assert "Foco: o que o fato muda para quem já investe." in prompt
+    assert "Use sem explicar o vocabulário padrão de quem investe" in prompt
+    assert "# Termos de especialista" in prompt
+    assert f"- {p.termos_a_explicar[0].termo} (nos claims C07): {p.termos_a_explicar[0].definicao}" in prompt
+    assert "{%" not in prompt and "{#" not in prompt
+
+
+def test_prompt_do_avancado_usa_o_jargao_sem_explicar_e_nao_lista_termos():
+    plano, factsheet = com_jargao()
+    p = pacote.montar(plano, "avancado", "artigo", factsheet, SPECS["avancado"], GLOSSARIO)
+    prompt = redator.montar_prompt(RAIZ, p, SPECS["avancado"])
+    assert "Escreva para um leitor profissional: use o jargão técnico sem explicar" in prompt
+    assert "Termos de especialista" not in prompt
+
+
+def test_prompt_do_iniciante_nao_tem_regra_de_vocabulario():
+    prompt = redator.montar_prompt(RAIZ, pacote_de("iniciante", "artigo"), SPECS["iniciante"])
+    assert "vocabulário padrão" not in prompt and "leitor profissional" not in prompt
+    assert "Termos de especialista" not in prompt
 
 
 def test_prompt_do_retry_traz_a_peca_anterior_e_o_relatorio_agrupado():

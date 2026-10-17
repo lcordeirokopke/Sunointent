@@ -9,8 +9,8 @@ const ETAPAS = [
     descricao: "Lê o PDF, confere o doc_sha256 e gera o texto limpo, os chunks, os metadados e a tabela de números." },
   { id: "E2", nos: ["extract"], nome: "Extractor & Anchor",
     descricao: "O LLM extrai os claims do documento e cada um é ancorado no texto da página de origem." },
-  { id: "E3", nos: ["validate", "quarentena"], nome: "Validador de Âncoras",
-    descricao: "Confere âncoras e números de cada claim. Reprovado volta à E2; aprovado, o FactSheet é assinado. Reprovado depois da última rodada vai para a quarentena, à espera de revisão humana." },
+  { id: "E3", nos: ["validate", "descarte"], nome: "Validador de Âncoras",
+    descricao: "Confere âncoras e números de cada claim. Reprovado volta à E2; aprovado, o FactSheet é assinado. Reprovado depois da última rodada é descartado, com o motivo registrado na validação da rodada." },
   { id: "E4", nos: ["adapt"], nome: "Plano editorial",
     descricao: "Decide o núcleo e, para cada nível, o que entra, em que ordem, o que sai e por quê, e quais analogias usar. O código confere o plano." },
   { id: "E5", nos: ["synth"], celulas: true, nome: "Format Synthesizer",
@@ -227,7 +227,7 @@ function implementada(etapa) {
 
 function noDaEtapa(etapa, run) {
   if (etapa.id === "E0") return run?.modo === "dev" ? "referencia" : "coleta";
-  // Etapa com mais de um nó (E3: validate e quarentena): o estado é o do último nó que rodou.
+  // Etapa com mais de um nó (E3: validate e descarte): o estado é o do último nó que rodou.
   return [...etapa.nos].reverse().find((no) => run?.etapas[no]) ?? etapa.nos[0];
 }
 
@@ -319,7 +319,7 @@ function renderInicio() {
       ${metrica("Fonte", esc(ultimo.fonte))}
       ${metrica("Documento", esc(ultimo.doc_id ?? ""), true)}
       ${metrica("Claims", fmtInt(ultimo.claims))}
-      ${metrica("Em quarentena", fmtInt(ultimo.quarentena))}
+      ${metrica("Claims descartados na E3", fmtInt(ultimo.descartados))}
       ${metrica("Células aprovadas", d ? `${aprovadas} de ${celulas.length || NIVEIS.length * FORMATOS.length}` : "")}
       ${metrica("Tokens", fmtInt(ultimo.custo_total_tokens))}
       ${metrica("Custo", fmtBRL(ultimo.custo_total_brl))}
@@ -534,7 +534,7 @@ function dadosEtapa(etapa, run) {
     case "E2":
       return cartaoSpans(spansDoNo(d.spans, "extractor"), m) + cartaoClaims(d.factsheet);
     case "E3":
-      return cartaoValidacoes(d.validacoes, d.factsheet) + cartaoQuarentena(d.quarentena);
+      return cartaoValidacoes(d.validacoes, d.factsheet);
     case "E4":
       return cartaoPlano(d.plano, d.factsheet) + cartaoValidacoesPlano(d.validacoes_plano, d.plano)
         + cartaoSpans(spansDoNo(d.spans, "adapter"), m);
@@ -609,7 +609,7 @@ function cartaoClaims(factsheet) {
   if (!factsheet?.claims?.length) return "";
   const linhas = factsheet.claims.map((c) => `
     <tr>
-      <td class="num">${esc(c.id)}${c.origem === "humano" ? `<div style="margin-top:4px">${selo("normal", "humano")}</div>` : ""}</td>
+      <td class="num">${esc(c.id)}</td>
       <td>${esc(c.texto)}<div class="literal">${esc(c.literal_fonte)}</div></td>
       <td>${selo("normal", c.tipo)}<div class="etiquetas" style="margin-top:4px">${(c.tags ?? []).map((t) => selo("", t)).join("")}</div></td>
       <td class="num">${(c.numeros ?? []).map((n) => esc(n.bruto)).join("<br>")}</td>
@@ -708,32 +708,6 @@ function cartaoValidacoesPlano(validacoes, plano) {
   return `<div class="cartao"><h3>Gate do plano por rodada</h3><div class="rodadas">${rodadas}</div></div>`;
 }
 
-// Claims reprovados depois da última rodada do loop E2/E3. Só leitura: a revisão é feita pelas funções
-// de sunontent/extracao/quarentena.py.
-function cartaoQuarentena(itens) {
-  if (!itens?.length) return "";
-  const pendentes = itens.filter((q) => !q.decisao).length;
-  const linhas = itens.map((q) => {
-    const p = q.proposto ?? {};
-    const decisao = q.decisao
-      ? `${selo(q.decisao === "aceitar" ? "ok" : "erro", q.decisao === "aceitar" ? "aceito" : "descartado")}
-         <div class="motivo">${esc(q.autor)} · ${esc(fmtData(q.decidido_em))}</div>`
-      : selo("", "aguardando revisão");
-    return `<tr>
-      <td class="num">${esc(q.claim_id)}</td>
-      <td>${esc(p.texto)}<div class="literal">${esc(p.literal_fonte)}</div></td>
-      <td class="num">${(p.numeros ?? []).map((n) => esc(n)).join("<br>")}</td>
-      <td><span class="motivo">${esc(q.motivo)}</span></td>
-      <td>${decisao}</td>
-    </tr>`;
-  }).join("");
-  return `<div class="cartao"><div class="cabecalho-etapa"><h3>Quarentena</h3>
-      ${selo(pendentes ? "erro" : "ok", pendentes ? `${pendentes} aguardando revisão` : "todos revisados")}</div>
-    <div class="tabela-rolagem"><table>
-      <thead><tr><th>ID</th><th>Claim proposto e trecho citado</th><th>Números</th><th>Motivo da última recusa</th><th>Decisão</th></tr></thead>
-      <tbody>${linhas}</tbody></table></div></div>`;
-}
-
 // Histórico
 
 function renderHistorico() {
@@ -751,12 +725,12 @@ function renderHistorico() {
       <td>${selo(r.status, ROTULO_ESTADO[r.status] ?? r.status)}</td>
       <td class="num">${esc(r.doc_id ?? "")}</td>
       <td class="num">${fmtInt(r.claims)}</td>
-      <td class="num">${fmtInt(r.quarentena)}</td>
+      <td class="num">${fmtInt(r.descartados)}</td>
       <td class="num">${fmtInt(r.custo_total_tokens)}</td>
       <td class="num">${fmtBRL(r.custo_total_brl)}</td>
     </tr>`).join("");
   alvo.innerHTML = `<div class="cartao"><div class="tabela-rolagem"><table>
-    <thead><tr><th>Run</th><th>Início</th><th>Fonte</th><th>Modo</th><th>Status</th><th>Documento</th><th>Claims</th><th>Em quarentena</th><th>Tokens</th><th>Custo</th></tr></thead>
+    <thead><tr><th>Run</th><th>Início</th><th>Fonte</th><th>Modo</th><th>Status</th><th>Documento</th><th>Claims</th><th>Claims descartados na E3</th><th>Tokens</th><th>Custo</th></tr></thead>
     <tbody>${linhas}</tbody></table></div></div>`;
 }
 
@@ -784,7 +758,6 @@ async function carregarHistorico() {
   if (estado.aba === "historico") renderHistorico();
   if (estado.aba === "resultado") renderResultado();
   if (estado.aba === "tecnicas") renderTecnicas();
-  if (estado.aba === "quarentena" && !revisao.ocupado) renderQuarentena();
 }
 
 // Durante o run, várias leituras do mesmo run podem estar em andamento; só a mais recente vale.
@@ -805,7 +778,6 @@ async function carregarDetalhe(runId) {
   if (estado.aba === "inicio" && estado.historico[0]?.run_id === runId) renderInicio();
   if (estado.aba === "resultado" && estado.resultadoRun === runId) renderResultado();
   if (estado.aba === "tecnicas" && estado.resultadoRun === runId) renderTecnicas();
-  if (estado.aba === "quarentena" && revisao.run === runId && !revisao.ocupado) renderQuarentena();
 }
 
 function conectar(desde) {
@@ -865,15 +837,14 @@ async function parar() {
 
 // Eventos da página
 
-// Endereço da aba na URL: #inicio, #fluxo/E3, #resultado/<run_id>/<celula_id>, #quarentena/<run_id>, #tecnicas/<run_id>, #historico.
-const ABAS = ["inicio", "resultado", "fluxo", "quarentena", "tecnicas", "historico"];
+// Endereço da aba na URL: #inicio, #fluxo/E3, #resultado/<run_id>/<celula_id>, #tecnicas/<run_id>, #historico.
+const ABAS = ["inicio", "resultado", "fluxo", "tecnicas", "historico"];
 
 function gravarEndereco() {
   const extras = {
     fluxo: [estado.subaba],
     resultado: [estado.resultadoRun, vista.celula],
     tecnicas: [estado.resultadoRun],
-    quarentena: [revisao.run],
   }[estado.aba] ?? [];
   const caminho = extras.filter(Boolean).map(encodeURIComponent).join("/");
   history.replaceState(null, "", `#${estado.aba}${caminho ? `/${caminho}` : ""}`);
@@ -885,7 +856,6 @@ function lerEndereco() {
   if (aba === "fluxo" && extra && (extra === "terminal" || ETAPAS.some((e) => e.id === extra))) estado.subaba = extra;
   if ((aba === "resultado" || aba === "tecnicas") && extra) estado.resultadoRun = decodeURIComponent(extra);
   if (aba === "resultado" && extra2) vista.celula = decodeURIComponent(extra2);
-  if (aba === "quarentena" && extra) revisao.run = decodeURIComponent(extra);
   trocarAba(aba);
 }
 
@@ -896,7 +866,6 @@ function trocarAba(aba) {
   if (aba === "inicio") { renderInicio(); carregarHistorico(); carregarBiblioteca(); }
   if (aba === "resultado") { renderResultado(); carregarHistorico(); }
   if (aba === "tecnicas") { renderTecnicas(); carregarHistorico(); }
-  if (aba === "quarentena") { renderQuarentena(); carregarHistorico(); }
   if (aba === "historico") { renderHistorico(); carregarHistorico(); }
   if (aba === "fluxo") agendarRender();
   gravarEndereco();

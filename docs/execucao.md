@@ -7,12 +7,12 @@ Este documento descreve como um run começa, como o grafo é montado e executado
 | Peça | Papel |
 | ---- | ----- |
 | `sunontent/__main__.py` | Ponto de entrada (`python -m sunontent [fonte] [--dev]`). Lê o `.env`, confere as credenciais do Supabase, do Gemini e do Groq, gera o `run_id`, monta o manifest, registra o run, executa o grafo escrevendo as linhas de etapa no terminal e fecha o run como `concluido` ou `abortado`, com o custo do run. |
-| `sunontent/graph.py` | Monta o grafo LangGraph: as duas entradas (E0 ou referência), a E1, a E2, a E3, o loop E2/E3, a quarentena, a E4, o fan-out das 9 células (subgrafo E5, E6 e E7 com o refinement loop) e o fechamento, as constantes `K`, `RODADAS_EXTRACAO`, `RODADAS_PLANO` e `MAX_CONCORRENCIA`, `config_execucao()`, `construir_grafo()` e `construir_grafo_celula()`. A ordem das etapas, o fan-out e o retry ficam só aqui. |
+| `sunontent/graph.py` | Monta o grafo LangGraph: as duas entradas (E0 ou referência), a E1, a E2, a E3, o loop E2/E3, o descarte, a E4, o fan-out das 9 células (subgrafo E5, E6 e E7 com o refinement loop) e o fechamento, as constantes `K`, `RODADAS_EXTRACAO`, `RODADAS_PLANO` e `MAX_CONCORRENCIA`, `config_execucao()`, `construir_grafo()` e `construir_grafo_celula()`. A ordem das etapas, o fan-out e o retry ficam só aqui. |
 | `sunontent/manifesto.py` | Lê `config/` e `prompts/` e devolve o `RunManifest` sem os campos do documento. |
 | `sunontent/schemas.py` | `RunManifest`, `PipelineState`, `CelulaGrafoState` e os tipos `Nivel`, `Fonte` e `Modo`. |
 | `sunontent/llm.py` | `conferir_credenciais` (`GOOGLE_API_KEY_PRINC` e `GROQ_API_KEY`) e `criar_cliente`: um `ClienteLLM` por run, com as chaves do Gemini na ordem `GOOGLE_API_KEY_PRINC` e `GOOGLE_API_KEY_SEC` e o juiz no Groq (`GROQ_API_KEY`), que acumula os tokens e o custo do run. As células chamam o cliente em paralelo, e as somas de tokens e de custo passam por uma trava (`threading.Lock`). |
 | `sunontent/persistencia.py` | Funções do run: `criar_run`, `concluir_run`, `abortar_run`, `gravar_manifest_local` e `criar_repositorio_supabase`. Única porta de gravação no Supabase e em `data/`. |
-| `sunontent/nodes/` | Nós finos: `coleta` e `referencia` (entradas), `leitura` (E1), `extract` (E2), `validate` (E3), `quarentena`, `adapt` (E4), `synth` (E5), `evaluate` (E6), `router` (E7) e `fechamento`. Os nós da E0 à E4 não tratam erro: a `Falha` sobe até o `__main__.py`. Os da E5 à E7 pegam a `Falha` da célula e a gravam como `ERRO_INFRA` (`docs/fluxos/avaliacao.md`). |
+| `sunontent/nodes/` | Nós finos: `coleta` e `referencia` (entradas), `leitura` (E1), `extract` (E2), `validate` (E3), `descarte`, `adapt` (E4), `synth` (E5), `evaluate` (E6), `router` (E7) e `fechamento`. Os nós da E0 à E4 não tratam erro: a `Falha` sobe até o `__main__.py`. Os da E5 à E7 pegam a `Falha` da célula e a gravam como `ERRO_INFRA` (`docs/fluxos/avaliacao.md`). |
 
 ## Ciclo de vida do run
 
@@ -31,9 +31,9 @@ flowchart TD
     E1 --> E2["no extract: E2"]
     E2 --> E3["no validate: E3"]
     E3 -->|"claim reprovado e rodada menor que 3"| E2
-    E3 -->|"claim reprovado na rodada 3"| QUA["no quarentena"]
+    E3 -->|"claim reprovado na rodada 3"| DES["no descarte"]
     E3 -->|"todos aprovados"| E4["no adapt: E4"]
-    QUA --> E4
+    DES --> E4
     E4 --> CEL["fan-out: Send por celula, no maximo 3 em paralelo"]
     CEL --> CE["no celula: subgrafo synth, evaluate, router com o refinement loop"]
     CE --> FEC["no fechamento: conta as 9 celulas por estado final"]
@@ -61,7 +61,7 @@ START -> (modo normal) coleta     -> leitura -> extract -> validate -> adapt -> 
                                                   ^           |
                                                   +-----------+  claim reprovado e rodada < 3
                                                               |
-                                                              +--> quarentena -> adapt   claim reprovado e rodada = 3
+                                                              +--> descarte -> adapt     claim reprovado e rodada = 3
 
 celula (subgrafo, um por célula):  START -> synth -> evaluate -> router -> END
                                                 ^                    |
@@ -71,8 +71,8 @@ celula (subgrafo, um por célula):  START -> synth -> evaluate -> router -> END
 
 - A aresta condicional de `START` lê `state.manifest.modo`: `dev` entra pelo nó `referencia`, e `normal` entra pelo nó `coleta` (E0).
 - As duas entradas entregam um `DocumentoFonte` em `documento_fonte` e seguem para o nó `leitura` (E1), que entrega o `DocumentoProcessado` em `documento`.
-- O nó `extract` (E2) coloca o FactSheet não assinado no estado, e o nó `validate` (E3) o confere. Sem claim reprovado, o FactSheet é assinado e o grafo segue para o nó `adapt` (E4). Com claim reprovado, `depois_da_validacao` volta ao `extract` enquanto `rodada < RODADAS_EXTRACAO` (3); na terceira rodada, segue para o nó `quarentena`, que grava os reprovados em quarentena e assina o FactSheet com os válidos (sem nenhum válido, levanta `FalhaTerminal`). O loop e a quarentena estão detalhados em `docs/fluxos/extracao.md`.
-- O nó `adapt` (E4) recebe o FactSheet assinado, na E3 ou na quarentena, roda o loop do gate dentro dele, até `RODADAS_PLANO` (3), e grava o plano e as 9 células em `PENDENTE`. Depois dele, `disparar_celulas` devolve um `Send` por célula do plano. A E4 está detalhada em `docs/fluxos/plano-editorial.md`.
+- O nó `extract` (E2) coloca o FactSheet não assinado no estado, e o nó `validate` (E3) o confere. Sem claim reprovado, o FactSheet é assinado e o grafo segue para o nó `adapt` (E4). Com claim reprovado, `depois_da_validacao` volta ao `extract` enquanto `rodada < RODADAS_EXTRACAO` (3); na terceira rodada, segue para o nó `descarte`, que deixa os reprovados de fora e assina o FactSheet com os válidos (sem nenhum válido, levanta `FalhaTerminal`). O motivo de cada descartado é a linha da última rodada em `validacoes_ancora`. O loop e o descarte estão detalhados em `docs/fluxos/extracao.md`.
+- O nó `adapt` (E4) recebe o FactSheet assinado, na E3 ou no descarte, roda o loop do gate dentro dele, até `RODADAS_PLANO` (3), e grava o plano e as 9 células em `PENDENTE`. Depois dele, `disparar_celulas` devolve um `Send` por célula do plano. A E4 está detalhada em `docs/fluxos/plano-editorial.md`.
 - O nó `celula` roda o subgrafo de uma célula (`construir_grafo_celula`: `synth` (E5), `evaluate` (E6) e `router` (E7), com o retry voltando ao `synth`) e devolve só a célula final. As 9 células rodam em paralelo, no máximo `MAX_CONCORRENCIA` (3) ao mesmo tempo: o limite vai em `max_concurrency` do config de cada execução (`config_execucao`). Cada célula é isolada: a `Falha` da E5 ou da E6 vira `ERRO_INFRA` daquela célula e as outras seguem. Uma exceção que não é `Falha` (bug) aborta o run, com o nó do subgrafo em `etapa_erro`. `PipelineState.celulas` junta as 9 entradas por um reducer (`juntar_celulas`).
 - O nó `fechamento` espera as 9 células, confere que todas têm estado final e guarda em `contagem_celulas` quantas terminaram em cada um (`APROVADA`, `REPROVADA`, `ERRO_INFRA`). Não grava nada: o estado final de cada célula já foi gravado pela E7. Célula sem estado final é bug e levanta `ValueError`.
 - `K = 3` e `MAX_CONCORRENCIA = 3` são constantes de `graph.py`. Os valores lidos no início do run entram no manifest.
@@ -102,9 +102,9 @@ etapa fechamento: concluída
 concluído: cvm_fato_relevante_16993_1575717 (215aa96736b4), 9 claims, plano em 1 rodada, 9 células (7 APROVADA, 2 REPROVADA), 10836 tokens, R$ 0.1516
 ```
 
-- O nome é o do nó em `graph.py` (`coleta`, `referencia`, `leitura`, `extract`, `validate`, `quarentena`, `adapt`, `fechamento`). No loop E2/E3, `extract` e `validate` aparecem uma vez por rodada.
+- O nome é o do nó em `graph.py` (`coleta`, `referencia`, `leitura`, `extract`, `validate`, `descarte`, `adapt`, `fechamento`). No loop E2/E3, `extract` e `validate` aparecem uma vez por rodada.
 - Os nós do subgrafo da célula (`synth`, `evaluate`, `router`) não têm linha `etapa`. Cada um escreve `celula <celula_id> <no> <tentativa>: iniciada` e `celula <celula_id> <no> <tentativa>: concluída`, e a célula, ao terminar, `celula <celula_id>: <ESTADO>` (`APROVADA`, `REPROVADA` ou `ERRO_INFRA`). A tentativa é a da peça que o nó trata: no `synth`, a que está sendo gerada; no `evaluate` e no `router`, a que está sendo avaliada. Com até 3 células em paralelo, as linhas de células diferentes se intercalam; as de uma célula seguem a ordem do subgrafo.
-- Com claims em quarentena, a linha final diz quantos: `..., 22 claims, 1 em quarentena, ...`.
+- Com claims descartados depois da última rodada E2/E3, a linha final diz quantos: `..., 22 claims, 1 descartado, ...` (ou `2 descartados`).
 - A linha final diz em quantas rodadas o plano da E4 ficou pronto e, com `aviso`, que o plano tem aviso: `plano em 3 rodadas (com aviso)`. Depois dela vem a contagem das células por estado final, só com os estados que existem: `9 células (7 APROVADA, 2 REPROVADA)`.
 - A etapa que falha não tem a linha `concluída`: a exceção sobe e a linha seguinte é `abortado (<classe>): <mensagem>`.
 - O dashboard (`docs/fluxos/dashboard.md`) lê essas linhas para mostrar em que etapa o run está.
@@ -172,7 +172,6 @@ data/runs/<run_id>/
 ├── spans/<span_id>.json     # E2: uma chamada de LLM por arquivo
 ├── validacoes/<rodada>.json # E3: resultado de cada rodada
 ├── factsheet.json           # E3: FactSheet assinado, sem a tabela_numeros
-├── quarentena.json          # claims em quarentena, quando há
 ├── validacoes_plano/<rodada>.json  # E4: problemas do gate e saída do planejador em cada rodada
 ├── plano.json               # E4: núcleo, aviso e os 3 planos de nível
 └── celulas/<celula_id>/     # estado.json (a E4 cria em PENDENTE e a E7 grava o estado final), peca_<t>.json e scorecard_<t>.json por tentativa

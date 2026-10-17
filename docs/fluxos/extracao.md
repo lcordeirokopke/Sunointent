@@ -5,7 +5,7 @@ Este documento detalha a E2 (Extractor & Anchor) e a E3 (Validador de Âncoras):
 ## Responsabilidade
 
 - **E2:** o modelo lê o documento inteiro e propõe os claims. O código ancora cada um: acha a posição do trecho citado no texto limpo e associa os números da `tabela_numeros`. Devolve o `FactSheet` não assinado, que fica só no estado do grafo, e a lista dos claims que não conseguiu ancorar, com o motivo.
-- **E3:** confere cada claim contra o mesmo texto limpo e a mesma `tabela_numeros` que a E2 recebeu, nunca contra o PDF. Com todos aprovados, assina e grava o FactSheet. Com algum reprovado, devolve só os reprovados para a E2, com o motivo. Depois da última rodada, os que seguem reprovados vão para a quarentena, e o FactSheet é assinado com os válidos.
+- **E3:** confere cada claim contra o mesmo texto limpo e a mesma `tabela_numeros` que a E2 recebeu, nunca contra o PDF. Com todos aprovados, assina e grava o FactSheet. Com algum reprovado, devolve só os reprovados para a E2, com o motivo. Depois da última rodada, os que seguem reprovados são descartados, e o FactSheet é assinado com os válidos.
 
 O modelo nunca escreve página, offset nem valor de número. Ele cita o trecho e o bruto, e a posição e o `Numero` vêm do código. Assim, âncora e número inventados não chegam ao FactSheet: o que não existe no documento não resolve.
 
@@ -15,14 +15,13 @@ O modelo nunca escreve página, offset nem valor de número. Ele cita o trecho e
 |---|---|
 | `sunontent/nodes/extract.py` | Nó da E2: extrai (rodada 1) ou corrige (rodadas seguintes), ancora e coloca o FactSheet no estado. Grava os spans. |
 | `sunontent/nodes/validate.py` | Nó da E3: valida, grava a rodada e, com todos aprovados, assina e grava o FactSheet. |
-| `sunontent/nodes/quarentena.py` | Nó da quarentena: depois da última rodada, grava os reprovados em quarentena e assina e grava o FactSheet com os válidos. |
+| `sunontent/nodes/descarte.py` | Nó do descarte: depois da última rodada, deixa os reprovados de fora e assina e grava o FactSheet com os válidos. |
 | `sunontent/extracao/extractor.py` | Monta o prompt de `prompts/extractor.j2`, chama o modelo e renumera ou substitui as propostas. |
 | `sunontent/extracao/ancoragem.py` | Localiza o trecho citado e resolve os números. Determinístico. |
-| `sunontent/extracao/validador.py` | Regras da E3. Determinístico. |
-| `sunontent/extracao/quarentena.py` | Separação entre claims válidos e quarentena, e as funções da revisão humana: preparar, aceitar e descartar. |
+| `sunontent/extracao/validador.py` | Regras da E3 e `descartar_reprovados`, que tira do FactSheet os claims reprovados na última rodada. Determinístico. |
 | `sunontent/llm.py` | Cliente LLM: modelo por nó, saída JSON validada, retentativa, custo e span. Único módulo que importa o SDK do provider. |
-| `sunontent/graph.py` | Arestas E2 -> E3 -> E2, E3 -> quarentena e o limite de rodadas (`RODADAS_EXTRACAO`). |
-| `sunontent/persistencia.py` | `gravar_span`, `gravar_validacao`, `gravar_factsheet`, `gravar_quarentena` e `gravar_decisao_quarentena`: Supabase e cópia local. Também lê o documento e a quarentena de um run para a revisão. |
+| `sunontent/graph.py` | Arestas E2 -> E3 -> E2, E3 -> descarte e o limite de rodadas (`RODADAS_EXTRACAO`). |
+| `sunontent/persistencia.py` | `gravar_span`, `gravar_validacao` e `gravar_factsheet`: Supabase e cópia local. |
 | `config/models.yaml` | Snapshot do modelo de cada nó, preço por milhão de tokens, cotação USD/BRL e nível de raciocínio da correção. |
 
 ## Modelo
@@ -89,7 +88,7 @@ Cada claim passa ou reprova, sem nota:
 2. O texto limpo no intervalo é exatamente o `literal_fonte`, e ele tem ao menos uma palavra além de números, escala e unidade (`milhões`, `bps`). Literal só de números (`'4,1'`, uma célula de tabela sem o rótulo da linha) não diz a que o número se refere e é recusado, pedindo o rótulo junto.
 3. Cada `Numero` do claim é uma entrada da `tabela_numeros`, com o mesmo valor, unidade, bruto e posição. Unidade trocada (`pp` no lugar de `pct`) é recusada com o valor e a unidade da tabela.
 4. Cada número está dentro do `literal_fonte`.
-5. O texto do claim e a lista de números dizem o mesmo: o texto é lido pelo mesmo parser da E1 (`numeros.varrer`), e cada número listado precisa aparecer no texto com o mesmo valor e unidade; cada número do texto, exceto datas, precisa estar na lista. Isso recusa claim que carrega números de outro fato e número no texto que não veio do documento. Data listada em `numeros` também reprova: a E5 troca cada número listado por um marcador, e a data fica só no texto. Essa recusa vale no loop da E3, e não na aceitação da quarentena.
+5. O texto do claim e a lista de números dizem o mesmo: o texto é lido pelo mesmo parser da E1 (`numeros.varrer`), e cada número listado precisa aparecer no texto com o mesmo valor e unidade; cada número do texto, exceto datas, precisa estar na lista. Isso recusa claim que carrega números de outro fato e número no texto que não veio do documento. Data listada em `numeros` também reprova: a E5 troca cada número listado por um marcador, e a data fica só no texto.
 6. Cada data com dia do texto do claim (`19/10`, `19 de outubro`, `15 e 16 de setembro de 2026`, lidas por `numeros.datas`) está no `literal_fonte`, com o mesmo dia e mês; se o texto traz o ano, o literal traz o mesmo ano. `19 de outubro de 2026` contra o literal `19/10` reprova, porque o ano foi deduzido. Mês e ano sem dia (`junho de 2026`, `dez/25`) e trimestre (`2T26`) não entram na regra.
 7. Id repetido é recusado.
 
@@ -100,33 +99,24 @@ Os claims que a E2 não ancorou também reprovam, com o motivo da E2.
 ```
 E1 -> E2 (rodada 1: extração) -> E3 --todos aprovados--> FactSheet assinado -> E4
                                     --reprovados, rodada < 3--> E2 (correção só dos reprovados) -> E3
-                                    --reprovados, rodada = 3--> quarentena: FactSheet assinado com os válidos
-                                                                e reprovados em quarentena -> E4
+                                    --reprovados, rodada = 3--> descarte: FactSheet assinado com os válidos
+                                                              e reprovados descartados -> E4
 ```
 
 - Na correção, o prompt traz as mesmas regras, só os blocos do documento em volta dos claims reprovados e, para cada claim reprovado, o claim enviado e o motivo. Os blocos são, para cada claim, o chunk citado, o chunk onde o trecho foi encontrado (quando ele ancora fora do citado) e um vizinho de cada lado (`VIZINHOS` em `extractor.py`); se o claim cita um chunk que não existe, o prompt traz o documento inteiro. A chamada usa o nível de raciocínio `extractor_correcao` de `config/models.yaml`. O modelo devolve só esses claims, com o mesmo id. Id fora da lista é ignorado; claim reprovado que o modelo não devolver continua como estava e reprova de novo.
-- No máximo 3 rodadas: a extração e até 2 correções (`RODADAS_EXTRACAO` em `graph.py`). Se ainda houver claim reprovado, o grafo segue para o nó `quarentena` (abaixo). Nada segue sem assinatura.
+- No máximo 3 rodadas: a extração e até 2 correções (`RODADAS_EXTRACAO` em `graph.py`). Se ainda houver claim reprovado, o grafo segue para o nó `descarte` (abaixo). Nada segue sem assinatura.
 - A cada rodada, todas as propostas são ancoradas e validadas de novo.
 
-## Quarentena
+## Descarte
 
-Claim reprovado depois da última rodada não derruba o run nem é perdido. O nó `quarentena`:
+Claim reprovado depois da última rodada não derruba o run: o código o descarta, e nenhuma pessoa decide se ele entra ou sai. O nó `descarte`:
 
-1. Grava cada reprovado em `claims_quarentena`: o claim como o extractor o propôs (`ClaimProposto`), o motivo da última recusa e a rodada.
-2. Assina o FactSheet só com os claims válidos e o grava como na E3. O grafo segue para a E4, e a linha final do terminal diz quantos claims ficaram em quarentena.
-3. Se nenhum claim for válido, grava a quarentena e aborta o run com erro terminal: um FactSheet vazio não serve para a E4.
+1. Assina o FactSheet só com os claims válidos (`validador.descartar_reprovados`) e o grava como na E3. O grafo segue para a E4, e a linha final do terminal diz quantos claims foram descartados (`1 descartado`, `2 descartados`).
+2. Se nenhum claim for válido, aborta o run com erro terminal, com a quantidade de descartados e o motivo de cada um: um FactSheet vazio não serve para a E4.
+
+O registro do descarte é a linha de cada claim na última rodada em `validacoes_ancora`, com `passou = false` e o motivo da recusa; não há tabela própria. O dashboard conta os descartados de um run por essas linhas.
 
 O caso típico é um número que o modelo cita e a E1 não leu: a ancoragem recusa o claim porque o número não está na `tabela_numeros`, e o modelo insiste.
-
-### Revisão humana
-
-Uma pessoa decide cada claim em quarentena, uma vez, e a decisão é final (`decisoes_quarentena`, com o nome de quem revisou). As funções ficam em `extracao/quarentena.py`, e a aba Quarentena do dashboard as chama (`docs/fluxos/dashboard.md`, Revisão da quarentena), com o `autor` `dashboard`.
-
-- **Aceitar:** `preparar_revisao` ancora de novo o trecho e, para cada bruto, devolve a entrada da `tabela_numeros` ou, se a E1 não leu o número, a posição do bruto dentro do trecho e o valor e a unidade interpretados por `numeros.py`, para a pessoa confirmar. Se o formato não for interpretado, ela informa valor e unidade (`numero_informado`). `aceitar_da_quarentena` passa o claim pelas mesmas regras da E3, contra a `tabela_numeros` acrescida dos números confirmados, e, se passar, grava numa transação os números novos em `numeros` e o claim em `claims` e `claim_numeros`, com `origem = humano`, no FactSheet do mesmo run.
-- **Corrigir o trecho:** para claim sem âncora, a pessoa informa o trecho certo (`literal_fonte`), que o código ancora de novo; depois segue como em aceitar.
-- **Descartar:** grava só a decisão.
-
-A pessoa nunca informa posição: aponta o trecho e o bruto, e a âncora vem do código. Número novo precisa estar dentro do trecho e não pode se sobrepor a um número que a E1 leu. Claim que não passa nas regras da E3 é recusado com o motivo, e nada é gravado. Um run abortado, sem FactSheet, não aceita claim da quarentena.
 
 ## Cliente LLM
 
@@ -188,15 +178,13 @@ Ordem de grandeza nos documentos de referência, com 2 rodadas: de R$ 0,15 a R$ 
 |---|---|---|
 | Span de cada tentativa (E2) | `llm_spans`, e o custo somado em `runs` | `spans/<span_id>.json` |
 | Resultado de cada rodada (E3) | `validacoes_ancora`: uma linha por claim proposto, com `passou` e `motivo` | `validacoes/<rodada>.json` |
-| FactSheet assinado (E3 ou quarentena) | `factsheets`, `claims` e `claim_numeros`, numa transação | `factsheet.json`, sem a `tabela_numeros`, que já está em `documento.json` |
-| Claims em quarentena | `claims_quarentena` | `quarentena.json` |
-| Decisão da revisão humana | `decisoes_quarentena` e, ao aceitar, `numeros`, `claims` e `claim_numeros` com `origem = humano`, numa transação | `revisoes/<claim_id>.json`, com o claim aceito e os números novos |
+| FactSheet assinado (E3 ou descarte) | `factsheets`, `claims` e `claim_numeros`, numa transação | `factsheet.json`, sem a `tabela_numeros`, que já está em `documento.json` |
 
-Todas as gravações usam `on conflict do nothing`: repetir não duplica linhas. Repetir a mesma decisão da revisão não tem efeito, e uma decisão diferente da gravada é recusada. `claims_quarentena` e `decisoes_quarentena` são imutáveis: um trigger bloqueia update, delete e truncate. Cada `claim_numeros` guarda o `Numero` completo e o `numero_id` da sua entrada em `numeros`, sempre preenchido. O FactSheet só é gravado assinado; `gravar_factsheet` recusa um FactSheet não assinado.
+Todas as gravações usam `on conflict do nothing`: repetir não duplica linhas. O FactSheet é gravado uma vez, numa transação, e não muda depois de assinado: `carregar_factsheet` lê o FactSheet inteiro ou nenhum, sem precisar de snapshot. Cada `claim_numeros` guarda o `Numero` completo e o `numero_id` da sua entrada em `numeros`, sempre preenchido. O FactSheet só é gravado assinado; `gravar_factsheet` recusa um FactSheet não assinado.
 
 ## Como falha
 
 - **Omissão silenciosa:** um fato que não vira claim não existe para o resto do pipeline, e nenhuma etapa detecta. A defesa é o teste de cobertura com os documentos anotados à mão (`docs/testes.md`).
-- **Não convergência:** claim que segue reprovado depois de 3 rodadas vai para a quarentena e fica fora do FactSheet até a revisão humana; se nenhum claim passar, o run aborta.
+- **Não convergência:** claim que segue reprovado depois de 3 rodadas é descartado e fica fora do FactSheet, com o motivo em `validacoes_ancora`; se nenhum claim passar, o run aborta.
 - **Provider fora ou resposta inválida:** retentativas esgotadas nas duas chaves abortam o run com erro terminal.
 - **Falha de gravação:** segue a classificação de `docs/fluxos/ingestao.md`; esgotadas as tentativas, aborta o run.

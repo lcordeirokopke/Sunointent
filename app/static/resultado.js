@@ -40,7 +40,7 @@ function cartaoResumoRun(d) {
         ${metrica("Fonte", esc(m.fonte))}
         ${metrica("doc_id", esc(m.doc_id), true)}
         ${metrica("Claims", d.factsheet ? fmtInt(d.factsheet.claims.length) : "")}
-        ${d.quarentena?.length ? metrica("Em quarentena", fmtInt(d.quarentena.filter((q) => !q.decisao).length)) : ""}
+        ${d.descartados ? metrica("Claims descartados na E3", fmtInt(d.descartados)) : ""}
         ${metrica("Rodadas E2/E3", fmtInt(d.validacoes.length || ""))}
         ${d.plano ? metrica("Rodadas do plano", fmtInt(d.plano.rodadas)) : ""}
         ${metrica("Tokens", fmtInt(m.custo_total_tokens))}

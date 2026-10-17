@@ -1,7 +1,7 @@
 nivel: intermediario
-versao: 3
+versao: 4
 # Campos da E4 (docs/fluxos/plano-editorial.md, LevelSpec da E4). Valores de partida.
-foco: "alocação e tendências"
+foco: "o que o fato muda para quem já investe"
 tags_priorizadas: [indicador_chave, contexto_macro]
 tags_descartaveis: []
 # Contrato de formato (docs/arquiteturas.md, O LevelSpec): lido pela E4 (o plano usa o max_claims do artigo),
@@ -21,3 +21,7 @@ formatos:
     palavras_por_segundo: 2.5
     abertura_s: 6
     fechamento_s: 6
+# Regra de vocabulário do redator (docs/fluxos/plano-editorial.md, LevelSpec da E4): os termos do glossário com
+# nivel_minimo acima de explicar_acima_de são explicados na primeira vez que aparecem; os outros, usados sem explicar.
+vocabulario:
+  explicar_acima_de: intermediario

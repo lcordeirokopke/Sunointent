@@ -452,11 +452,11 @@ O modelo nunca escreve página, offset nem valor: o que ele cita e não existe n
 2. Para cada `Numero` do claim: confere presença na `tabela_numeros`, com valor **e** unidade. Confusão de `pp` com `pct` é o erro clássico aqui e é semanticamente grave: "subiu 0,50 p.p." e "subiu 0,50%" são coisas diferentes.
 3. Confere que `literal_fonte` é substring real do texto da página, não paráfrase.
 4. Confere que o texto do claim e a lista de números dizem o mesmo, lendo o texto com o parser da E1.
-5. Se algum claim reprovar, devolve **só os claims ruins** para a etapa 2 com o motivo, e não o documento inteiro. O loop tem no máximo 3 rodadas (a extração e 2 correções); se ainda houver claim reprovado, ele vai para a quarentena, à espera de revisão humana, e o FactSheet é assinado só com os claims válidos. Sem nenhum claim válido, o run aborta com erro terminal. Detalhado em `docs/fluxos/extracao.md`, Quarentena.
+5. Se algum claim reprovar, devolve **só os claims ruins** para a etapa 2 com o motivo, e não o documento inteiro. O loop tem no máximo 3 rodadas (a extração e 2 correções); se ainda houver claim reprovado, ele é descartado pelo código, com o motivo registrado na linha da última rodada em `validacoes_ancora`, e o FactSheet é assinado só com os claims válidos. Nenhuma pessoa decide se um claim entra ou sai. Sem nenhum claim válido, o run aborta com erro terminal. Detalhado em `docs/fluxos/extracao.md`, Descarte.
 
 **Decide:** claim por claim, aprova ou devolve. Sem nota, sem gradiente: booleano.
 
-**Gera:** `FactSheet` com `assinado=True`, ou um pedido de correção parcial. Grava o resultado de cada rodada em `validacoes_ancora` e, quando todos os claims passam, o FactSheet assinado em `factsheets`, `claims` e `claim_numeros`.
+**Gera:** `FactSheet` com `assinado=True`, ou um pedido de correção parcial. Grava o resultado de cada rodada em `validacoes_ancora` e, quando todos os claims passam (ou, depois da última rodada, no nó `descarte`, com os válidos), o FactSheet assinado em `factsheets`, `claims` e `claim_numeros`, numa transação. O FactSheet é gravado uma vez e não muda depois de assinado: quem o lê (`carregar_factsheet`) vê sempre o FactSheet inteiro ou nenhum.
 
 **Natureza:** determinístico. É código puro comparando strings e `Decimal`.
 
@@ -495,6 +495,8 @@ O pré-filtro só remove o óbvio. A prioridade entre os candidatos não é deci
 2. Para cada nível: os descartes com motivo específico (`redundante`, com o claim usado que já diz o mesmo e tem todos os números e datas do descartado; `exige_base_tecnica`, só com termo acima do nível e nunca no Avançado; ou `fora_do_foco`); os claims que entram, em ordem de leitura, com o papel e a prioridade; a tese, uma paráfrase dos claims que a sustentam, sem causa, tendência ou recomendação que eles não digam, sem números além de datas e, no Iniciante, sem termo técnico; e, no Iniciante, as analogias `nova` para os termos da lista que estiverem nos claims usados, começando com "É como..." e sem números.
 
 O planejador fica só com o que exige julgamento editorial: núcleo, seleção, ordem, papel, prioridade, tese e analogias para termos do glossário sem analogia. O papel do núcleo e a presença do núcleo na tese ficam livres nos 3 níveis: o Iniciante pode abrir com outro fato de impacto prático. O que é regra fixa (`atribuir_fonte`, o descarte `secundario` dos candidatos restantes e as analogias que o glossário já tem) é feito pelo código no passo seguinte.
+
+O prompt também diz como o Intermediário e o Avançado se diferenciam na escolha: o Intermediário fica com os fatos que mudam algo para quem já investe e deixa de fora o detalhe técnico e metodológico que não muda essa leitura; o Avançado inclui as premissas e a metodologia, o balanço de riscos, a orientação futura em detalhe e a governança.
 
 Uma chamada para os 3 níveis, e não uma por nível: o modelo enxerga o contraste e diferencia os níveis de propósito, que é o que a matriz de confusão de níveis do Entregável 6 mede. O isolamento por nível não traria ganho aqui, porque a E4 nunca é refeita no retry das células. Se os runs mostrarem seleção ruim (gate reprovando com frequência, ou a leitura humana da matriz discordando das seleções), a alternativa é 1 chamada para o núcleo e 3 em paralelo, uma por nível, com o núcleo fixo.
 
@@ -566,10 +568,11 @@ A etapa tem três passos, e só o do meio chama o modelo.
 2. **Claims com marcadores.** Para cada claim do formato, o código varre o texto do claim com `numeros.varrer`, ignora os achados com unidade `data`, e troca o trecho de cada achado pelo seu marcador, `{{<claim_id>.<ordem>}}`: em "O Copom decidiu reduzir a taxa básica de juros para 13,75% a.a.", o `13,75%` vira `{{C27.1}}`. Cada achado, em ordem de aparição no texto, casa com a primeira entrada ainda livre da lista de números do claim (`claim_numeros`, na ordem de `ordem`) com o mesmo valor e a mesma unidade; achado sem entrada ou entrada sem achado é erro terminal de dado. As datas ficam no texto, sem marcador. O redator recebe o texto com marcadores e a tabela de cada marcador com o trecho do texto do claim (`5,2%`, e não o `5,2` da célula de tabela do documento).
 3. **Contrato do formato com a conta feita.** O código lê o contrato do formato no LevelSpec e calcula o espaço disponível. No carrossel: de 5 a 7 slides, com um gancho, os slides de corpo e uma conclusão, e o limite de caracteres de cada papel (gancho, corpo e conclusão). No roteiro: o total de palavras (`duracao_s` × `palavras_por_segundo`, 150 palavras em 60 s), uma cena de abertura com o gancho (`abertura_s`), uma cena por claim e uma de fechamento (`fechamento_s`), com as palavras que sobram divididas entre as cenas de claim pelo `peso_papel` de cada claim. No artigo: a faixa de palavras do nível dividida entre os claims pelo `peso_papel`. As palavras e os caracteres são contados por `sunontent/texto.py`, a mesma função da M2. O modelo recebe o orçamento pronto, sem precisar fazer a conta.
 4. **O plano do nível:** a tese, quando o plano tem tese no nível, ordem, papel e `atribuir_fonte` de cada claim, e as analogias, com a explicação, que o redator mantém no sentido e só encurta para caber no orçamento do formato. As analogias vão presas aos claims: para cada termo, os claims do formato em que ele aparece e a instrução "explique na primeira vez que usar o termo", o que funciona com qualquer ordem escolhida pelo redator. O pacote traz também a `data_documento`: o redator pode dar o ano do documento a uma data que o claim escreve sem ano.
+5. **Termos a explicar.** No nível com o bloco `vocabulario` do LevelSpec (o Intermediário), os termos do glossário com `nivel_minimo` acima de `explicar_acima_de` que aparecem no texto dos claims do formato, cada um com a `definicao_simples` e os claims em que aparece. O redator explica cada um em poucas palavras na primeira vez que o usa, ou o troca pela explicação. No Avançado a lista é vazia, e o Iniciante explica pelas analogias.
 
 ### E5.2 Redator (LLM)
 
-Um único template, `prompts/synthesizer.j2`, com três partes: as regras comuns (não criar fatos, escrever todo número que não seja data só por marcador, seguir a ordem e as analogias do plano), a parte do nível, renderizada do LevelSpec que a E6 também lê, e a parte do formato, com o orçamento calculado na E5.1. As 9 células usam o mesmo template com parâmetros diferentes.
+Um único template, `prompts/synthesizer.j2`, com três partes: as regras comuns (não criar fatos, escrever todo número que não seja data só por marcador, seguir a ordem e as analogias do plano), a parte do nível, renderizada do LevelSpec que a E6 também lê (o foco, as expressões de analogia e a meta de frase do Iniciante e a regra de vocabulário do Intermediário e do Avançado), com os termos de especialista a explicar, e a parte do formato, com o orçamento calculado na E5.1. As 9 células usam o mesmo template com parâmetros diferentes.
 
 O modelo devolve o payload do formato com marcadores no texto. Cada formato tem o seu schema de saída (`SaidaArtigo`, `SaidaCarrossel` e `SaidaRoteiro`, ver **Peça final**), que impõe as regras que valem para qualquer célula; a resposta fora do schema volta ao modelo pelo `llm.py` e não consome o orçamento `K`.
 
@@ -656,7 +659,7 @@ A varredura roda em cada campo da peça: o título, a linha fina, o texto de cad
 1. Cada `Analogia` explica o conceito **corretamente**, ou é decorativa ou enganosa? A M5 confirma que a analogia existe; só o juiz sabe se "Selic é como o aluguel do dinheiro" está certo e "Selic é como o preço do dólar" está errado.
 2. Cada unidade da peça (seção, slide ou cena) é implicada (*entailment*) pelos claims que ela cita? Projeção apresentada como fato não é implicada pelo claim, e causa que o claim não diz também não. O juiz recebe os claims citados (texto e trecho literal), o chunk da âncora de cada um, os chunks vizinhos e os 3 chunks de maior sobreposição lexical com a unidade, para pegar contradição com outra parte do documento; para as analogias, recebe a definição técnica do glossário.
 
-O `nivel_percebido` de cada peça é só informativo: a matriz de confusão de níveis cruza o nível pedido e o percebido, por formato. Uma segunda matriz, estatística, cruza o nível pedido e o estilo da peça medido pela M3 (IFL no piso do Iniciante e analogia na peça); como as determinísticas rodam em toda tentativa, ela não depende de o juiz ter rodado. O nó confere que toda unidade e toda analogia tem resposta; resposta incompleta é `ERRO_INFRA`.
+O juiz decide o nível pelo vocabulário, pela explicação, pelo pressuposto e pelo foco, e a explicação separa os níveis pelo que é explicado: a peça que usa sem explicar o jargão de especialista tende ao Avançado; a que usa sem explicar o vocabulário padrão de quem investe e explica em poucas palavras só o jargão de especialista tende ao Intermediário; a que explica também o vocabulário padrão, com analogia ou palavras simples, tende ao Iniciante. O `nivel_percebido` de cada peça é só informativo: a matriz de confusão de níveis cruza o nível pedido e o percebido, por formato. Uma segunda matriz, estatística, cruza o nível pedido e o estilo da peça medido pela M3 (IFL no piso do Iniciante e analogia na peça); como as determinísticas rodam em toda tentativa, ela não depende de o juiz ter rodado. O nó confere que toda unidade e toda analogia tem resposta; resposta incompleta é `ERRO_INFRA`.
 
 **M7. plan_contract (determinístico).** As regras de estrutura que dependem do LevelSpec ou do plano: quantidade de slides do carrossel, soma das cenas do roteiro até `duracao_s`, `claim_ids` de cada unidade dentro do plano do nível e cobertura do formato. A montagem da E5.3 entrega as violações já calculadas. As regras que valem para qualquer célula são validadores do schema do redator e não passam por aqui.
 
@@ -700,7 +703,7 @@ O `nivel_percebido` de cada peça é só informativo: a matriz de confusão de n
 
 O carrossel sai do pipeline como dado estruturado, como o artigo e o roteiro. A única forma visual é a prévia do dashboard: cada slide é um SVG de 1080 x 1350, com o texto em `<text>` e `<tspan>`, gerado na hora pelo servidor a partir da peça lida do Supabase, com a quebra de linha medida pela fonte do template e sem mudar nenhuma palavra do `Slide.texto`. Os botões de baixar salvam esse mesmo SVG ou um PNG feito dele no navegador, e nada é gravado no servidor.
 
-O dashboard fica em `app/` (FastAPI, com HTML, CSS e JS sem build) e escuta só em `127.0.0.1`. Ele inicia o pipeline, mostra as etapas ao vivo, lê os runs do Supabase pela `ConsultaSupabase` de `sunontent/persistencia.py`, em conexão só de leitura, mostra a página Resultado (as peças por nível e a matriz 3x3 com o scorecard, as violações por posição, a rastreabilidade, as matrizes de confusão e o carrossel em SVG), a página de informações técnicas do run e a revisão humana da quarentena, a única que grava. Detalhado em `docs/fluxos/dashboard.md`.
+O dashboard fica em `app/` (FastAPI, com HTML, CSS e JS sem build) e escuta só em `127.0.0.1`. Ele inicia o pipeline, mostra as etapas ao vivo, lê os runs do Supabase pela `ConsultaSupabase` de `sunontent/persistencia.py`, em conexão só de leitura, mostra a página Resultado (as peças por nível e a matriz 3x3 com o scorecard, as violações por posição, a rastreabilidade, as matrizes de confusão e o carrossel em SVG) e a página de informações técnicas do run. Ele não grava nada no banco. Detalhado em `docs/fluxos/dashboard.md`.
 
 **Natureza:** leitura, sem LLM e sem decisão.
 
@@ -847,7 +850,7 @@ prompt:     "Escreva um artigo curto."
 avaliador:  assert 350 <= palavras(texto) <= 550
 ```
 
-O prompt precisa dizer o alvo numérico e o que ele significa em termos operacionais (de 350 a 550 palavras no texto das seções), renderizado do mesmo arquivo que o avaliador lê: `instrucoes_redator` em `sunontent/levelspec.py` escreve as frases do orçamento, dos marcadores de analogia e da meta de tamanho de frase e o limite que a M2 registra.
+O prompt precisa dizer o alvo numérico e o que ele significa em termos operacionais (de 350 a 550 palavras no texto das seções), renderizado do mesmo arquivo que o avaliador lê: `instrucoes_redator` em `sunontent/levelspec.py` escreve as frases do orçamento, dos marcadores de analogia, da meta de tamanho de frase e da regra de vocabulário e o limite que a M2 registra.
 
 ## 3. Tool registry
 
@@ -913,12 +916,12 @@ As credenciais ficam no `.env`, fora do git. O `.env.example` versionado lista a
 
 O contrato que define cada nível. Uma fonte, lida pelo prompt e pelo avaliador.
 
-Cada arquivo tem os campos da E4, o contrato de formato, no Iniciante o bloco `analogia` e, em qualquer nível, o bloco opcional `legibilidade`, validados por `sunontent/levelspec.py`, que recusa campo desconhecido (valores e motivos em `docs/fluxos/plano-editorial.md`, LevelSpec da E4):
+Cada arquivo tem os campos da E4, o contrato de formato, no Iniciante o bloco `analogia`, em qualquer nível, o bloco opcional `legibilidade` e, no Intermediário e no Avançado, o bloco opcional `vocabulario`, validados por `sunontent/levelspec.py`, que recusa campo desconhecido (valores e motivos em `docs/fluxos/plano-editorial.md`, LevelSpec da E4):
 
 ```yaml
 # config/levels/iniciante.yaml
 nivel: iniciante
-versao: 4
+versao: 5
 foco: "impacto prático no bolso do leitor"
 tags_priorizadas: [impacto_pratico]
 tags_descartaveis: [metodologico]
@@ -944,7 +947,7 @@ legibilidade:                                        # opcional; hoje só no Ini
   frase_max_palavras: 18
 ```
 
-O contrato de formato é a fonte única do orçamento da E5.1, do prompt do redator e da M2. O bloco `analogia` é obrigatório no Iniciante e proibido nos outros níveis; os `marcadores` são expressões de pelo menos duas palavras, e a M5 os procura na mesma unidade da primeira ocorrência do termo. O bloco `legibilidade` traz o piso do IFL por formato, lido pela M3, e a meta de tamanho de frase, que só o prompt do redator lê; o nível sem o bloco só mede a legibilidade. O `levelspec.py` confere que as palavras mínimas do artigo crescem do Iniciante ao Avançado e avisa quando `carrossel.max_claims` é maior que `slides.max - 2`, os slides de corpo possíveis.
+O contrato de formato é a fonte única do orçamento da E5.1, do prompt do redator e da M2. O bloco `analogia` é obrigatório no Iniciante e proibido nos outros níveis; os `marcadores` são expressões de pelo menos duas palavras, e a M5 os procura na mesma unidade da primeira ocorrência do termo. O bloco `legibilidade` traz o piso do IFL por formato, lido pela M3, e a meta de tamanho de frase, que só o prompt do redator lê; o nível sem o bloco só mede a legibilidade. O bloco `vocabulario` (`explicar_acima_de: intermediario` no Intermediário e `avancado` no Avançado) é lido só pelo prompt do redator: o Intermediário usa sem explicar o vocabulário padrão de quem investe e explica, na primeira vez, o termo do glossário acima de `explicar_acima_de`, que a E5.1 lista com a `definicao_simples`; o Avançado escreve com o jargão técnico sem explicar. Nenhuma métrica confere o bloco. O `levelspec.py` confere que as palavras mínimas do artigo crescem do Iniciante ao Avançado e avisa quando `carrossel.max_claims` é maior que `slides.max - 2`, os slides de corpo possíveis.
 
 Quais termos pedem analogia não fica no LevelSpec: vem do `nivel_minimo` de cada termo do glossário, a mesma fonte lida pelo planejador, pelo gate e pela M5.
 

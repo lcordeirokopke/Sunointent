@@ -635,6 +635,7 @@ def test_prompt_traz_o_levelspec_dos_3_niveis_e_os_claims():
     assert "tem todos os números e todas as datas deste" in prompt
     assert "No iniciante, prefira usar o claim de impacto prático cujo termo tem analogia" in prompt
     assert "Numa ata do Copom, o que mais importa ao leitor é a decisão de juros" in prompt
+    assert "O intermediario e o avancado não podem ser o mesmo plano com mais ou menos claims." in prompt
 
 
 @pytest.mark.parametrize("tipo, trecho", [
@@ -801,13 +802,13 @@ def test_atualizar_celula(repo_com_factsheet, tmp_path):
         persistencia.atualizar_celula(outro, tmp_path, RUN, gerando)
 
 
-def test_carregar_factsheet_com_os_claims_da_quarentena_em_ordem_de_id(repo_com_factsheet):
-    humano = claim("C100", "O Copom manteve o ritmo.", "decisao")
-    repo_com_factsheet.claims_humanos[(RUN, "C100")] = humano
-    repo_com_factsheet.claims_humanos[("outro_run", "C07")] = claim("C07", "Outro.")
+def test_carregar_factsheet_com_os_claims_em_ordem_de_id(repo_com_factsheet):
+    c100 = claim("C100", "O Copom manteve o ritmo.", "decisao")
+    gravado = repo_com_factsheet.factsheets[RUN]
+    gravado["claims"] = [c100.model_dump(mode="json"), *gravado["claims"]]
     factsheet = persistencia.carregar_factsheet(repo_com_factsheet, RUN)
     assert [c.id for c in factsheet.claims] == [*CLAIMS, "C100"]
-    assert factsheet.claims[-1] == humano and factsheet.assinado
+    assert factsheet.claims[-1] == c100 and factsheet.assinado
     with pytest.raises(FalhaTerminal, match="não tem FactSheet"):
         persistencia.carregar_factsheet(RepositorioMemoria(), RUN)
 

@@ -23,7 +23,7 @@ import pytest
 
 from sunontent import retentativa
 from sunontent.llm import ClienteLLM, Preco, RespostaBruta
-from sunontent.persistencia import Coleta, ItemQuarentena
+from sunontent.persistencia import Coleta
 from sunontent.retentativa import FalhaRetriavel, FalhaTerminal
 from sunontent.schemas import (
     Chunk,
@@ -106,9 +106,6 @@ class RepositorioMemoria:
     spans: dict[str, object] = field(default_factory=dict)
     validacoes: dict[tuple, dict] = field(default_factory=dict)
     factsheets: dict[str, object] = field(default_factory=dict)
-    quarentena: dict[tuple, object] = field(default_factory=dict)
-    decisoes_quarentena: dict[tuple, dict] = field(default_factory=dict)
-    claims_humanos: dict[tuple, object] = field(default_factory=dict)
     validacoes_plano: dict[tuple, object] = field(default_factory=dict)
     rodadas_plano: dict[tuple, dict] = field(default_factory=dict)
     planos: dict[str, dict] = field(default_factory=dict)
@@ -193,7 +190,7 @@ class RepositorioMemoria:
         paginas = {(run_id, p.pagina): {"texto_limpo": p.texto_limpo, "ocr": p.ocr} for p in documento.paginas}
         chunks = {(run_id, c.chunk_id): c.model_dump() for c in documento.chunks}
         numeros = {
-            (run_id, n.ancora.pagina, n.ancora.offset_inicio, n.ancora.offset_fim): {**n.model_dump(), "origem": "pipeline"}
+            (run_id, n.ancora.pagina, n.ancora.offset_inicio, n.ancora.offset_fim): n.model_dump()
             for n in documento.tabela_numeros
         }
         for destino, novos in ((self.paginas, paginas), (self.chunks, chunks), (self.numeros, numeros)):
@@ -233,7 +230,7 @@ class RepositorioMemoria:
         self.factsheets.setdefault(run_id, factsheet.model_dump(mode="json", exclude={"tabela_numeros"}))
 
     def factsheet_gravado(self, run_id) -> FactSheet:
-        """O FactSheet como foi gravado, sem os claims aceitos na quarentena (atalho dos testes)."""
+        """O FactSheet como foi gravado, sem a tabela de números (atalho dos testes)."""
         return FactSheet.model_validate({**self.factsheets[run_id], "tabela_numeros": []})
 
     def plano_gravado(self, run_id) -> PlanoEditorial:
@@ -241,26 +238,17 @@ class RepositorioMemoria:
         return PlanoEditorial.model_validate(self.planos[run_id])
 
     def carregar_factsheet(self, run_id):
-        """Mesma leitura do Supabase: claims em ordem de id, com os aceitos na quarentena, e a tabela de números
-        do run (de origem pipeline e humano)."""
+        """Mesma leitura do Supabase: claims em ordem de id e a tabela de números do run."""
         self._entrar("carregar_factsheet")
         if run_id not in self.factsheets:
             raise FalhaTerminal(f"run {run_id} não tem FactSheet assinado")
         dados = self.factsheets[run_id]
-        humanos = [c.model_dump(mode="json") for (r, _), c in self.claims_humanos.items() if r == run_id]
-        claims = sorted([*dados["claims"], *humanos], key=lambda c: (len(c["id"]), c["id"]))
+        claims = sorted(dados["claims"], key=lambda c: (len(c["id"]), c["id"]))
         tabela = [
-            Numero(**{c: v for c, v in valor.items() if c != "origem"}).model_dump(mode="json")
+            Numero(**valor).model_dump(mode="json")
             for k, valor in sorted(self.numeros.items()) if k[0] == run_id
         ]
         return FactSheet.model_validate({**dados, "claims": claims, "tabela_numeros": tabela})
-
-    def gravar_quarentena(self, run_id, itens) -> None:
-        self._entrar("gravar_quarentena")
-        if run_id not in self.runs:
-            raise FalhaTerminal(f"run {run_id} não existe em runs")
-        for item in itens:
-            self.quarentena.setdefault((run_id, item.proposto.id), item)
 
     def carregar_documento_processado(self, run_id):
         self._entrar("carregar_documento_processado")
@@ -273,44 +261,10 @@ class RepositorioMemoria:
             paginas=[Pagina(pagina=k[1], **v) for k, v in sorted(self.paginas.items()) if k[0] == run_id],
             chunks=[Chunk(**v) for k, v in self.chunks.items() if k[0] == run_id],
             tabela_numeros=[
-                Numero(**{c: v for c, v in valor.items() if c != "origem"})
+                Numero(**valor)
                 for k, valor in sorted(self.numeros.items()) if k[0] == run_id
             ],
         )
-
-    def carregar_quarentena(self, run_id):
-        self._entrar("carregar_quarentena")
-        return [
-            ItemQuarentena(item, self.decisoes_quarentena.get(chave, {}).get("decisao"))
-            for chave, item in sorted(self.quarentena.items()) if chave[0] == run_id
-        ]
-
-    def gravar_decisao_quarentena(self, run_id, claim_id, decisao, autor, claim, numeros_novos) -> None:
-        """Mesmas regras do Supabase: uma decisão por claim; aceitar exige o FactSheet e grava tudo ou nada."""
-        self._entrar("gravar_decisao_quarentena")
-        chave = (run_id, claim_id)
-        if chave not in self.quarentena:
-            raise FalhaTerminal(f"claim {claim_id} não está em claims_quarentena")
-        gravada = self.decisoes_quarentena.get(chave)
-        if gravada is not None:
-            if gravada["decisao"] != decisao:
-                raise FalhaTerminal(f"o claim {claim_id} do run {run_id} já foi revisado: {gravada['decisao']}")
-            return
-        if claim is not None:
-            if run_id not in self.factsheets:
-                raise FalhaTerminal(f"run {run_id} não tem FactSheet assinado; o claim {claim_id} não pode ser aceito")
-            novos = {
-                (run_id, n.ancora.pagina, n.ancora.offset_inicio, n.ancora.offset_fim): {**n.model_dump(), "origem": "humano"}
-                for n in numeros_novos
-            }
-            for n in claim.numeros:
-                posicao = (run_id, n.ancora.pagina, n.ancora.offset_inicio, n.ancora.offset_fim)
-                if posicao not in self.numeros and posicao not in novos:
-                    raise FalhaTerminal(f"claim_numeros.numero_id nulo: {claim.id} {n.bruto!r}")
-            for posicao, valor in novos.items():
-                self.numeros.setdefault(posicao, valor)
-            self.claims_humanos[chave] = claim
-        self.decisoes_quarentena[chave] = {"decisao": decisao, "autor": autor}
 
     def gravar_validacao_plano(self, run_id, rodada, problemas, saida) -> None:
         self._entrar("gravar_validacao_plano")
@@ -373,7 +327,6 @@ class RepositorioMemoria:
                 raise FalhaTerminal(f"run {run_id} já tem outra peça gravada em {peca.celula_id} tentativa {peca.tentativa}")
             return
         claims = {c["id"]: len(c["numeros"]) for c in self.factsheets.get(run_id, {}).get("claims", [])}
-        claims |= {c.id: len(c.numeros) for (r, _), c in self.claims_humanos.items() if r == run_id}
         for n in peca.numeros_usados:
             if not 1 <= n.ordem <= claims.get(n.claim_id, 0):
                 raise FalhaTerminal(f"peca_unidade_numeros: {n.claim_id}.{n.ordem} não existe em claim_numeros")

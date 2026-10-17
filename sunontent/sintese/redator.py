@@ -1,7 +1,7 @@
 """E5.2 Redator (docs/arquiteturas.md, E5.2): uma chamada ao modelo por tentativa da célula.
 
-O prompt vem de prompts/synthesizer.j2: as regras comuns, a parte do nível (foco e expressões de analogia, de
-`levelspec.instrucoes_redator`), a parte do formato (o orçamento calculado na E5.1) e, no retry, a peça
+O prompt vem de prompts/synthesizer.j2: as regras comuns, a parte do nível (foco, expressões de analogia e regra de
+vocabulário, de `levelspec.instrucoes_redator`), os termos de especialista a explicar, a parte do formato (o orçamento calculado na E5.1) e, no retry, a peça
 anterior com os marcadores restaurados e o relatório corretivo, agrupado pelo lugar da peça. A resposta é
 validada pelo schema do formato (SaidaArtigo, SaidaCarrossel ou SaidaRoteiro); fora do schema, volta ao modelo
 pelo `llm.py` sem consumir o `K`. No retry, usa o raciocínio `synthesizer_correcao` de config/models.yaml.
@@ -81,12 +81,14 @@ def montar_prompt(
         foco=spec.foco,
         marcadores=pacote.instrucoes.marcadores,
         legibilidade=pacote.instrucoes.legibilidade,
+        vocabulario=pacote.instrucoes.vocabulario,
         orcamento=pacote.instrucoes.orcamento,
         orcamento_abertura=pacote.orcamento_abertura,
         orcamento_fechamento=pacote.orcamento_fechamento,
         tese=pacote.tese,
         claims=[{**c.__dict__, "texto": " ".join(c.texto.split())} for c in pacote.claims],
         analogias=pacote.analogias,
+        termos_a_explicar=pacote.termos_a_explicar,
         anterior_json=json.dumps(anterior.model_dump(), ensure_ascii=False, indent=2) if anterior else "",
         certos=relatorio.certos,
         grupos=_grupos(relatorio, _UNIDADE[pacote.formato]),

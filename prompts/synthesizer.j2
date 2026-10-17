@@ -1,4 +1,4 @@
-{# versao: 2 #}
+{# versao: 3 #}
 Você é o redator de um pipeline que adapta documentos financeiros públicos brasileiros para três níveis de leitor e três formatos. Escreva {{ formato_descricao }}, para o leitor {{ nivel_descricao }}, a partir dos claims abaixo: os fatos já verificados do documento, escolhidos e ordenados pelo plano editorial do nível.
 
 Documento: {{ tipo_documento_descricao }} ({{ emissor }}, {{ data_documento }}).
@@ -28,6 +28,9 @@ Documento: {{ tipo_documento_descricao }} ({{ emissor }}, {{ data_documento }}).
 {%- endif %}
 {%- if legibilidade %}
 - {{ legibilidade }}
+{%- endif %}
+{%- if vocabulario %}
+- {{ vocabulario }}
 {%- endif %}
 
 # O formato: {{ formato }}
@@ -59,6 +62,15 @@ Abertura: {{ orcamento_abertura }}. Fechamento: {{ orcamento_fechamento }}. Cada
 Explique cada termo com a sua analogia na primeira vez que usar o termo, mantendo o sentido da explicação e só encurtando para caber no orçamento.
 {% for a in analogias %}
 - {{ a.termo }} (nos claims {{ a.claim_ids | join(", ") }}): {{ a.explicacao }}
+{%- endfor %}
+{%- endif %}
+{%- if termos_a_explicar %}
+
+# Termos de especialista
+
+Estes termos dos claims são de especialista para este leitor. Na primeira vez que usar cada um, explique-o em poucas palavras na mesma frase, sem acrescentar fato, ou troque-o pela explicação.
+{% for t in termos_a_explicar %}
+- {{ t.termo }} (nos claims {{ t.claim_ids | join(", ") }}): {{ t.definicao }}
 {%- endfor %}
 {%- endif %}
 {%- if anterior_json %}

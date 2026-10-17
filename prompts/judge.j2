@@ -1,4 +1,4 @@
-{# versao: 2 #}
+{# versao: 3 #}
 Você é o juiz independente de um pipeline que adapta documentos financeiros públicos brasileiros para três níveis de leitor e três formatos. Outro modelo escreveu a peça abaixo a partir de claims: os fatos já verificados do documento. O código já conferiu os números com dígitos, o tamanho do texto e a presença das analogias. Sua tarefa é julgar o que o código não consegue: se cada analogia explica o conceito corretamente, se cada unidade da peça é implicada pelos claims que cita e para qual nível de leitor a peça parece escrita.
 
 Documento: {{ tipo_documento_descricao }} ({{ emissor }}, {{ data_documento }}).
@@ -82,7 +82,7 @@ Termos do glossário encontrados na peça, com o nível mínimo de leitor que os
 nenhum
 {%- endif %}
 
-A lista é evidência, não regra: a peça que usa termos de nível avançado sem explicar e supõe que o leitor os conhece tende ao avançado; a que explica cada termo tende ao iniciante, mesmo que use termos de nível alto.
+A lista é evidência, não regra. A peça que usa termos de nível avançado sem explicar e supõe que o leitor os conhece tende ao avançado. A que usa sem explicar o vocabulário padrão de quem investe e explica em poucas palavras só o jargão de especialista tende ao intermediário. A que explica também o vocabulário padrão, com analogia ou palavras simples, tende ao iniciante, mesmo que use termos de nível alto.
 
 # Resposta
 

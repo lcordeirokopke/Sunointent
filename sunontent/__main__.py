@@ -199,14 +199,14 @@ def executar(
     )
     persistencia.concluir_run(repositorio, raiz_dados, manifest)
     claims = len(resultado["factsheet"].claims)
-    # Com o run concluído, as correções que restam são os claims que foram para a quarentena.
-    em_quarentena = len(resultado["correcoes"])
+    # Com o run concluído, as correções que restam são os claims descartados depois da última rodada.
+    descartados = len(resultado["correcoes"])
     plano = resultado["plano"]
     contagem = resultado["contagem_celulas"]
     celulas = ", ".join(f"{n} {estado}" for estado, n in contagem.items() if n)
     print(
         f"concluído: {documento.doc_id} ({documento.doc_sha256[:12]}), {claims} claims,"
-        + (f" {em_quarentena} em quarentena," if em_quarentena else "")
+        + (f" {descartados} {'descartado' if descartados == 1 else 'descartados'}," if descartados else "")
         + f" plano em {plano.rodadas} {'rodada' if plano.rodadas == 1 else 'rodadas'}"
         + (" (com aviso)," if plano.aviso else ",")
         + f" {sum(contagem.values())} células ({celulas}),"

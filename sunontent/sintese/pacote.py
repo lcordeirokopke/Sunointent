@@ -12,6 +12,8 @@
    palavras de cada cena (segundos vezes `palavras_por_segundo`). O carrossel não tem divisão por claim.
 4. Plano: tese, papel, `atribuir_fonte` e as analogias presas aos claims do formato em que o termo aparece,
    e a `data_documento`.
+5. Termos a explicar: no nível com o bloco `vocabulario`, os termos do glossário com `nivel_minimo` acima de
+   `explicar_acima_de` que aparecem nos claims do formato, com a `definicao_simples` e os claims em que aparecem.
 """
 
 import math
@@ -54,6 +56,13 @@ class AnalogiaDoPacote:
 
 
 @dataclass(frozen=True)
+class TermoDoPacote:
+    termo: str
+    definicao: str  # a `definicao_simples` do glossário
+    claim_ids: tuple[str, ...]  # os claims do formato em que o termo aparece
+
+
+@dataclass(frozen=True)
 class Pacote:
     celula_id: str
     nivel: str
@@ -64,6 +73,7 @@ class Pacote:
     tese: str  # vazia quando a limpeza da E4 a tirou
     claims: tuple[ClaimDoPacote, ...]  # os claims do formato, na ordem de leitura do plano
     analogias: tuple[AnalogiaDoPacote, ...]
+    termos_a_explicar: tuple[TermoDoPacote, ...]  # vazio quando o nível não tem o bloco `vocabulario`
     instrucoes: InstrucoesRedator
     orcamento_abertura: str  # só no roteiro
     orcamento_fechamento: str
@@ -175,10 +185,20 @@ def montar(
         if presos:  # a analogia acompanha os claims do formato
             analogias.append(AnalogiaDoPacote(analogia.termo, analogia.explicacao, presos))
 
+    presos_por_termo: dict[str, list[str]] = {}
+    if spec.vocabulario is not None:
+        for c in do_formato:
+            for termo_id in glossario.acima_de(glossario.termos_em(claims[c.id].texto), spec.vocabulario.explicar_acima_de):
+                presos_por_termo.setdefault(termo_id, []).append(c.id)
+    termos_a_explicar = tuple(
+        TermoDoPacote(glossario.termos[t].termo, glossario.termos[t].definicao_simples, tuple(ids))
+        for t, ids in presos_por_termo.items()
+    )
+
     return Pacote(
         celula_id=celula_id(nivel, formato), nivel=nivel, formato=formato,
         tipo_documento=factsheet.tipo_documento, emissor=factsheet.emissor, data_documento=factsheet.data_documento,
-        tese=plano_nivel.tese, claims=do_formato, analogias=tuple(analogias),
+        tese=plano_nivel.tese, claims=do_formato, analogias=tuple(analogias), termos_a_explicar=termos_a_explicar,
         instrucoes=instrucoes_redator(spec, formato),
         orcamento_abertura=abertura, orcamento_fechamento=fechamento,
         plano_claim_ids=tuple(c.claim_id for c in plano_nivel.claims), marcadores=validos,

@@ -8,7 +8,7 @@ Implementada, com o nó `synth`, no subgrafo da célula com a E6 e a E7 (`docs/f
 
 ## Responsabilidade
 
-- **Pacote (código):** corta os claims do plano do nível para o formato, troca os números do texto de cada claim por marcadores, calcula o orçamento e prende as analogias aos claims do formato.
+- **Pacote (código):** corta os claims do plano do nível para o formato, troca os números do texto de cada claim por marcadores, calcula o orçamento, prende as analogias aos claims do formato e, no nível com o bloco `vocabulario`, lista os termos de especialista dos claims do formato.
 - **Redator (LLM, 1 chamada por tentativa):** escreve o payload do formato com os marcadores no texto, no schema do formato.
 - **Montagem (código):** troca os marcadores pelos números, registra a posição de cada número em `numeros_usados` e calcula o M7 (`plan_contract`).
 
@@ -16,7 +16,7 @@ Implementada, com o nó `synth`, no subgrafo da célula com a E6 e a E7 (`docs/f
 
 | Arquivo | Papel |
 | ------- | ----- |
-| `sunontent/sintese/pacote.py` | E5.1: corte por formato, marcadores, orçamento e analogias do formato. |
+| `sunontent/sintese/pacote.py` | E5.1: corte por formato, marcadores, orçamento, analogias e termos a explicar do formato. |
 | `sunontent/sintese/redator.py` | E5.2: prompt de `prompts/synthesizer.j2` e chamada pelo `llm.py` com o schema do formato. |
 | `sunontent/sintese/montagem.py` | E5.3: troca dos marcadores, `numeros_usados`, `plan_contract` e `restaurar` (a peça de volta com os marcadores, para o retry). |
 | `sunontent/nodes/synth.py` | Nó da célula: lê o plano e o FactSheet, chama os três passos e grava a peça. |
@@ -39,6 +39,8 @@ Exemplo, Iniciante: no artigo, com os papéis principal, apoio, apoio, contexto 
 
 **Analogias.** Cada analogia do plano do nível (só o Iniciante tem) vai presa aos claims do formato em cujo texto o termo aparece, casado pelo glossário (`docs/glossario.md`, Casamento no texto). A analogia de um termo que só aparece em claims cortados do formato sai do pacote.
 
+**Termos a explicar.** No nível com o bloco `vocabulario` no LevelSpec, o pacote lista os termos do glossário com `nivel_minimo` acima de `explicar_acima_de` que aparecem no texto dos claims do formato, casados pelo glossário, cada um com a `definicao_simples` e os claims em que aparece. No Intermediário (`explicar_acima_de: intermediario`) são os termos de nível avançado; no Avançado (`explicar_acima_de: avancado`) a lista é sempre vazia; o Iniciante não tem o bloco. O termo que só aparece em claims cortados do formato sai do pacote.
+
 O pacote traz também a tese (vazia quando a limpeza da E4 a tirou, e então o prompt não tem a seção), o papel, o `atribuir_fonte` e a marca de núcleo de cada claim, o tipo e o emissor do documento e a `data_documento`.
 
 ## Prompt do redator
@@ -46,12 +48,13 @@ O pacote traz também a tese (vazia quando a limpeza da E4 a tirou, e então o p
 Um template, `prompts/synthesizer.j2`, para as 9 células, nesta ordem:
 
 1. **Regras comuns:** não criar fatos, causa ou consequência que os claims não digam; todo número que não seja data só pelo marcador, sem conta nem arredondamento; datas como o claim as escreve, com o ano do documento permitido na data sem ano; seguir a ordem de leitura; escrever com atribuição o claim marcado "atribuir à fonte"; listar em `claim_ids` os claims de cada unidade, cobrindo todos os do formato; as regras de estrutura do formato (título e linha fina, gancho e conclusão, abertura e fechamento, `gancho_visual` sem número).
-2. **O nível:** o `foco` do LevelSpec e, no Iniciante, as expressões de analogia (`instrucoes_redator(...).marcadores`) e a meta de tamanho de frase (`instrucoes_redator(...).legibilidade`, do bloco `legibilidade`).
+2. **O nível:** o `foco` do LevelSpec; no Iniciante, as expressões de analogia (`instrucoes_redator(...).marcadores`) e a meta de tamanho de frase (`instrucoes_redator(...).legibilidade`, do bloco `legibilidade`); no Intermediário e no Avançado, a regra de vocabulário (`instrucoes_redator(...).vocabulario`, do bloco `vocabulario`): o Intermediário usa sem explicar o vocabulário padrão de quem investe e explica em poucas palavras, na primeira vez, o termo de especialista, ou o troca pela explicação; o Avançado escreve para o leitor profissional, com o jargão técnico sem explicar.
 3. **O formato:** o orçamento de `instrucoes_redator` e, no roteiro, o tempo da abertura e do fechamento.
 4. **A tese do nível**, quando há.
 5. **Os claims**, na ordem de leitura: id, papel, núcleo, atribuição, a parte do orçamento, o texto com marcadores e a tabela de marcadores (`{{C01.1}} = 13,75%`).
 6. **As analogias**, com os claims do formato em que o termo aparece e a instrução de explicar o termo na primeira vez que for usado, mantendo o sentido e só encurtando.
-7. **Correção**, só no retry: a peça anterior em JSON, com os marcadores restaurados (inclusive o inválido), o que está certo e não deve mudar, as violações agrupadas pelo lugar da peça (a unidade, o título, a linha fina ou a peça inteira) e, por métrica, quantas ficaram de fora da lista.
+7. **Os termos de especialista**, quando o pacote tem termos a explicar: cada termo com os claims do formato em que aparece e a `definicao_simples`, e a instrução de explicá-lo em poucas palavras na mesma frase, sem acrescentar fato, ou trocá-lo pela explicação.
+8. **Correção**, só no retry: a peça anterior em JSON, com os marcadores restaurados (inclusive o inválido), o que está certo e não deve mudar, as violações agrupadas pelo lugar da peça (a unidade, o título, a linha fina ou a peça inteira) e, por métrica, quantas ficaram de fora da lista.
 
 O relatório corretivo é um `RelatorioCorretivo` (`sunontent/schemas.py`): `certos` (o que passou, com o valor), `violacoes` (até 5 por métrica, na ordem do scorecard) e `restantes` (por métrica, as violações além das 5). O template só o renderiza.
 

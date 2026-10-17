@@ -10,9 +10,6 @@ Funções da E0 e do run (docs/fluxos/ingestao.md, docs/arquiteturas.md):
 - spans de LLM, com o custo somado em runs na mesma instrução, e data/runs/<run_id>/spans/;
 - E3: resultado de cada rodada em validacoes_ancora e o FactSheet assinado (factsheets, claims e
   claim_numeros numa transação), e data/runs/<run_id>/validacoes/ e factsheet.json;
-- quarentena do loop E2/E3 (claims_quarentena e data/runs/<run_id>/quarentena.json), a leitura do
-  documento e da quarentena para a revisão, e a decisão humana (decisoes_quarentena e, ao aceitar, o
-  claim e os números novos com origem humano, numa transação; data/runs/<run_id>/revisoes/);
 - E4: problemas e saída do planejador de cada rodada do gate (validacoes_plano e rodadas_plano), e o plano
   (planos_editoriais e planos_nivel) com as 9 células em PENDENTE numa transação; data/runs/<run_id>/
   validacoes_plano/, plano.json e celulas/<celula_id>/estado.json;
@@ -43,8 +40,6 @@ from sunontent.schemas import (
     CelulaState,
     Chunk,
     Claim,
-    ClaimQuarentena,
-    DecisaoQuarentena,
     DocumentoFonte,
     DocumentoProcessado,
     FactSheet,
@@ -71,14 +66,6 @@ class Coleta:
     doc_sha256: str
     url_origem: str
     coletado_em: datetime
-
-
-@dataclass(frozen=True)
-class ItemQuarentena:
-    """Linha de `claims_quarentena` e a decisão humana, None enquanto não revisado."""
-
-    claim: ClaimQuarentena
-    decisao: DecisaoQuarentena | None
 
 
 class Repositorio(Protocol):
@@ -146,34 +133,12 @@ class Repositorio(Protocol):
         """Numa transação: `factsheets`, `claims` e `claim_numeros`, cada número ligado à sua linha em `numeros`."""
         ...
 
-    def gravar_quarentena(self, run_id: str, itens: list[ClaimQuarentena]) -> None:
-        """Linhas de `claims_quarentena`, numa transação. Repetição não duplica."""
-        ...
-
     def carregar_documento_processado(self, run_id: str) -> DocumentoProcessado:
-        """O DocumentoProcessado gravado pela E1, com os números de origem humano. FalhaTerminal se não existe."""
-        ...
-
-    def carregar_quarentena(self, run_id: str) -> list[ItemQuarentena]:
-        """Claims em quarentena do run, em ordem de id, cada um com a sua decisão."""
-        ...
-
-    def gravar_decisao_quarentena(
-        self,
-        run_id: str,
-        claim_id: str,
-        decisao: DecisaoQuarentena,
-        autor: str,
-        claim: Claim | None,
-        numeros_novos: list[Numero],
-    ) -> None:
-        """Numa transação: a linha de `decisoes_quarentena` e, ao aceitar, os números novos em `numeros` e o
-        claim em `claims` e `claim_numeros`, com origem humano. Repetir a mesma decisão não tem efeito;
-        decisão diferente da gravada é FalhaTerminal. Aceitar exige o FactSheet assinado do run."""
+        """O DocumentoProcessado gravado pela E1. FalhaTerminal se não existe."""
         ...
 
     def carregar_factsheet(self, run_id: str) -> FactSheet:
-        """O FactSheet assinado do run: claims em ordem de id (com os de origem humano), os números de cada claim
+        """O FactSheet assinado do run: claims em ordem de id, os números de cada claim
         na ordem de `claim_numeros` e a tabela de números do documento. FalhaTerminal se não existe."""
         ...
 
@@ -375,13 +340,6 @@ def gravar_factsheet(repositorio: Repositorio, raiz_dados: Path, run_id: str, fa
     return _gravar_json(destino, factsheet.model_dump(mode="json", exclude={"tabela_numeros"}))
 
 
-def gravar_quarentena(repositorio: Repositorio, raiz_dados: Path, run_id: str, itens: list[ClaimQuarentena]) -> Path:
-    """Grava a quarentena no Supabase e, depois, em data/runs/<run_id>/quarentena.json."""
-    com_retentativa(lambda: repositorio.gravar_quarentena(run_id, itens), f"gravação da quarentena do run {run_id}")
-    destino = Path(raiz_dados) / "runs" / run_id / "quarentena.json"
-    return _gravar_json(destino, [item.model_dump(mode="json") for item in itens])
-
-
 def carregar_documento_processado(repositorio: Repositorio, run_id: str) -> DocumentoProcessado:
     return com_retentativa(
         lambda: repositorio.carregar_documento_processado(run_id),
@@ -391,45 +349,6 @@ def carregar_documento_processado(repositorio: Repositorio, run_id: str) -> Docu
 
 def carregar_factsheet(repositorio: Repositorio, run_id: str) -> FactSheet:
     return com_retentativa(lambda: repositorio.carregar_factsheet(run_id), f"leitura do FactSheet do run {run_id}")
-
-
-def carregar_quarentena(repositorio: Repositorio, run_id: str) -> list[ItemQuarentena]:
-    return com_retentativa(lambda: repositorio.carregar_quarentena(run_id), f"leitura da quarentena do run {run_id}")
-
-
-def gravar_decisao_quarentena(
-    repositorio: Repositorio,
-    raiz_dados: Path,
-    run_id: str,
-    claim_id: str,
-    decisao: DecisaoQuarentena,
-    autor: str,
-    *,
-    claim: Claim | None = None,
-    numeros_novos: list[Numero] = (),
-) -> Path:
-    """Grava a decisão humana sobre um claim em quarentena no Supabase e, depois, em
-    data/runs/<run_id>/revisoes/<claim_id>.json. Ao aceitar, o claim entra no FactSheet do run."""
-    autor = autor.strip()
-    if not autor:
-        raise FalhaTerminal("a decisão sobre a quarentena precisa do nome de quem revisou")
-    if (decisao == "aceitar") != (claim is not None) or (claim is not None and claim.id != claim_id):
-        raise FalhaTerminal(f"decisão {decisao} do claim {claim_id} sem o claim correspondente")
-    numeros_novos = list(numeros_novos)
-    com_retentativa(
-        lambda: repositorio.gravar_decisao_quarentena(run_id, claim_id, decisao, autor, claim, numeros_novos),
-        f"gravação da decisão sobre o claim {claim_id} do run {run_id}",
-    )
-    destino = Path(raiz_dados) / "runs" / run_id / "revisoes" / f"{claim_id}.json"
-    conteudo = {
-        "claim_id": claim_id,
-        "decisao": decisao,
-        "autor": autor,
-        "decidido_em": _utc_iso(datetime.now(timezone.utc)),
-        "claim": claim.model_dump(mode="json") if claim else None,
-        "numeros_novos": [n.model_dump(mode="json") for n in numeros_novos],
-    }
-    return _gravar_json(destino, conteudo)
 
 
 def gravar_validacao_plano(
@@ -884,11 +803,11 @@ class RepositorioSupabase:
         self._executar(transacao)
 
     @staticmethod
-    def _inserir_claims(cursor, run_id: str, claims: list[Claim], origem: str) -> None:
+    def _inserir_claims(cursor, run_id: str, claims: list[Claim]) -> None:
         """Linhas de `claims` e `claim_numeros`, cada número ligado à sua linha em `numeros` pela posição."""
         linhas = [
             (run_id, c.id, c.texto, c.tipo, c.tags, c.literal_fonte, c.ancora.pagina, c.ancora.offset_inicio,
-             c.ancora.offset_fim, origem)
+             c.ancora.offset_fim)
             for c in claims
         ]
         numeros = [
@@ -899,7 +818,7 @@ class RepositorioSupabase:
         ]
         cursor.executemany(
             "insert into claims (run_id, claim_id, texto, tipo, tags, literal_fonte, pagina, offset_inicio,"
-            " offset_fim, origem) values (%s, %s, %s, %s::tipo_claim, %s, %s, %s, %s, %s, %s::origem_dado)"
+            " offset_fim) values (%s, %s, %s, %s::tipo_claim, %s, %s, %s, %s, %s)"
             " on conflict (run_id, claim_id) do nothing",
             linhas,
         )
@@ -920,25 +839,7 @@ class RepositorioSupabase:
                     (run_id, factsheet.doc_id, factsheet.tipo_documento, factsheet.emissor,
                      factsheet.data_documento, factsheet.assinado),
                 )
-                self._inserir_claims(cursor, run_id, factsheet.claims, "pipeline")
-
-        self._executar(transacao)
-
-    def gravar_quarentena(self, run_id: str, itens: list[ClaimQuarentena]) -> None:
-        from psycopg.types.json import Jsonb
-
-        linhas = [
-            (run_id, item.proposto.id, item.rodada, Jsonb(item.proposto.model_dump(mode="json")), item.motivo)
-            for item in itens
-        ]
-
-        def transacao(conexao):
-            with conexao.transaction(), conexao.cursor() as cursor:
-                cursor.executemany(
-                    "insert into claims_quarentena (run_id, claim_id, rodada, proposto, motivo)"
-                    " values (%s, %s, %s, %s, %s) on conflict (run_id, claim_id) do nothing",
-                    linhas,
-                )
+                self._inserir_claims(cursor, run_id, factsheet.claims)
 
         self._executar(transacao)
 
@@ -986,13 +887,9 @@ class RepositorioSupabase:
 
     def carregar_factsheet(self, run_id: str) -> FactSheet:
         def consulta(conexao):
-            from psycopg import IsolationLevel
             from psycopg.rows import dict_row
 
-            # As quatro leituras no mesmo snapshot: uma aceitação da quarentena no meio não separa o claim dos
-            # seus números.
-            conexao.isolation_level = IsolationLevel.REPEATABLE_READ
-            with conexao.transaction(), conexao.cursor(row_factory=dict_row) as cursor:
+            with conexao.cursor(row_factory=dict_row) as cursor:
                 cabecalho = cursor.execute(
                     "select doc_id, tipo_documento::text as tipo_documento, emissor, data_documento, assinado"
                     " from factsheets where run_id = %s",
@@ -1036,66 +933,6 @@ class RepositorioSupabase:
             ],
             tabela_numeros=[numero(linha) for linha in tabela],
         )
-
-    def carregar_quarentena(self, run_id: str) -> list[ItemQuarentena]:
-        def consulta(conexao):
-            return conexao.execute(
-                "select q.proposto, q.motivo, q.rodada, d.decisao::text from claims_quarentena q"
-                " left join decisoes_quarentena d on d.run_id = q.run_id and d.claim_id = q.claim_id"
-                " where q.run_id = %s order by q.claim_id",
-                (run_id,),
-            ).fetchall()
-
-        return [
-            ItemQuarentena(ClaimQuarentena(proposto=proposto, motivo=motivo, rodada=rodada), decisao)
-            for proposto, motivo, rodada, decisao in self._executar(consulta)
-        ]
-
-    def gravar_decisao_quarentena(
-        self,
-        run_id: str,
-        claim_id: str,
-        decisao: DecisaoQuarentena,
-        autor: str,
-        claim: Claim | None,
-        numeros_novos: list[Numero],
-    ) -> None:
-        novos = [
-            (run_id, n.bruto, n.valor, n.unidade, n.ancora.pagina, n.ancora.offset_inicio, n.ancora.offset_fim)
-            for n in numeros_novos
-        ]
-
-        def transacao(conexao):
-            with conexao.transaction(), conexao.cursor() as cursor:
-                inserida = cursor.execute(
-                    "insert into decisoes_quarentena (run_id, claim_id, decisao, autor)"
-                    " values (%s, %s, %s::decisao_quarentena, %s) on conflict (run_id, claim_id) do nothing"
-                    " returning decisao",
-                    (run_id, claim_id, decisao, autor),
-                ).fetchone()
-                if inserida is None:
-                    (gravada,) = cursor.execute(
-                        "select decisao::text from decisoes_quarentena where run_id = %s and claim_id = %s",
-                        (run_id, claim_id),
-                    ).fetchone()
-                    if gravada != decisao:
-                        raise FalhaTerminal(f"o claim {claim_id} do run {run_id} já foi revisado: {gravada}")
-                    return
-                if claim is None:
-                    return
-                if cursor.execute("select 1 from factsheets where run_id = %s", (run_id,)).fetchone() is None:
-                    raise FalhaTerminal(
-                        f"run {run_id} não tem FactSheet assinado; o claim {claim_id} não pode ser aceito"
-                    )
-                cursor.executemany(
-                    "insert into numeros (run_id, bruto, valor, unidade, pagina, offset_inicio, offset_fim, origem)"
-                    " values (%s, %s, %s, %s::unidade_numero, %s, %s, %s, 'humano')"
-                    " on conflict (run_id, pagina, offset_inicio, offset_fim) do nothing",
-                    novos,
-                )
-                self._inserir_claims(cursor, run_id, [claim], "humano")
-
-        self._executar(transacao)
 
     def gravar_validacao_plano(
         self, run_id: str, rodada: int, problemas: list[ProblemaPlano], saida: SaidaPlanejador
@@ -1402,6 +1239,13 @@ class RepositorioSupabase:
         self._executar(lambda conexao: conexao.execute("select 1"))
 
 
+# Claims descartados de um run `r`: os reprovados na última rodada do loop E2/E3, passada como parâmetro. Um run
+# parado antes dela não tem descartados.
+_DESCARTADOS = (
+    "(select count(*) from validacoes_ancora v where v.run_id = r.run_id and v.rodada = %s and not v.passou)"
+)
+
+
 class ConsultaSupabase:
     """Leitura dos runs para o dashboard (app/). Não grava: toda transação abre com BEGIN READ ONLY.
 
@@ -1434,20 +1278,18 @@ class ConsultaSupabase:
     def verificar_conexao(self) -> None:
         self._executar(lambda conexao: conexao.execute("select 1"))
 
-    def listar_runs(self, limite: int = 200) -> list[dict]:
+    def listar_runs(self, limite: int = 200, *, rodadas_extracao: int) -> list[dict]:
         """Resumo dos runs, do mais recente ao mais antigo. `claims` é nulo sem FactSheet assinado;
-        `quarentena` conta os claims em quarentena ainda sem decisão, nulo quando não há."""
+        `descartados` conta os claims reprovados na última rodada E2/E3 (`rodadas_extracao`), nulo quando não há."""
 
         def consulta(conexao):
             return conexao.execute(
                 'select r.run_id, r."timestamp", r.modo, r.fonte, r.status, r.doc_id, r.custo_total_tokens,'
                 " r.custo_total_brl, r.erro_classe, r.erro_mensagem, r.etapa_erro,"
                 " nullif((select count(*) from claims c where c.run_id = r.run_id), 0) as claims,"
-                " nullif((select count(*) from claims_quarentena q where q.run_id = r.run_id and not exists"
-                " (select 1 from decisoes_quarentena d where d.run_id = q.run_id and d.claim_id = q.claim_id)), 0)"
-                " as quarentena"
+                f" nullif({_DESCARTADOS}, 0) as descartados"
                 ' from runs r order by r."timestamp" desc, r.run_id limit %s',
-                (limite,),
+                (rodadas_extracao, limite),
             ).fetchall()
 
         return self._executar(consulta)
@@ -1531,9 +1373,10 @@ class ConsultaSupabase:
 
         return self._executar(consulta)
 
-    def detalhar_run(self, run_id: str) -> dict | None:
-        """Run, documento processado (resumido), FactSheet, validações por rodada, quarentena, spans, plano
-        editorial, rodadas do gate do plano e as células (peças, números usados e scorecards por tentativa).
+    def detalhar_run(self, run_id: str, *, rodadas_extracao: int) -> dict | None:
+        """Run, documento processado (resumido), FactSheet, validações por rodada, a contagem dos claims
+        descartados na última rodada E2/E3 (`rodadas_extracao`), spans, plano editorial, rodadas do gate do plano
+        e as células (peças, números usados e scorecards por tentativa).
 
         None se o run não existe.
         """
@@ -1553,7 +1396,10 @@ class ConsultaSupabase:
                 "documento": self._documento(conexao, run_id),
                 "factsheet": self._factsheet(conexao, run_id),
                 "validacoes": self._validacoes(conexao, run_id),
-                "quarentena": self._quarentena(conexao, run_id),
+                "descartados": conexao.execute(
+                    f"select {_DESCARTADOS} as descartados from runs r where r.run_id = %s",
+                    (rodadas_extracao, run_id),
+                ).fetchone()["descartados"],
                 "spans": conexao.execute(
                     "select span_id, no, nivel, celula_id, tentativa, rodada, modelo, tokens_entrada, tokens_saida,"
                     " custo_brl, duracao_ms, falha_classe, falha_mensagem, criado_em"
@@ -1676,11 +1522,10 @@ class ConsultaSupabase:
                 "tags": c["tags"],
                 "literal_fonte": c["literal_fonte"],
                 "ancora": _ancora(c),
-                "origem": c["origem"],
                 "numeros": numeros.get(c["claim_id"], []),
             }
             for c in conexao.execute(
-                "select claim_id, texto, tipo, tags, literal_fonte, pagina, offset_inicio, offset_fim, origem"
+                "select claim_id, texto, tipo, tags, literal_fonte, pagina, offset_inicio, offset_fim"
                 " from claims where run_id = %s order by claim_id",
                 (run_id,),
             )
@@ -1729,17 +1574,6 @@ class ConsultaSupabase:
                 {"nivel": v["nivel"], "regra": v["regra"], "detalhe": v["detalhe"]}
             )
         return [{"rodada": rodada, "problemas": problemas} for rodada, problemas in rodadas.items()]
-
-    @staticmethod
-    def _quarentena(conexao, run_id: str) -> list[dict]:
-        """Claims em quarentena, em ordem de id, com a decisão humana (nula enquanto não revisado)."""
-        return conexao.execute(
-            "select q.claim_id, q.rodada, q.motivo, q.proposto, d.decisao, d.autor, d.decidido_em"
-            " from claims_quarentena q left join decisoes_quarentena d"
-            " on d.run_id = q.run_id and d.claim_id = q.claim_id where q.run_id = %s order by q.claim_id",
-            (run_id,),
-        ).fetchall()
-
 
 def _ancora(linha: dict) -> dict:
     return {"pagina": linha["pagina"], "offset_inicio": linha["offset_inicio"], "offset_fim": linha["offset_fim"]}
