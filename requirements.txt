@@ -1,14 +1,17 @@
-langgraph
-pydantic>=2
-pyyaml
-jinja2
-pytest
-psycopg[binary]
-supabase
-python-dotenv
-httpx
-pymupdf
-google-genai
-fastapi
-uvicorn
-pillow
+# Versões exatas (==) dos pacotes diretos, as mesmas com que o projeto foi desenvolvido e testado.
+# Este arquivo existe para garantir a máxima reprodutibilidade: toda instalação deve resolver para as mesmas versões.
+# Dependências transitivas (ex.: storage3, via supabase) ficam a cargo dos pacotes abaixo.
+langgraph==1.2.13
+pydantic==2.13.5
+pyyaml==6.0.3
+jinja2==3.1.6
+pytest==9.1.1
+psycopg[binary]==3.3.6
+supabase==2.32.0
+python-dotenv==1.2.4
+httpx==0.28.1
+pymupdf==1.28.2
+google-genai==2.29.0
+fastapi==0.143.0
+uvicorn==0.54.0
+pillow==12.3.0

@@ -294,6 +294,7 @@ Sobe em `http://127.0.0.1:8000` (somente local; use `--porta N` para outra porta
 - **Snapshot de modelo fixo por nó** em `config/models.yaml`, com o preço usado no custo.
 - **Documentos congelados** com hash conferido no modo `--dev`, mais a anotação manual dos fatos que a E2 deve cobrir (`<fonte>.anotacao.yaml`).
 - **LevelSpec, glossário, prompts e `models.yaml` versionados no git**; o banco guarda só as versões usadas em cada run.
+- **Dependências com versão exata:** o `requirements.txt` fixa cada pacote direto com `==`, para garantir a máxima reprodutibilidade do ambiente.
 - **Métricas M1 a M5 e M7 puras:** mesma peça, mesmo resultado, sem rede.
 
 ### Limites da reprodução
