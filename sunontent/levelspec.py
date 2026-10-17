@@ -4,6 +4,7 @@ O LevelSpec existe só em config/levels/: o prompt e o avaliador leem o mesmo ar
 da E4, o contrato de formato (`peso_papel` e `formatos`), lido pela E4 (o `max_claims` do plano é o do artigo),
 pela E5.1 e pela M2, no Iniciante e no Intermediário, o bloco `analogia` com os marcadores que a M5 procura, em qualquer nível, o bloco
 opcional `legibilidade` (piso do IFL por formato, lido pela M3, e meta de frase do redator), o bloco opcional
+`densidade` (só no Iniciante: teto de termos do glossário por 100 palavras por formato, lido pela M4 e pelo redator), o bloco opcional
 `sinal_ifl` (faixa de IFL do artigo no nível, só um sinal para a matriz de confusão) e, fora do Iniciante, o
 bloco opcional `vocabulario` (o que o redator usa sem explicar e o que explica). As frases do
 prompt do redator e o limite da M2 saem da mesma função, `instrucoes_redator`. Arquivo inválido é
@@ -137,12 +138,27 @@ class IflMinimo(_Fechado):
     roteiro: StrictFloat | StrictInt
 
 
+class TetoDensidade(_Fechado):
+    """Teto da densidade de termos (M4) por formato, em ocorrências por 100 palavras."""
+
+    artigo: StrictFloat | StrictInt = Field(gt=0)
+    carrossel: StrictFloat | StrictInt = Field(gt=0)
+    roteiro: StrictFloat | StrictInt = Field(gt=0)
+
+
 class RegraLegibilidade(_Fechado):
     """Regra da M3 num nível: o piso do IFL por formato e a meta de tamanho de frase que o redator recebe. O nível
     sem o bloco só mede a legibilidade."""
 
     ifl_minimo: IflMinimo
     frase_max_palavras: StrictInt = Field(ge=5)
+
+
+class RegraDensidade(_Fechado):
+    """Regra da M4 no Iniciante: o teto de ocorrências de termos do glossário acima de iniciante por 100 palavras, por
+    formato. O nível sem o bloco só mede a densidade."""
+
+    termos_max_por_100: TetoDensidade
 
 
 class FaixaIfl(_Fechado):
@@ -189,6 +205,7 @@ class LevelSpec(BaseModel):
     analogia: RegraAnalogia | None = None
     legibilidade: RegraLegibilidade | None = None
     sinal_ifl: SinalIfl | None = None
+    densidade: RegraDensidade | None = None
     vocabulario: RegraVocabulario | None = None
 
     @property
@@ -217,6 +234,12 @@ class LevelSpec(BaseModel):
             raise ValueError("o bloco `analogia` é obrigatório no Iniciante")
         if self.nivel == "avancado" and self.analogia is not None:
             raise ValueError("o bloco `analogia` não vale no Avançado, que usa o jargão sem explicar")
+        return self
+
+    @model_validator(mode="after")
+    def _densidade_so_no_iniciante(self) -> "LevelSpec":
+        if self.densidade is not None and self.nivel != "iniciante":
+            raise ValueError("o bloco `densidade` só vale no Iniciante; os outros níveis só medem a densidade")
         return self
 
     @model_validator(mode="after")
@@ -301,7 +324,11 @@ class InstrucoesRedator(_Fechado):
     marcadores: str  # as expressões de analogia ou de explicação do nível, em frase; vazio quando o nível não tem o bloco
     faixa_esperada: str  # o limite renderizado, que a M2 registra no scorecard
     legibilidade: str  # a meta de tamanho de frase do nível, em frase; vazio quando o nível não tem
+    densidade: str  # o teto de termos do glossário por 100 palavras, em frase; vazio quando o nível não tem o bloco
     vocabulario: str  # o que usar sem explicar e o que explicar, em frase; vazio quando o nível não tem o bloco
+
+
+_UNIDADE_DO_FORMATO = {"artigo": "seção", "carrossel": "slide", "roteiro": "cena"}
 
 
 def _numero(valor: float) -> str:
@@ -353,6 +380,15 @@ def instrucoes_redator(spec: LevelSpec, formato: Formato) -> InstrucoesRedator:
             f"Escreva frases de até {spec.legibilidade.frase_max_palavras} palavras e prefira palavras curtas "
             "e comuns: a legibilidade do texto é medida."
         )
+    densidade = ""
+    if spec.densidade is not None:
+        teto = getattr(spec.densidade.termos_max_por_100, formato)
+        densidade = (
+            f"Use poucos termos técnicos: no máximo {_numero(teto)} ocorrências de termos do glossário (Selic, CDI, "
+            "IPCA e semelhantes) a cada 100 palavras, contando todas as vezes que o termo aparece. Depois de explicar "
+            "um termo, prefira palavras simples a repeti-lo. Uma ocorrência por "
+            f"{_UNIDADE_DO_FORMATO[formato]} está sempre dentro do limite."
+        )
     vocabulario = ""
     if spec.vocabulario is not None:
         if spec.vocabulario.explicar_acima_de == NIVEIS[-1]:
@@ -368,5 +404,5 @@ def instrucoes_redator(spec: LevelSpec, formato: Formato) -> InstrucoesRedator:
             )
     return InstrucoesRedator(
         orcamento=orcamento, marcadores=marcadores, faixa_esperada=faixa, legibilidade=legibilidade,
-        vocabulario=vocabulario,
+        densidade=densidade, vocabulario=vocabulario,
     )

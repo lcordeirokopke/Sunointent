@@ -26,7 +26,7 @@ Implementada. A E4 grava o plano e as 9 células em `PENDENTE`; em seguida o gra
 
 ## LevelSpec da E4
 
-A E4 lê de cada `config/levels/<nivel>.yaml` os campos `foco`, `tags_priorizadas`, `tags_descartaveis` e o `max_claims` do artigo. O mesmo arquivo tem o contrato de formato (`peso_papel` e `formatos`), lido pela E5.1, pelo prompt do redator e pela M2, no Iniciante e no Intermediário, o bloco `analogia`, lido pela M5 e pelo prompt do redator, e, no Intermediário e no Avançado, o bloco `vocabulario`, lido só pelo prompt do redator.
+A E4 lê de cada `config/levels/<nivel>.yaml` os campos `foco`, `tags_priorizadas`, `tags_descartaveis` e o `max_claims` do artigo. O mesmo arquivo tem o contrato de formato (`peso_papel` e `formatos`), lido pela E5.1, pelo prompt do redator e pela M2, no Iniciante e no Intermediário, o bloco `analogia`, lido pela M5 e pelo prompt do redator, no Iniciante, o bloco `densidade`, lido pela M4 e pelo prompt do redator, e, no Intermediário e no Avançado, o bloco `vocabulario`, lido só pelo prompt do redator.
 
 | Campo | Iniciante | Intermediário | Avançado |
 |---|---|---|---|
@@ -42,17 +42,19 @@ Nos 3 níveis:
 - carrossel: de 5 a 7 slides, contando o gancho e a conclusão, com no máximo 120 caracteres no gancho, 220 em cada slide de corpo e 160 na conclusão;
 - roteiro: 60 s a 2,5 palavras por segundo (150 palavras), com uma cena de abertura (o gancho) de 6 s, uma cena por claim e uma de fechamento de 6 s;
 - `analogia` (Iniciante e Intermediário): `marcadores`, as expressões que a M5 procura na mesma seção, slide ou cena da primeira ocorrência de um termo com analogia ou explicação no plano. No Iniciante, `["é como", "funciona como", "imagine que", "na prática"]`; no Intermediário, `["ou seja", "isto é", "quer dizer", "em outras palavras"]`;
+- `densidade` (só no Iniciante): `termos_max_por_100`, o teto de ocorrências de termos do glossário acima de iniciante por 100 palavras, por formato (`artigo` 5,5, `carrossel` 6,5 e `roteiro` 6,5). A M4 reprova acima dele, com piso de uma ocorrência por unidade, e o prompt do redator recebe o teto do formato;
 - `vocabulario` (só no Intermediário e no Avançado): `explicar_acima_de`, o nível acima do qual o redator explica o termo do glossário na primeira vez que o usa. No Intermediário é `intermediario` (os termos de nível avançado são explicados); no Avançado é `avancado` (nenhum termo é explicado, e o redator escreve com o jargão técnico sem explicar).
 
 Validação do `sunontent/levelspec.py`, que recusa campo desconhecido e aborta o run com `FalhaTerminal`:
 
 - `analogia` é obrigatória no Iniciante, opcional no Intermediário e proibida no Avançado; `marcadores` não é vazio, não repete expressão e tem expressões de pelo menos duas palavras;
+- `densidade` é opcional e proibido no Intermediário e no Avançado, e o teto é positivo nos 3 formatos;
 - `vocabulario` é opcional e proibido no Iniciante, e `explicar_acima_de` é um nível igual ou acima do nível do arquivo;
 - `formatos.artigo.palavras.min` cresce do Iniciante ao Avançado (350, 450 e 600);
 - `max_claims` é artigo >= carrossel >= roteiro;
 - `carrossel.max_claims` maior que `slides.max - 2` (os slides de corpo possíveis) emite um aviso (`UserWarning`) ao carregar o arquivo e não aborta; os valores atuais (4, 5 e 5 claims, com no máximo 7 slides) não emitem o aviso.
 
-`instrucoes_redator(spec, formato)` devolve um `InstrucoesRedator` com `orcamento` (o contrato do formato em frases, para o prompt do redator), `marcadores` (a frase com as expressões de analogia ou de explicação, vazia no nível sem o bloco `analogia`), `legibilidade` (a meta de tamanho de frase, vazia no nível sem o bloco), `vocabulario` (a regra de vocabulário, vazia no nível sem o bloco) e `faixa_esperada` (o limite renderizado, que a M2 registra). No artigo, a faixa conta as palavras do texto das seções; o título e a linha fina ficam de fora. O prompt e a M2 leem o limite da mesma função.
+`instrucoes_redator(spec, formato)` devolve um `InstrucoesRedator` com `orcamento` (o contrato do formato em frases, para o prompt do redator), `marcadores` (a frase com as expressões de analogia ou de explicação, vazia no nível sem o bloco `analogia`), `legibilidade` (a meta de tamanho de frase, vazia no nível sem o bloco), `densidade` (o teto de termos do formato, vazio no nível sem o bloco), `vocabulario` (a regra de vocabulário, vazia no nível sem o bloco) e `faixa_esperada` (o limite renderizado, que a M2 registra). No artigo, a faixa conta as palavras do texto das seções; o título e a linha fina ficam de fora. O prompt e a M2 leem o limite da mesma função.
 
 Por que esses valores:
 

@@ -58,6 +58,18 @@ def _abortar(
         print(f"o aborto não foi registrado: {falha.mensagem}", file=sys.stderr)
 
 
+def _varrer_orfaos(repositorio: persistencia.Repositorio, raiz_dados: Path) -> None:
+    """Fecha como abortado o run antigo que ficou em_andamento (processo parado ou morto). Uma falha aqui
+    não impede o novo run."""
+    try:
+        abortados = persistencia.abortar_orfaos(repositorio, raiz_dados, comum.agora_utc())
+    except Falha as falha:
+        print(f"varredura de runs em andamento não feita: {falha.mensagem}", file=sys.stderr)
+        return
+    for run_id in abortados:
+        print(f"run {run_id} marcado como abortado: {persistencia.MENSAGEM_ORFAO}")
+
+
 def _com_custo(manifest: RunManifest, cliente_llm: llm.ClienteLLM) -> RunManifest:
     """Manifest com o custo acumulado pelas chamadas de LLM do run, para a cópia local."""
     return manifest.model_copy(
@@ -223,6 +235,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         load_dotenv(RAIZ / ".env")
         repositorio = persistencia.criar_repositorio_supabase(os.environ)
         llm.conferir_credenciais(os.environ)
+        _varrer_orfaos(repositorio, RAIZ / "data")
         # Um cliente por run, para que o custo acumulado seja só daquele run.
         codigos = []
         for fonte in [parametros.fonte] if parametros.fonte else FONTES:

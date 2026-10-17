@@ -91,7 +91,7 @@ Não há suporte a arquivo colocado à mão neste modo: a entrada é sempre o do
 
 Apagar arquivos de `data/sources/` não perde nada: o Supabase guarda todos os documentos e coletas, e a próxima coleta de um documento grava de novo o PDF local que falta.
 
-Se o processo morrer no meio da gravação, a linha do run fica com status `em_andamento` e o que já foi gravado continua válido:
+Se o processo morrer no meio da gravação, a linha do run fica com status `em_andamento` até a varredura de runs parados (`docs/execucao.md`) e o que já foi gravado continua válido:
 
 - Entre o envio ao bucket e a transação: o objeto fica no bucket sem linha em `documentos`. A próxima coleta do mesmo arquivo encontra o objeto ("Asset Already Exists") e o reaproveita.
 - Entre a transação e a cópia local: o Supabase tem o documento e a coleta, e falta a cópia local. A próxima coleta do mesmo arquivo grava o PDF local.
@@ -269,7 +269,7 @@ tests/fixtures/
 | HTTP 404 ou publicação não localizada na página da fonte | Terminal | Aborta o run com mensagem indicando a fonte e a URL. |
 | Conteúdo baixado não corresponde ao formato esperado (ex: página de erro HTML no lugar do documento) | Retriável | A fonte pode devolver uma página de erro temporária com HTTP 200, como o RAD da CVM. O download é repetido com backoff exponencial; esgotadas as tentativas, vira terminal e aborta o run sem enviar nada ao bucket nem gravar em `documentos`, `coletas` ou `data/sources/`. |
 | Documento baixado maior que 50 MiB (52.428.800 bytes) | Terminal | Aborta o run sem enviar nada ao bucket nem gravar em `documentos`, `coletas` ou `data/sources/`, com mensagem indicando a fonte, a URL e o tamanho. |
-| Timeout, erro de conexão ou HTTP 5xx ao gravar no Supabase (bucket ou banco) | Retriável | Retentativa com backoff exponencial; esgotadas as tentativas, vira terminal. Se nem o status do run puder ser gravado, o erro fica só em `data/runs/<run_id>/manifest.json` e a linha do run fica `em_andamento`. |
+| Timeout, erro de conexão ou HTTP 5xx ao gravar no Supabase (bucket ou banco) | Retriável | Retentativa com backoff exponencial; esgotadas as tentativas, vira terminal. Se nem o status do run puder ser gravado, o erro fica só em `data/runs/<run_id>/manifest.json` e a linha do run fica `em_andamento` até a varredura de runs parados (`docs/execucao.md`). |
 | Gravação recusada pelo Supabase: upload recusado pelo bucket (HTTP 4xx que não seja "Asset Already Exists"), violação de constraint ou trigger de imutabilidade no banco | Terminal | Aborta o run com a resposta do Supabase. A transação é desfeita inteira: nenhuma linha em `documentos` nem em `coletas`. Um objeto já enviado ao bucket fica e é reaproveitado na próxima coleta. |
 | Falha ao gravar em `data/sources/` (ex: arquivo aberto em outro programa, disco cheio) | Terminal | Aborta o run com mensagem indicando o arquivo e a causa. O documento e a coleta já estão no Supabase e continuam válidos. Se o arquivo estiver em uso, a mensagem pede para fechá-lo (ex: "feche o arquivo `data/sources/copom/<doc_sha256>.pdf`"). |
 | Modo desenvolvimento sem`<fonte>.pdf` ou `<fonte>.json` em `tests/fixtures/referencia/`         | Terminal   | Para com mensagem clara indicando o arquivo ausente. Sem download como alternativa. |

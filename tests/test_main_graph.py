@@ -4,7 +4,7 @@ import hashlib
 import json
 import re
 import shutil
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -249,6 +249,20 @@ def test_run_concluido_nao_e_sobrescrito_pelo_aborto(raiz, repo):
     manifest = run["manifest"]
     persistencia.abortar_run(repo, raiz / "data", manifest, "terminal", "tarde demais", "adapt")
     assert run["status"] == "concluido" and "erro_classe" not in run
+
+
+def test_varredura_aborta_so_o_run_antigo_em_andamento(raiz, repo):
+    assert rodar(raiz, repo, dev=True) == 0
+    (antigo_id, antigo), = repo.runs.items()
+    antigo.update(status="em_andamento")
+    agora = antigo["manifest"].timestamp + persistencia.IDADE_ORFAO + timedelta(minutes=1)
+    novo = antigo["manifest"].model_copy(update={"run_id": "copom_20990101T000000Z_aaaaaa", "timestamp": agora})
+    repo.criar_run(novo)
+    assert persistencia.abortar_orfaos(repo, raiz / "data", agora) == [antigo_id]
+    assert antigo["status"] == "abortado" and antigo["erro_classe"] == "terminal"
+    assert antigo["erro_mensagem"] == persistencia.MENSAGEM_ORFAO
+    assert manifest_local(raiz)["status"] == "abortado"
+    assert repo.runs[novo.run_id]["status"] == "em_andamento"
 
 
 def test_run_abortado_mantem_a_primeira_mensagem(raiz, repo):

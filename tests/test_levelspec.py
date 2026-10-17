@@ -51,7 +51,7 @@ def test_le_os_valores_da_spec():
         assert (s.formatos.roteiro.abertura_s, s.formatos.roteiro.fechamento_s) == (6, 6)
         caracteres = s.formatos.carrossel.caracteres
         assert (caracteres.gancho, caracteres.corpo, caracteres.conclusao) == (120, 220, 160)
-    assert [s.versao for s in specs.values()] == [6, 6, 6]
+    assert [s.versao for s in specs.values()] == [7, 6, 6]
     assert specs["intermediario"].foco == "o que o fato muda para quem já investe"
     assert specs["avancado"].foco == "análise técnica e institucional"
 
@@ -132,8 +132,8 @@ def test_peso_do_papel_completo_e_positivo(raiz):
 
 
 def test_campo_desconhecido_e_recusado(raiz):
-    reescrever(raiz, "iniciante", densidade={"min": 60})
-    with pytest.raises(FalhaTerminal, match="densidade"):
+    reescrever(raiz, "iniciante", ruido={"min": 60})
+    with pytest.raises(FalhaTerminal, match="ruido"):
         levelspec.carregar(raiz, "iniciante")
 
 
@@ -318,6 +318,40 @@ def test_instrucoes_trazem_a_meta_de_frase_so_no_nivel_que_a_tem():
     assert iniciante.legibilidade.startswith("Escreva frases de até 18 palavras")
     for nivel in ("intermediario", "avancado"):
         assert levelspec.instrucoes_redator(levelspec.carregar(RAIZ, nivel), "artigo").legibilidade == ""
+
+
+# Bloco `densidade` (M4)
+
+
+def test_so_o_iniciante_tem_teto_de_densidade():
+    specs = levelspec.carregar_todos(RAIZ)
+    teto = specs["iniciante"].densidade.termos_max_por_100
+    assert (teto.artigo, teto.carrossel, teto.roteiro) == (5.5, 6.5, 6.5)
+    assert specs["intermediario"].densidade is None and specs["avancado"].densidade is None
+
+
+def test_teto_de_densidade_fora_do_iniciante_e_recusado(raiz):
+    reescrever(raiz, "avancado", densidade={"termos_max_por_100": {"artigo": 5, "carrossel": 5, "roteiro": 5}})
+    with pytest.raises(FalhaTerminal, match="só vale no Iniciante"):
+        levelspec.carregar(raiz, "avancado")
+
+
+def test_teto_de_densidade_pede_os_tres_formatos_e_valor_positivo(raiz):
+    reescrever(raiz, "iniciante", densidade={"termos_max_por_100": {"artigo": 5, "carrossel": 5}})
+    with pytest.raises(FalhaTerminal, match="densidade.termos_max_por_100.roteiro"):
+        levelspec.carregar(raiz, "iniciante")
+    reescrever(raiz, "iniciante", densidade={"termos_max_por_100": {"artigo": 0, "carrossel": 5, "roteiro": 5}})
+    with pytest.raises(FalhaTerminal, match="densidade.termos_max_por_100.artigo"):
+        levelspec.carregar(raiz, "iniciante")
+
+
+def test_instrucoes_trazem_o_teto_de_densidade_do_formato_so_no_iniciante():
+    ini = levelspec.carregar(RAIZ, "iniciante")
+    assert "no máximo 5,5 ocorrências" in levelspec.instrucoes_redator(ini, "artigo").densidade
+    assert "no máximo 6,5 ocorrências" in levelspec.instrucoes_redator(ini, "carrossel").densidade
+    assert "por slide" in levelspec.instrucoes_redator(ini, "carrossel").densidade
+    for nivel in ("intermediario", "avancado"):
+        assert levelspec.instrucoes_redator(levelspec.carregar(RAIZ, nivel), "artigo").densidade == ""
 
 
 # Bloco `vocabulario` (prompt do redator)

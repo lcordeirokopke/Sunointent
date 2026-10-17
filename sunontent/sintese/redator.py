@@ -81,6 +81,7 @@ def montar_prompt(
         foco=spec.foco,
         marcadores=pacote.instrucoes.marcadores,
         legibilidade=pacote.instrucoes.legibilidade,
+        densidade=pacote.instrucoes.densidade,
         vocabulario=pacote.instrucoes.vocabulario,
         orcamento=pacote.instrucoes.orcamento,
         orcamento_abertura=pacote.orcamento_abertura,

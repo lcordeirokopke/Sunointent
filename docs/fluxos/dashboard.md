@@ -32,7 +32,7 @@ Ficam na barra fixa do topo, visível em todas as páginas.
 
 - **Executar run**: `python -m sunontent [fonte]`. O `__main__.py` monta o manifest, registra o run no Supabase e chama `graph.construir_grafo()`. Cada run passa pela E0 (download da publicação mais recente), E1, E2, E3 e E4, depois pelas 9 células em paralelo (E5, E6 e E7, até 3 ao mesmo tempo) e pelo fechamento, e termina com o plano editorial e as 9 células no estado final.
 - **Modo dev**: o mesmo com `--dev`, entrando pelo nó `referencia` com o documento de `tests/fixtures/referencia/`, sem download. A E2, a E4 e a E5 chamam o Gemini nos dois modos.
-- **Parar**: encerra o processo. O run em andamento fica com status `em_andamento` no Supabase, porque o `__main__.py` não chega a registrar o aborto.
+- **Parar**: encerra o processo. O `__main__.py` não chega a registrar o aborto: o run fica `em_andamento` no Supabase até a varredura do início do próximo run (`docs/execucao.md`, Run abortado).
 - **Fonte**: Todas (sem fonte, os três runs em sequência), Copom, CVM ou B3.
 
 ## Leitura do Supabase
@@ -70,7 +70,7 @@ Uma sidebar à esquerda leva às cinco páginas, nesta ordem (no celular ela vir
 - **Resultado**: um run lido do Supabase, escolhido no seletor (abaixo, Resultado).
 - **Fluxo**: os cartões E0 a E7 com estado e duração, o contador de rodadas do loop E2/E3, a miniatura das 9 células nos cartões da E5 à E7 e as arestas do grafo. As subabas mostram o terminal completo ou uma etapa: descrição, estado, duração, os dados do run gravados por ela e as linhas do terminal daquela etapa. O cartão da E3 cobre os nós `validate` e `descarte`: soma as durações, junta as linhas e mostra o estado do último que rodou. Cada etapa com agente mostra só as chamadas de LLM do seu nó: a E2, as do `extractor`; a E4, as do `adapter`. A subaba da E4 mostra as rodadas do plano, se ele tem aviso e o plano gravado (ver Plano editorial abaixo). As subabas da E5, da E6 e da E7 mostram a grade das células (abaixo).
 - **Info. técnicas**: tudo o que um run gravou, de um run por vez (abaixo, Informações técnicas).
-- **Histórico**: os runs da tabela `runs`, do mais recente ao mais antigo, com os claims e os claims descartados na E3; um clique abre o resultado.
+- **Histórico**: os runs da tabela `runs`, do mais recente ao mais antigo, com os claims e os claims descartados na E3 (0 quando não há); no run abortado, claims e descartados ausentes valem 0 e os demais dados ausentes aparecem como "-"; um clique abre o resultado.
 
 ### Telas estreitas
 

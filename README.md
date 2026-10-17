@@ -1,0 +1,313 @@
+# Sunontent
+
+Pipeline de IA que recebe documentos financeiros públicos densos (ata do Copom, fato relevante da CVM, release de resultados da B3) e gera adaptações para **3 níveis de audiência × 3 formatos de mídia**, com um avaliador híbrido (métricas determinísticas e um juiz LLM) que confere se a peça é fiel ao documento e se o nível de sofisticação foi respeitado. Quando uma métrica falha, um loop de correção reescreve a peça com um relatório corretivo.
+
+- **Audiências:** Iniciante (zero jargão sem analogia), Intermediário (vocabulário padrão de mercado, jargão de especialista explicado) e Avançado/Institucional (jargão pleno, foco analítico).
+- **Formatos:** artigo analítico, carrossel (gancho, corpo e conclusão) e roteiro de vídeo curto (até 60 s, com marcação de tempo e gancho visual).
+- **Saída por documento:** 9 células (3 × 3), cada uma com a peça, o scorecard e o estado final.
+
+## Sumário
+
+1. [Arquitetura em uma página](#arquitetura-em-uma-página)
+2. [Metodologia de avaliação](#metodologia-de-avaliação)
+3. [Matriz de confusão de níveis](#matriz-de-confusão-de-níveis)
+4. [Resultados medidos](#resultados-medidos)
+5. [Trade-offs de custo e latência](#trade-offs-de-custo-e-latência)
+6. [Reprodutibilidade](#reprodutibilidade)
+7. [Mapa da documentação](#mapa-da-documentação)
+
+## Arquitetura em uma página
+
+```
+E0 coleta (ou --dev) -> E1 leitura do PDF -> E2 extractor -> E3 validador de âncoras
+                                                 ^______ até 3 rodadas ______|
+                                                              |
+                                           descarte dos claims reprovados
+                                                              |
+                                              E4 plano editorial (3 níveis)
+                                                              |
+                          fan-out: 1 subgrafo por célula, no máximo 3 em paralelo
+                          E5 redator -> E6 avaliação (M1 a M7) -> E7 Router
+                                 ^_____ retry com relatório, até K = 3 ______|
+                                                              |
+                                              fechamento: conta as 9 células
+```
+
+- **Orquestrador:** LangGraph. **Modelos:** `gemini-3.8-flash` no extractor, no planejador e no redator; `openai/gpt-oss-120b` (Groq) no juiz, de família diferente do gerador, para o juiz não avaliar a si mesmo.
+- **Fatos antes de texto:** o extractor produz *claims* ancorados num trecho literal do PDF, e o validador (código, sem LLM) confere âncora, números e datas. O redator só escreve a partir dos claims aprovados, e todo número da peça entra por um marcador do claim (`{{C27.1}}`) que o código troca pelo trecho original (`5,2%`).
+- **Banco:** Supabase (Postgres e Storage) é a fonte da verdade; `data/sources/` e `data/runs/` são cópias locais.
+
+Detalhes em `docs/arquiteturas.md` e `docs/execucao.md`.
+
+## Metodologia de avaliação
+
+A avaliação é o núcleo do projeto. Ela responde duas perguntas: **a peça é fiel ao documento?** e **o nível de sofisticação pedido foi respeitado?** As cinco primeiras métricas e a M7 são determinísticas (rodam sem rede, sem banco e sem LLM); só a M6 chama um modelo.
+
+| Métrica | Nome | Tipo | O que confere | Reprova quando |
+| ------- | ---- | ---- | ------------- | -------------- |
+| M1 | `numeric_fidelity` | determinística | Todo número da peça que não é data vem de um marcador de claim; datas, anos, trimestres e reuniões batem com os claims do plano e o ano do documento | número sem marcador (inclusive alucinado), marcador inválido, data sem lastro |
+| M2 | `text_size` | determinística | Palavras do artigo, caracteres de cada slide e palavras de cada cena dentro do contrato de formato do LevelSpec | unidade fora do limite |
+| M3 | `readability` | determinística | Índice de Facilidade de Leitura de Flesch adaptado ao português (Martins et al., 1996) | IFL abaixo do piso do Iniciante (os outros níveis só medem) |
+| M4 | `term_density` | determinística | Ocorrências de termos do glossário acima de iniciante por 100 palavras | densidade acima do teto do Iniciante (os outros níveis só medem) |
+| M5 | `analogy_rule` | determinística | Todo termo acima do nível tem analogia (Iniciante) ou explicação (Intermediário) no plano e um marcador na mesma unidade da primeira ocorrência | termo sem analogia no plano, ou sem marcador na unidade |
+| M6 | `llm_judge` | juiz LLM | Cada analogia explica corretamente; cada unidade é implicada pelos claims que cita; nível percebido | analogia incorreta, unidade não implicada |
+| M7 | `plan_contract` | determinística | Quantidade de slides, soma das cenas até `duracao_s`, `claim_ids` dentro do plano, cobertura do formato | qualquer checagem falha |
+
+### Princípios
+
+- **Determinístico primeiro, juiz por último.** O juiz só roda depois que M1, M2, M3, M4, M5 e M7 passam, e só pode **reprovar**: não existe caminho em que ele aprove o que uma métrica determinística reprovou.
+- **Falso positivo é o pior defeito.** A M1 confere ano, trimestre e reunião por valor (regra leve) para não reprovar peça correta, ao custo de deixar passar um trimestre trocado quando os dois números aparecem nos claims.
+- **O nível é medido por cinco sinais independentes:** regra de analogia (M5), tamanho por nível (M2), legibilidade (M3), densidade de termos (M4) e nível percebido pelo juiz (M6).
+- **O juiz não sabe o nível pedido.** O prompt do `nivel_percebido` não recebe o nível da célula, para não ser influenciado. Ele examina quatro critérios, nesta ordem: vocabulário, explicação, pressuposto de conhecimento e foco.
+- **Contexto do juiz por BM25, sem embeddings.** Para cada unidade, vão ao juiz o chunk da âncora de cada claim citado, o anterior, o seguinte e os 3 chunks de maior sobreposição lexical.
+- **Toda violação é acionável.** Cada `Violacao` traz o trecho exato, a posição (unidade, campo, intervalo), o esperado, o obtido e uma `instrucao_corretiva` que alimenta o retry.
+- **Falha de infraestrutura nunca vira aprovação.** Falha esgotada do juiz grava o scorecard com veredito `ERRO_INFRA`.
+
+### Calibração do juiz
+
+`tests/fixtures/juiz/calibracao.yaml` tem 20 peças escritas sobre os claims das três referências, cobrindo os 3 níveis e os 3 formatos: 10 fiéis aos claims e 10 com um erro plantado (analogia errada, causa inventada, projeção como fato, número por extenso trocado). `pytest -m judge` julga as 20 com o Groq de verdade e exige acerto de pelo menos 80% em cada grupo (fiéis aprovadas, com erro reprovadas). Custa da ordem de R$ 0,20.
+
+### Refinement loop (E7)
+
+O Router é o único nó que grava estado final de célula. Em cada tentativa ele aplica as regras na ordem e:
+
+1. **Aprova** quando todas as métricas ficam dentro da faixa.
+2. **Devolve à E5** com um relatório corretivo (até 5 violações por métrica, o resto em `restantes`, e o que já passou), se a tentativa não esgotou o `K`.
+3. **Encerra por `nao_convergencia`** a partir da tentativa 2 quando a tentativa não melhora a anterior (mesma contagem de violações ou maior, sem nenhuma métrica que passou a passar).
+4. **Encerra por `k_esgotado`** na 3ª tentativa que ainda reprova (`K = 3`).
+5. **Termina em `ERRO_INFRA`** (com a classe e a mensagem da falha) quando o redator ou o avaliador falha por infraestrutura.
+
+Regra por métrica, fórmulas, instruções corretivas e limites conhecidos: `docs/metricas.md`. Fluxo do Router: `docs/fluxos/avaliacao.md`.
+
+## Matriz de confusão de níveis
+
+São duas matrizes, as duas **só informativas** (nenhuma reprova célula). Ambas leem a última tentativa de cada célula.
+
+1. **Matriz do juiz:** linhas = nível pedido, colunas = `nivel_percebido` pelo juiz (M6), por formato. Só entram células em que o juiz rodou (as determinísticas passaram).
+2. **Matriz estatística:** linhas = nível pedido, colunas = sinal de nível da M3.
+   - **Artigo:** as colunas são os três níveis, pela faixa de IFL em que o artigo cai (`sinal_ifl` do LevelSpec: Iniciante a partir de 45, Intermediário de 27 a 45, Avançado abaixo de 27).
+   - **Carrossel e roteiro:** as colunas são `iniciante` e `acima_de_iniciante`. O limite de caracteres encurta as frases de qualquer nível, então o IFL sozinho confunde frase curta com texto de Iniciante; por isso o sinal exige IFL no piso do Iniciante **e** um marcador de analogia na peça.
+
+Para imprimir as duas a partir do Supabase (só leitura):
+
+```
+python -m sunontent.metrics.matriz_niveis [run_id ...]
+```
+
+Sem `run_id`, usa todos os runs. O dashboard mostra as mesmas matrizes na página Resultado.
+
+## Resultados medidos
+
+Os números abaixo vêm das cópias locais em `data/runs/` dos três runs mais recentes concluídos, um por fonte: Copom (`copom_20261017T153942Z_fac022`), B3 (`b3_20261017T150348Z_435f57`) e CVM (`cvm_20261017T122720Z_920b7c`). São 27 células. São poucas fontes e uma execução de cada: leia como ordem de grandeza, não como estatística robusta.
+
+### Estados finais das 27 células
+
+| Fonte | Aprovadas | Reprovadas | Motivo das reprovadas |
+| ----- | --------- | ---------- | --------------------- |
+| Copom | 7 | 2 | `k_esgotado` (Iniciante/carrossel e Intermediário/roteiro) |
+| B3 | 8 | 1 | `nao_convergencia` (Avançado/roteiro) |
+| CVM | 9 | 0 | |
+| **Total** | **24** | **3** | |
+
+Das 24 aprovadas, 15 passaram na tentativa 1, 8 na tentativa 2 e 1 na tentativa 3, o que mostra o ganho do loop: sem ele, só 15 das 27 células teriam saído aprovadas.
+
+### Matriz do juiz (nível pedido × nível percebido)
+
+Soma dos três runs, das células em que o juiz rodou.
+
+| Artigo | percebido Iniciante | percebido Intermediário | percebido Avançado |
+| ------ | :---: | :---: | :---: |
+| **pedido Iniciante** | 1 | 2 | 0 |
+| **pedido Intermediário** | 0 | 3 | 0 |
+| **pedido Avançado** | 0 | 0 | 3 |
+
+| Carrossel | percebido Iniciante | percebido Intermediário | percebido Avançado |
+| --------- | :---: | :---: | :---: |
+| **pedido Iniciante** | 2 | 1 | 0 |
+| **pedido Intermediário** | 1 | 1 | 1 |
+| **pedido Avançado** | 0 | 0 | 3 |
+
+| Roteiro | percebido Iniciante | percebido Intermediário | percebido Avançado |
+| ------- | :---: | :---: | :---: |
+| **pedido Iniciante** | 2 | 1 | 0 |
+| **pedido Intermediário** | 1 | 1 | 1 |
+| **pedido Avançado** | 0 | 0 | 2 |
+
+Leitura: o Avançado é sempre reconhecido (8 de 8). A confusão se concentra nas fronteiras vizinhas (Iniciante com Intermediário, e o Intermediário para os dois lados); não há nenhum Iniciante lido como Avançado nem o inverso. O Intermediário é o nível mais difícil de fixar, como esperado, por ser o do meio.
+
+### Matriz estatística (nível pedido × sinal da M3)
+
+**Artigo** (as 9 células):
+
+| | sinal Iniciante | sinal Intermediário | sinal Avançado |
+| - | :---: | :---: | :---: |
+| **pedido Iniciante** | 3 | 0 | 0 |
+| **pedido Intermediário** | 0 | 2 | 1 |
+| **pedido Avançado** | 0 | 0 | 3 |
+
+IFL medido: Iniciante 48,8 a 62,6; Intermediário 25,3 a 36,8; Avançado 20,0 a 24,8. O Intermediário da CVM (25,3) caiu abaixo do corte de 27 e foi lido como Avançado, o único erro do artigo. Como o IFL mede o texto e não o assunto, um documento com muito nome próprio e termo longo desloca a escala.
+
+**Carrossel e roteiro** (9 células de cada): o Iniciante caiu em `iniciante` nas 3 fontes, e o Intermediário e o Avançado em `acima_de_iniciante` nas 3, ou seja, 100% de acerto nos dois formatos. O sinal só separa o Iniciante dos demais, por construção.
+
+## Trade-offs de custo e latência
+
+Custos em BRL, com a cotação provisória de R$ 5,40 por US$ (`config/models.yaml`). Preço por milhão de tokens: `gemini-3.8-flash` US$ 0,75 de entrada e US$ 3,75 de saída (promocional até 2026-12-31); juiz `openai/gpt-oss-120b` US$ 0,15 e US$ 0,60. Tokens de raciocínio contam como saída.
+
+### Custo por run e por etapa
+
+| Etapa | Copom | B3 | CVM |
+| ----- | ----: | -: | --: |
+| Extractor (E2) | R$ 0,17 | R$ 0,52 | R$ 0,27 |
+| Planejador (E4) | R$ 0,16 | R$ 0,22 | R$ 0,09 |
+| Redator (E5) | R$ 1,39 | R$ 1,39 | R$ 0,85 |
+| Juiz (M6) | R$ 0,18 | R$ 0,16 | R$ 0,09 |
+| **Total do run** | **R$ 1,90** | **R$ 2,28** | **R$ 1,31** |
+| Tokens totais | 231.789 | 308.842 | 135.711 |
+
+Um run completo (9 células) custa entre R$ 1,3 e R$ 2,3, ou cerca de R$ 0,15 a R$ 0,25 por peça.
+
+### Onde está o trade-off
+
+- **O redator domina o custo (cerca de 61% a 73%).** Cada retry reescreve a peça inteira, e o raciocínio conta como saída, o token mais caro. Por isso a correção do redator usa raciocínio `low` (`synthesizer_correcao`), assim como a correção do extractor e do planejador: corrigir com um relatório é tarefa menor que gerar do zero.
+- **O loop troca custo por fidelidade.** Na B3, 5 das 9 células passaram só na tentativa 2. Cada tentativa extra repete a chamada do redator (e, se as determinísticas passam, a do juiz). A parada por não convergência evita gastar a 3ª tentativa quando a 2ª não melhorou.
+- **O juiz é barato, mas o contexto é caro.** Custa menos de 10% do run, mas a entrada dele é grande (claims, trechos do documento por BM25, unidades): 42 mil a 125 mil tokens de entrada por run contra 14 mil a 26 mil do redator. A recuperação por BM25 simples, sem embeddings, mantém esse contexto pequeno e sem custo de indexação.
+- **Juiz só depois das determinísticas.** Ele roda uma vez por tentativa e só quando as 6 verificações passam, então a tentativa que já falhou por número, tamanho ou analogia não paga a chamada.
+- **Concorrência limitada a 3 células** (`MAX_CONCORRENCIA`) para ficar dentro dos limites de requisições por minuto das APIs, ao custo de latência.
+- **Chave de reserva do Gemini:** a `GOOGLE_API_KEY_SEC` só é chamada quando a principal falha por infraestrutura ou chave recusada, trocando disponibilidade por um pouco de latência na falha.
+
+### Latência
+
+A soma das durações das chamadas de LLM por run (chamadas que rodam em paralelo entre as células, então o relógio real é menor que a soma do redator):
+
+| Etapa | Copom | B3 | CVM |
+| ----- | ----: | -: | --: |
+| Extractor | 38 s | 109 s | 82 s |
+| Planejador | 47 s | 50 s | 28 s |
+| Redator | 412 s | 387 s | 255 s |
+| Juiz | 84 s | 55 s | 43 s |
+
+- A extração e o plano são sequenciais e somam 1 a 3 minutos. Depois deles, as 9 células rodam 3 a 3.
+- O tempo de relógio de um run não é registrado no manifest; ele depende da fila de concorrência e das esperas de backoff. Nos testes de cobertura com a Gemini API de verdade, a extração e o plano das 3 fontes levaram de 15 a 20 minutos no total.
+- O número de chamadas inclui as que falharam: o run do Copom registra spans de redator com HTTP 429 (cota da camada gratuita da Gemini API), que não consomem tokens mas somam latência de retentativa. Com uma conta com cota, a latência cai.
+
+## Reprodutibilidade
+
+### Pré-requisitos
+
+- Python 3.12 (versão em que o projeto foi desenvolvido) e pip.
+- Node.js (para o `npx supabase`) e Docker em execução (o Supabase local sobe em contêineres).
+- Para rodar o pipeline com LLM de verdade: uma chave da Gemini API (Google AI Studio) e uma chave do Groq. Os testes de rotina **não** precisam de nenhuma chave.
+
+### 1. Instalar
+
+```
+git clone <url-do-repositório>
+cd <pasta-do-repositório>
+python -m venv .venv
+.venv\Scripts\activate          # Windows; no Linux/macOS: source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+O código roda sempre a partir da raiz do repositório.
+
+### 2. Rodar a suíte de testes (sem chaves, sem rede)
+
+```
+pytest
+```
+
+Quase tudo é simulado (HTTP, Supabase em memória, LLM simulado, disco em `tmp_path`), e uma trava no `conftest.py` aborta o pytest se `SUPABASE_URL` ou `SUPABASE_DB_URL` apontarem para um host que não seja `localhost`, `127.0.0.1` ou `::1`. Os testes de integração com o Supabase local têm o marker `supabase`; os que gastam tokens têm os markers `gemini` e `judge` e ficam pulados, a menos que o `-m` os peça:
+
+```
+pytest -m supabase     # integração com o Supabase local (passo 3)
+pytest -m gemini -s    # cobertura da extração com a Gemini API de verdade (gasta tokens)
+pytest -m judge -s     # calibração do juiz com o Groq de verdade (cerca de R$ 0,20)
+```
+
+O que cada teste cobre: `docs/testes.md`.
+
+### 3. Subir o Supabase local
+
+```
+npx supabase start
+npx supabase db reset
+```
+
+`db reset` aplica as migrations de `supabase/migrations/` e o `seed.sql`, e apaga os dados da cópia local. As portas padrão são 54321 (API) e 54322 (Postgres).
+
+### 4. Configurar o `.env`
+
+Copie `.env.example` para `.env` (o arquivo fica fora do git) e preencha. Para o Supabase local:
+
+```
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_SERVICE_ROLE_KEY=<service_role key impressa pelo supabase start>
+SUPABASE_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
+GOOGLE_API_KEY_PRINC=<chave da Gemini API>
+GOOGLE_API_KEY_SEC=             # opcional: reserva
+GROQ_API_KEY=<chave do Groq>
+```
+
+`npx supabase status` reimprime as chaves locais. A `GOOGLE_API_KEY_PRINC` e a `GROQ_API_KEY` são obrigatórias para um run; sem elas o `__main__` recusa o início antes de criar o run.
+
+### 5. Rodar o pipeline
+
+Modo `--dev`, que usa os documentos congelados de `tests/fixtures/referencia/` (Copom ata 281, fato relevante conjunto Sabesp e EMAE da CVM, release 2T26 da B3) em vez de baixar da internet. É o caminho reprodutível, porque o `doc_sha256` do PDF é conferido contra o `.json` de referência:
+
+```
+python -m sunontent copom --dev
+python -m sunontent cvm --dev
+python -m sunontent b3 --dev
+```
+
+Sem a fonte, `python -m sunontent --dev` roda as três. Sem `--dev`, a E0 baixa a publicação mais recente de cada fonte (ata do Copom, fato relevante da CVM, release da B3).
+
+Cada run grava no Supabase e em `data/runs/<run_id>/`: `manifest.json`, o FactSheet, o plano, e por célula a peça (`peca_N.json`), o scorecard (`scorecard_N.json`) e o `estado.json`. O código de saída é 1 se alguma célula terminar em `ERRO_INFRA`; célula `REPROVADA` não muda o código.
+
+### 6. Reproduzir as matrizes de confusão e o custo
+
+```
+python -m sunontent.metrics.matriz_niveis                 # todos os runs
+python -m sunontent.metrics.matriz_niveis <run_id> ...    # runs específicos
+```
+
+O custo e os tokens de cada chamada ficam em `data/runs/<run_id>/spans/` e o total em `manifest.json` (`custo_total_tokens`, `custo_total_brl`).
+
+### 7. Dashboard de comparação e auditoria
+
+```
+python -m app
+```
+
+Sobe em `http://127.0.0.1:8000` (somente local; use `--porta N` para outra porta). Permite iniciar o pipeline, acompanhar as etapas ao vivo, abrir os runs, ver a matriz 3×3 de células com scorecard, violações por posição, rastreabilidade claim a trecho do PDF, plano do nível, as matrizes de confusão e o carrossel em SVG (baixável em SVG ou PNG). O dashboard só lê o Supabase e nunca grava no banco. Detalhes em `docs/fluxos/dashboard.md`.
+
+### O que fixa a reprodutibilidade
+
+- **Manifest por run:** `manifest.json` registra o modelo de cada nó, a versão de cada prompt, a versão de cada LevelSpec e do glossário, `K`, `max_concorrencia` e o SHA-256 de cada arquivo de `config/` e `prompts/`. Dois runs com o mesmo manifest usaram exatamente as mesmas regras.
+- **Snapshot de modelo fixo por nó** em `config/models.yaml`, com o preço usado no custo.
+- **Documentos congelados** com hash conferido no modo `--dev`, mais a anotação manual dos fatos que a E2 deve cobrir (`<fonte>.anotacao.yaml`).
+- **LevelSpec, glossário, prompts e `models.yaml` versionados no git**; o banco guarda só as versões usadas em cada run.
+- **Métricas M1 a M5 e M7 puras:** mesma peça, mesmo resultado, sem rede.
+
+### Limites da reprodução
+
+- A saída do LLM varia entre execuções. Dois runs `--dev` do mesmo documento geram claims, planos e peças ligeiramente diferentes (os custos e estados das 18 células medidas acima mostram essa variação). O que é reprodutível é o **critério de avaliação**, não o texto gerado; por isso o relatório usa a matriz de confusão e as contagens de estado, e não a comparação de textos.
+- A cotação (R$ 5,40 por US$) e o preço promocional do Gemini são valores de consulta, e o custo em BRL muda quando eles mudam.
+- Os testes não confirmam que os sites reais do BCB, da CVM e da B3 mantêm o formato esperado; isso só se verifica rodando `python -m sunontent <fonte>` sem `--dev`.
+
+## Mapa da documentação
+
+| Arquivo | Conteúdo |
+| ------- | -------- |
+| `docs/arquiteturas.md` | Arquitetura, etapas E0 a E7 e o refinement loop |
+| `docs/execucao.md` | Ciclo de vida do run, manifest, concluído e abortado |
+| `docs/metricas.md` | M1 a M7: regra, valor, faixa, detalhes e instrução corretiva |
+| `docs/glossario.md` | `config/glossario.yaml`: termos, níveis e analogias |
+| `docs/testes.md` | O que cada teste cobre e como rodar |
+| `docs/fluxos/ingestao.md` | E0 e modo `--dev` |
+| `docs/fluxos/leitura.md` | E1: PDF, chunks, metadados e tabela de números |
+| `docs/fluxos/extracao.md` | E2 e E3: extractor, ancoragem, validação, cliente LLM e Groq |
+| `docs/fluxos/plano-editorial.md` | E4: LevelSpec, glossário e plano |
+| `docs/fluxos/sintese.md` | E5: pacote, redator e montagem |
+| `docs/fluxos/avaliacao.md` | E6 e E7: scorecard, Router e relatório corretivo |
+| `docs/fluxos/dashboard.md` | Dashboard: páginas, API e slide em SVG |

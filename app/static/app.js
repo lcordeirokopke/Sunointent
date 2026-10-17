@@ -605,12 +605,17 @@ function cartaoValidacoes(validacoes, factsheet) {
     <div class="rodadas">${rodadas}</div></div>`;
 }
 
+// O texto do PDF vem com a quebra de linha da página: no cartão ele corre como um parágrafo só.
+function juntarLinhas(texto) {
+  return String(texto ?? "").replace(/\s+/g, " ").trim();
+}
+
 function cartaoClaims(factsheet) {
   if (!factsheet?.claims?.length) return "";
   const linhas = factsheet.claims.map((c) => `
     <tr>
       <td class="num">${esc(c.id)}</td>
-      <td>${esc(c.texto)}<div class="literal">${esc(c.literal_fonte)}</div></td>
+      <td><div class="claim-texto">${esc(juntarLinhas(c.texto))}</div><div class="literal"><span class="literal-rotulo">Trecho da fonte</span>${esc(juntarLinhas(c.literal_fonte))}</div></td>
       <td>${selo("normal", c.tipo)}<div class="etiquetas" style="margin-top:4px">${(c.tags ?? []).map((t) => selo("", t)).join("")}</div></td>
       <td class="num">${(c.numeros ?? []).map((n) => esc(n.bruto)).join("<br>")}</td>
       <td class="num">p. ${esc(c.ancora?.pagina)}</td>
@@ -716,19 +721,24 @@ function renderHistorico() {
     alvo.innerHTML = `<div class="vazio">Nenhum run no Supabase.</div>`;
     return;
   }
-  const linhas = estado.historico.map((r) => `
+  // Run abortado: claims e descartados ausentes valem 0 e qualquer outro dado ausente vira "-".
+  const linhas = estado.historico.map((r) => {
+    const abortado = r.status === "abortado";
+    const ausente = (texto) => (abortado && !texto ? "-" : texto);
+    return `
     <tr class="clicavel" data-run="${esc(r.run_id)}" title="Abrir o resultado">
       <td class="num">${esc(r.run_id)}</td>
-      <td class="num">${esc(fmtData(r.timestamp))}</td>
-      <td>${esc(r.fonte)}</td>
-      <td>${selo(r.modo, r.modo)}</td>
+      <td class="num">${esc(ausente(fmtData(r.timestamp)))}</td>
+      <td>${esc(ausente(r.fonte))}</td>
+      <td>${selo(r.modo, ausente(r.modo))}</td>
       <td>${selo(r.status, ROTULO_ESTADO[r.status] ?? r.status)}</td>
-      <td class="num">${esc(r.doc_id ?? "")}</td>
-      <td class="num">${fmtInt(r.claims)}</td>
-      <td class="num">${fmtInt(r.descartados)}</td>
-      <td class="num">${fmtInt(r.custo_total_tokens)}</td>
-      <td class="num">${fmtBRL(r.custo_total_brl)}</td>
-    </tr>`).join("");
+      <td class="num">${esc(ausente(r.doc_id ?? ""))}</td>
+      <td class="num">${fmtInt(r.claims ?? (abortado ? 0 : null))}</td>
+      <td class="num">${fmtInt(r.descartados ?? 0)}</td>
+      <td class="num">${ausente(fmtInt(r.custo_total_tokens))}</td>
+      <td class="num">${ausente(fmtBRL(r.custo_total_brl))}</td>
+    </tr>`;
+  }).join("");
   alvo.innerHTML = `<div class="cartao"><div class="tabela-rolagem"><table>
     <thead><tr><th>Run</th><th>Início</th><th>Fonte</th><th>Modo</th><th>Status</th><th>Documento</th><th>Claims</th><th>Claims descartados na E3</th><th>Tokens</th><th>Custo</th></tr></thead>
     <tbody>${linhas}</tbody></table></div></div>`;

@@ -464,8 +464,10 @@ td.num { font-family: var(--mono); white-space: nowrap; }
   border-left: 2px solid var(--borda-forte);
   color: var(--texto-suave);
   font-size: 12px;
-  white-space: pre-wrap;
+  line-height: 1.5;
 }
+.literal-rotulo { display: block; margin-bottom: 2px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+.claim-texto { line-height: 1.5; }
 .etiquetas { display: flex; flex-wrap: wrap; gap: 4px; }
 
 .barra-resultado { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; justify-content: space-between; }
@@ -589,6 +591,9 @@ details.descartes .tabela-rolagem { margin-top: 8px; }
 .grade-celulas td { min-width: 130px; }
 .grade-celulas td .final { display: block; margin-top: 4px; }
 
+/* Espaço entre as matrizes de confusão de níveis */
+.matriz-confusao { margin-top: 24px; }
+
 /* Matriz 3x3 */
 .matriz-grade { width: 100%; border-collapse: separate; border-spacing: 8px; table-layout: fixed; }
 .matriz-grade th { color: #475569; font-weight: 700; text-align: left; padding: 4px 8px; background: none; border-bottom: 0; }
@@ -607,6 +612,7 @@ details.descartes .tabela-rolagem { margin-top: 8px; }
 .metrica-chip.reprovou::before { content: "✕ "; }
 .metrica-chip.ausente { background: var(--superficie); color: var(--texto-fraco); border: 1px solid var(--borda); }
 .barra-tentativas { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+.btn-tentativa[aria-pressed="true"], .btn-tentativa[aria-pressed="true"]:not(:disabled):hover { background: rgba(225, 25, 39, 0.1); border-color: var(--marca); color: var(--marca); }
 .peca-unidade { border-top: 1px solid var(--borda); padding: 10px 0; }
 .peca-unidade .rotulo-unidade { color: var(--texto-suave); font-size: 12px; margin-bottom: 4px; }
 .peca-texto { white-space: pre-wrap; line-height: 1.6; }
@@ -683,6 +689,7 @@ details.descartes .tabela-rolagem { margin-top: 8px; }
   font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
   padding: 2px 8px; border-radius: 999px; background: var(--marca); color: #fff;
 }
+.nota-texto { flex: 1 1 24em; min-width: 0; }
 .resultado { font-size: 16px; }
 .resultado .cartao h2 { font-size: 20px; }
 .resultado .cartao h3 { font-size: 15px; }

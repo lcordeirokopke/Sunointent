@@ -262,6 +262,7 @@ def test_prompt_traz_marcadores_orcamento_tese_analogias_e_expressoes():
     assert "o ano do documento (2026)" in prompt
     assert "de 350 a 550 palavras no texto das seções" in prompt
     assert "Escreva frases de até 18 palavras e prefira palavras curtas e comuns" in prompt
+    assert "no máximo 5,5 ocorrências de termos do glossário" in prompt
     assert "Correção" not in prompt
     assert "{%" not in prompt and "{#" not in prompt
 
@@ -269,7 +270,7 @@ def test_prompt_traz_marcadores_orcamento_tese_analogias_e_expressoes():
 def test_prompt_fora_do_iniciante_nao_tem_analogia_e_roteiro_tem_abertura():
     prompt = redator.montar_prompt(RAIZ, pacote_de("avancado", "roteiro"), SPECS["avancado"])
     assert "analogias do plano" not in prompt and "é como" not in prompt
-    assert "frases de até" not in prompt
+    assert "frases de até" not in prompt and "ocorrências de termos do glossário" not in prompt
     assert "Abertura: 6 s" in prompt
     assert "Ciclo de cortes." in prompt
 

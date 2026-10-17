@@ -4,7 +4,7 @@ Funções da E0 e do run (docs/fluxos/ingestao.md, docs/arquiteturas.md):
 - envio do PDF ao bucket `documentos`, sem upsert;
 - transação de `documentos`, `coletas` e vínculo em `runs`, com releitura de `runs.coleta_id`;
 - registro do documento de referência do modo --dev, sem coleta;
-- criação e fechamento da linha de `runs`, e o manifest.json local;
+- criação e fechamento da linha de `runs`, a varredura que aborta o run parado em_andamento, e o manifest.json local;
 - saída da E1: metadados (documentos_processados), páginas, chunks e números numa transação, e
   data/runs/<run_id>/documento.json;
 - spans de LLM, com o custo somado em runs na mesma instrução, e data/runs/<run_id>/spans/;
@@ -30,7 +30,7 @@ import json
 import os
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Mapping, Protocol, Sequence
 
@@ -55,6 +55,9 @@ from sunontent.schemas import (
 )
 
 BUCKET_DOCUMENTOS = "documentos"
+# Run em_andamento há mais que isso é tratado como morto pela varredura do início do run.
+IDADE_ORFAO = timedelta(hours=1)
+MENSAGEM_ORFAO = "processo encerrado sem registrar o fim"
 
 
 @dataclass(frozen=True)
@@ -196,6 +199,11 @@ class Repositorio(Protocol):
 
         Não toca nos campos de documento. Run já concluído ou abortado fica como está.
         """
+        ...
+
+    def abortar_orfaos(self, iniciados_antes_de: datetime, erro_mensagem: str) -> list[str]:
+        """Todo run em_andamento com `timestamp` anterior ao limite vira abortado (terminal, sem etapa) com a
+        mensagem. Devolve os run_ids alterados."""
         ...
 
 
@@ -505,6 +513,25 @@ def abortar_run(
         status = "em_andamento"
         texto = f"{mensagem} (status não gravado no Supabase: {falha.mensagem})"
     gravar_manifest_local(raiz_dados, manifest, status, classe, texto, etapa)
+
+
+def abortar_orfaos(
+    repositorio: Repositorio, raiz_dados: Path, agora: datetime, idade: timedelta = IDADE_ORFAO
+) -> list[str]:
+    """Marca como abortado o run que segue em_andamento há mais que `idade`: o processo foi parado ou morreu
+    sem registrar o fim. Atualiza também o manifest.json local, se existir. Devolve os run_ids alterados."""
+    antes_de = agora - idade
+    abortados = com_retentativa(
+        lambda: repositorio.abortar_orfaos(antes_de, MENSAGEM_ORFAO), "varredura de runs em andamento"
+    )
+    for run_id in abortados:
+        destino = Path(raiz_dados) / "runs" / run_id / "manifest.json"
+        if not destino.exists():
+            continue
+        conteudo = json.loads(destino.read_text(encoding="utf-8"))
+        conteudo.update(status="abortado", erro_classe="terminal", erro_mensagem=MENSAGEM_ORFAO, etapa_erro=None)
+        _gravar_atomico(destino, (json.dumps(conteudo, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+    return abortados
 
 
 def gravar_manifest_local(
@@ -1234,6 +1261,17 @@ class RepositorioSupabase:
 
         self._executar(atualizacao)
 
+    def abortar_orfaos(self, iniciados_antes_de: datetime, erro_mensagem: str) -> list[str]:
+        def atualizacao(conexao):
+            linhas = conexao.execute(
+                "update runs set status = 'abortado', erro_classe = 'terminal', erro_mensagem = %s, etapa_erro = null"
+                " where status = 'em_andamento' and \"timestamp\" < %s returning run_id",
+                (erro_mensagem, iniciados_antes_de),
+            ).fetchall()
+            return [linha[0] for linha in linhas]
+
+        return self._executar(atualizacao)
+
     def verificar_conexao(self) -> None:
         """Confere, sem retentativa, que o banco aceita a conexão."""
         self._executar(lambda conexao: conexao.execute("select 1"))
@@ -1287,7 +1325,8 @@ class ConsultaSupabase:
                 'select r.run_id, r."timestamp", r.modo, r.fonte, r.status, r.doc_id, r.custo_total_tokens,'
                 " r.custo_total_brl, r.erro_classe, r.erro_mensagem, r.etapa_erro,"
                 " nullif((select count(*) from claims c where c.run_id = r.run_id), 0) as claims,"
-                f" nullif({_DESCARTADOS}, 0) as descartados"
+                " case when exists (select 1 from claims c where c.run_id = r.run_id)"
+                f" then {_DESCARTADOS} end as descartados"
                 ' from runs r order by r."timestamp" desc, r.run_id limit %s',
                 (rodadas_extracao, limite),
             ).fetchall()

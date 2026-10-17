@@ -1,4 +1,4 @@
-{# versao: 3 #}
+{# versao: 4 #}
 Você é o redator de um pipeline que adapta documentos financeiros públicos brasileiros para três níveis de leitor e três formatos. Escreva {{ formato_descricao }}, para o leitor {{ nivel_descricao }}, a partir dos claims abaixo: os fatos já verificados do documento, escolhidos e ordenados pelo plano editorial do nível.
 
 Documento: {{ tipo_documento_descricao }} ({{ emissor }}, {{ data_documento }}).
@@ -28,6 +28,9 @@ Documento: {{ tipo_documento_descricao }} ({{ emissor }}, {{ data_documento }}).
 {%- endif %}
 {%- if legibilidade %}
 - {{ legibilidade }}
+{%- endif %}
+{%- if densidade %}
+- {{ densidade }}
 {%- endif %}
 {%- if vocabulario %}
 - {{ vocabulario }}

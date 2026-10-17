@@ -1,7 +1,7 @@
 """E6. Hybrid Evaluator de uma célula: chama metrics/ e grava o scorecard da tentativa.
 
 As 6 verificações determinísticas rodam sempre, todas: M1 (`numeric_fidelity`), M2 (`text_size`), M3
-(`readability`), M4 (`term_density`, só mede), M5 (`analogy_rule`) e o M7 (`plan_contract`) que a montagem da E5.3 deixou
+(`readability`), M4 (`term_density`, reprova só o Iniciante), M5 (`analogy_rule`) e o M7 (`plan_contract`) que a montagem da E5.3 deixou
 na célula. O juiz (M6) só roda se as 6 passarem e se config["configurable"] traz um `juiz`; sem ele, o scorecard
 tem as 6. Os claims do plano do nível e a
 `tabela_numeros` vêm do FactSheet assinado; os chunks do juiz, do documento processado da E1. O veredito é da
@@ -55,7 +55,7 @@ def evaluate(state: CelulaGrafoState, config) -> dict:
             numeric_fidelity.avaliar(peca, claims_do_plano, factsheet.tabela_numeros, factsheet.data_documento, glossario),
             text_size.avaliar(peca, spec),
             readability.avaliar(peca, spec, specs["iniciante"], specs),
-            term_density.avaliar(peca, glossario),
+            term_density.avaliar(peca, glossario, spec),
             analogy_rule.avaliar(peca, spec, plano_nivel, glossario),
             contrato,
         ]

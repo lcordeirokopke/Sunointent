@@ -6,7 +6,7 @@ Este documento descreve como um run começa, como o grafo é montado e executado
 
 | Peça | Papel |
 | ---- | ----- |
-| `sunontent/__main__.py` | Ponto de entrada (`python -m sunontent [fonte] [--dev]`). Lê o `.env`, confere as credenciais do Supabase, do Gemini e do Groq, gera o `run_id`, monta o manifest, registra o run, executa o grafo escrevendo as linhas de etapa no terminal e fecha o run como `concluido` ou `abortado`, com o custo do run. |
+| `sunontent/__main__.py` | Ponto de entrada (`python -m sunontent [fonte] [--dev]`). Lê o `.env`, confere as credenciais do Supabase, do Gemini e do Groq, gera o `run_id`, monta o manifest, registra o run, executa o grafo escrevendo as linhas de etapa no terminal e fecha o run como `concluido` ou `abortado`, com o custo do run, e antes do primeiro run fecha como `abortado` os runs parados em `em_andamento`. |
 | `sunontent/graph.py` | Monta o grafo LangGraph: as duas entradas (E0 ou referência), a E1, a E2, a E3, o loop E2/E3, o descarte, a E4, o fan-out das 9 células (subgrafo E5, E6 e E7 com o refinement loop) e o fechamento, as constantes `K`, `RODADAS_EXTRACAO`, `RODADAS_PLANO` e `MAX_CONCORRENCIA`, `config_execucao()`, `construir_grafo()` e `construir_grafo_celula()`. A ordem das etapas, o fan-out e o retry ficam só aqui. |
 | `sunontent/manifesto.py` | Lê `config/` e `prompts/` e devolve o `RunManifest` sem os campos do documento. |
 | `sunontent/schemas.py` | `RunManifest`, `PipelineState`, `CelulaGrafoState` e os tipos `Nivel`, `Fonte` e `Modo`. |
@@ -157,9 +157,13 @@ As constraints de `runs` são respeitadas: `status = 'abortado'` se, e somente s
 | `Falha` (retriável esgotada ou terminal) no grafo | Run `abortado` com `falha.classe`, `falha.mensagem` e a etapa do erro. |
 | Exceção que não é `Falha` (bug) | Run `abortado` como `terminal`, mensagem `NomeDoTipo: texto`, com a etapa do erro, e a exceção sobe com o traceback. |
 | Run já `concluido` ou `abortado` | O update não altera nada: o primeiro estado final é mantido. |
-| Supabase inacessível no update (retentativas esgotadas) | O erro fica só no `manifest.json`, com `status` `em_andamento`, `erro_classe`, `erro_mensagem` (a mensagem original mais a nota `status não gravado no Supabase`) e `etapa_erro`. A linha de `runs` segue `em_andamento`. A falha de gravação não é levantada e não esconde o erro original. |
+| Supabase inacessível no update (retentativas esgotadas) | O erro fica só no `manifest.json`, com `status` `em_andamento`, `erro_classe`, `erro_mensagem` (a mensagem original mais a nota `status não gravado no Supabase`) e `etapa_erro`. A linha de `runs` segue `em_andamento` até a varredura de runs parados (abaixo). A falha de gravação não é levantada e não esconde o erro original. |
 | Falha antes de existir o run (credencial, conexão ou config) | Mensagem na tela e código 1. Nenhuma linha em `runs` e nenhuma chamada a `abortar_run`. |
-| Falha ao gravar o fechamento de um run concluído | Mensagem na tela e código 1. A linha segue `em_andamento` e o `manifest.json` mantém o status gravado no início. |
+| Falha ao gravar o fechamento de um run concluído | Mensagem na tela e código 1. A linha segue `em_andamento` e o `manifest.json` mantém o status gravado no início; a varredura de runs parados a fecha como `abortado` depois de `IDADE_ORFAO`. |
+
+### Varredura de runs parados
+
+Run parado pelo usuário, processo morto ou aborto que não chegou ao Supabase deixa a linha `em_andamento`. No início do `main()`, depois de conferir as credenciais e antes de criar o primeiro run, `persistencia.abortar_orfaos` marca como `abortado` todo run `em_andamento` com `timestamp` anterior a `IDADE_ORFAO` (1 hora), com `erro_classe` `terminal`, `erro_mensagem` `processo encerrado sem registrar o fim` e `etapa_erro` nula, e atualiza o `manifest.json` local desses runs. O terminal escreve uma linha por run alterado. Se a varredura falhar, a mensagem vai ao stderr e o novo run segue.
 
 A classificação dos erros da E0 e do `--dev` está em `docs/fluxos/ingestao.md`, seção "Classificação de erros".
 

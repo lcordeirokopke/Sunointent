@@ -614,6 +614,10 @@ class TermDensityDetalhes(BaseModel):
     ocorrencias_avancado: int = Field(ge=0)  # as que são de termo com `nivel_minimo` avancado
     densidade_avancado: float = Field(ge=0)  # por 100 palavras
     termos: list[TermoContado]
+    # Teto do nível (M4 no Iniciante): None quando o nível só mede. `ocorrencias_maximas` é o teto em ocorrências para
+    # o tamanho da peça, com o piso de uma por unidade.
+    densidade_maxima: float | None = None
+    ocorrencias_maximas: int | None = Field(default=None, ge=0)
 
 
 class TermoAnalogia(BaseModel):

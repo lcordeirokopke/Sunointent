@@ -401,7 +401,7 @@ def test_dashboard_mostra_os_descartados_sem_revisao(cliente):
     assert set(re.findall(r'data-aba="(\w+)"', pagina)) == {"inicio", "resultado", "fluxo", "tecnicas", "historico"}
     assert 'metrica("Claims descartados na E3", fmtInt(d.descartados))' in http.get("/static/resultado.js").text
     app_js = http.get("/static/app.js").text
-    assert "fmtInt(ultimo.descartados)" in app_js and "fmtInt(r.descartados)" in app_js
+    assert "fmtInt(ultimo.descartados)" in app_js and "fmtInt(r.descartados ?? 0)" in app_js and 'ausente(r.doc_id ?? "")' in app_js
     assert 'id: "E3", nos: ["validate", "descarte"]' in app_js
     assert 'const ABAS = ["inicio", "resultado", "fluxo", "tecnicas", "historico"];' in app_js
     # As únicas rotas que mudam algo são as que iniciam e param o pipeline; nenhuma grava no banco.

@@ -69,6 +69,8 @@ function htmlBalanco(b) {
     porFonte[l.fonte] = (porFonte[l.fonte] ?? 0) + Number(l.total);
   }
   const brl = soma(b.runs, "brl");
+  const runsSemAbortados = b.runs.filter((l) => l.status !== "abortado");
+  const totalSemAbortados = soma(runsSemAbortados, "total");
   const celulas = Object.fromEntries(b.celulas.map((c) => [c.estado, c]));
   const totalCelulas = soma(b.celulas, "total");
   const comTentativa = b.celulas.filter((c) => ["APROVADA", "REPROVADA"].includes(c.estado));
@@ -87,7 +89,7 @@ function htmlBalanco(b) {
         ${metrica("Runs", fmtInt(totalRuns))}
         ${metrica("Tokens", fmtInt(soma(b.runs, "tokens")))}
         ${metrica("Custo total", fmtBRL(brl))}
-        ${metrica("Custo médio por run", totalRuns ? fmtBRL(brl / totalRuns) : "")}
+        ${metrica("Custo médio por run (sem abortados)", totalSemAbortados ? fmtBRL(soma(runsSemAbortados, "brl") / totalSemAbortados) : "")}
       </div>
       <p class="balanco-linha">Por status: ${lista(porStatus, ROTULO_ESTADO)}</p>
       <p class="balanco-linha">Por fonte: ${lista(porFonte)}</p></div>

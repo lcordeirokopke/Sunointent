@@ -647,6 +647,10 @@ def test_fim_da_unidade_fecha_a_frase():
 # M4. term_density
 
 
+def m4(peca, nivel="iniciante"):
+    return term_density.avaliar(peca, GLOSSARIO, SPECS[nivel])
+
+
 def test_densidade_conta_so_termos_acima_de_iniciante_por_cem_palavras():
     # 20 palavras: Selic (intermediário) duas vezes, hiato do produto (avançado) uma vez, juros (iniciante) fora
     texto = "A Selic subiu e os juros também; a taxa Selic e o hiato do produto mudam, mas o mercado segue."
@@ -656,10 +660,59 @@ def test_densidade_conta_so_termos_acima_de_iniciante_por_cem_palavras():
     assert {(t.glossario_id, t.ocorrencias) for t in r.detalhes.termos} == {("selic", 2), ("hiato", 1)}
 
 
-def test_densidade_so_mede_e_nunca_reprova():
-    r = term_density.avaliar(artigo(["Selic CDI IPCA Selic CDI IPCA"]), GLOSSARIO)
-    assert r.passou and r.violacoes == [] and r.valor == 100.0
-    assert r.faixa_esperada == "sem limite (só mede)"
+def test_densidade_so_mede_sem_spec_e_nos_niveis_sem_teto():
+    texto = "Selic CDI IPCA Selic CDI IPCA"
+    for r in (term_density.avaliar(artigo([texto]), GLOSSARIO), m4(artigo([texto], nivel="intermediario"), "intermediario"),
+              m4(artigo([texto], nivel="avancado"), "avancado")):
+        assert r.passou and r.violacoes == [] and r.valor == 100.0
+        assert r.faixa_esperada == "sem limite (só mede)"
+        assert r.detalhes.densidade_maxima is None and r.detalhes.ocorrencias_maximas is None
+
+
+def test_iniciante_dentro_do_teto_passa():
+    # 2 ocorrências em 40 palavras ou mais: abaixo de 5,5 por 100
+    texto = "A Selic é como o preço do dinheiro e muda o quanto custa pegar crédito. " + "Isso afeta o bolso de todo mundo. " * 3 + "Veja o CDI."
+    r = m4(artigo([texto]))
+    assert r.detalhes.ocorrencias == 2 and r.detalhes.densidade < 5.5
+    assert r.passou and r.violacoes == []
+    assert r.faixa_esperada == "no máximo 5,5 ocorrências por 100 palavras"
+    assert r.detalhes.densidade_maxima == 5.5
+
+
+def test_iniciante_acima_do_teto_reprova_com_as_repeticoes_da_ultima_para_a_primeira():
+    texto = "A Selic subiu e a Selic seguiu com o CDI e a Selic."  # 12 palavras, 4 ocorrências; teto 0 vira o piso de 1
+    r = m4(artigo([texto]))
+    assert not r.passou and r.detalhes.ocorrencias == 4 and r.detalhes.ocorrencias_maximas == 1
+    assert r.valor == r.detalhes.densidade == 30.8
+    assert [(v.trecho, v.inicio) for v in r.violacoes] == [("Selic", 45), ("Selic", 18), ("CDI", 37)]
+    assert all(v.metrica == "term_density" and v.unidade_indice == 0 and v.campo == "texto" for v in r.violacoes)
+    assert "corte pelo menos 3 ocorrências" in r.violacoes[0].instrucao_corretiva
+    assert "já foi explicado antes" in r.violacoes[0].instrucao_corretiva
+    assert "evite o termo" in r.violacoes[2].instrucao_corretiva
+
+
+def test_piso_de_uma_ocorrencia_por_unidade():
+    # 3 palavras e 1 ocorrência por seção: 33 por 100, mas uma por seção está sempre dentro do limite
+    r = m4(artigo(["A Selic subiu.", "O CDI caiu.", "O IPCA subiu."]))
+    assert r.detalhes.ocorrencias == 3 and r.detalhes.ocorrencias_maximas == 3
+    assert r.passou and r.violacoes == []
+    r = m4(artigo(["A Selic e o CDI subiram.", "O IPCA caiu."]))
+    assert r.detalhes.ocorrencias == 3 and r.detalhes.ocorrencias_maximas == 2 and not r.passou
+
+
+def test_teto_depende_do_formato():
+    # 100 palavras com 6 ocorrências: 6,0 por 100, acima do artigo (5,5) e abaixo do carrossel (6,5)
+    corpo = " ".join(["mercado"] * 94)
+    texto = f"Selic CDI IPCA Selic CDI IPCA {corpo}"
+    r_artigo = m4(artigo([texto]))
+    r_carrossel = m4(carrossel(["Oi", texto, "Tchau"]))
+    assert r_artigo.detalhes.ocorrencias == 6 and r_artigo.detalhes.ocorrencias_maximas == 5 and not r_artigo.passou
+    assert r_carrossel.detalhes.ocorrencias_maximas == 6 and r_carrossel.passou
+
+
+def test_violacoes_limitadas_a_cinco():
+    r = m4(artigo(["Selic " * 12]))
+    assert len(r.violacoes) == 5 and r.detalhes.ocorrencias == 12
 
 
 def test_densidade_ignora_titulo_e_linha_fina():

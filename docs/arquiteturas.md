@@ -287,7 +287,7 @@ Cada métrica tem o seu modelo de `detalhes`, gravado em `metricas.detalhes`:
 | `numeric_fidelity` | `numeros_varridos`, `com_marcador`, `datas_conferidas` e `desfechos` (a contagem de cada desfecho da M1, inclusive o número em formato que o parser não lê) |
 | `text_size` | `grandeza` (`palavras` ou `caracteres`), `limite` (o limite renderizado) e `unidades` (a medida e o limite de cada unidade; no roteiro, a última é o total) |
 | `readability` | `palavras`, `silabas`, `frases`, `ifl`, `ifl_minimo` e `frase_max_palavras` (os do nível, quando existem), `analogia_na_peca` e `nivel_estatistico` (o sinal de nível da peça: no artigo, o nível da faixa de IFL; no carrossel e no roteiro, IFL no piso do Iniciante e analogia na peça) |
-| `term_density` | `palavras`, `ocorrencias`, `densidade` (por 100 palavras), `ocorrencias_avancado`, `densidade_avancado` e `termos` (cada termo acima de iniciante encontrado, com o nível e a contagem) |
+| `term_density` | `palavras`, `ocorrencias`, `densidade` (por 100 palavras), `ocorrencias_avancado`, `densidade_avancado`, `termos` (cada termo acima de iniciante encontrado, com o nível e a contagem), `densidade_maxima` e `ocorrencias_maximas` (o teto do formato no Iniciante e o limite em ocorrências; `None` nos outros níveis) |
 | `analogy_rule` | `aplicavel` (a regra vale no Iniciante e no Intermediário) e `termos` (cada termo acima do nível encontrado, com a unidade da primeira ocorrência, se há `Analogia` no plano e se há marcador na unidade) |
 | `plan_contract` | `checagens` (quantidade de slides, soma das cenas, `claim_ids` no plano e cobertura do formato, cada uma com o esperado, o obtido e se passou) |
 | `llm_judge` | `analogias` (termo, justificativa e `correta`), `unidades` (índice, justificativa, `implicada` e trecho problemático), `justificativa_nivel` e `nivel_percebido` |
@@ -573,7 +573,7 @@ A etapa tem três passos, e só o do meio chama o modelo.
 
 ### E5.2 Redator (LLM)
 
-Um único template, `prompts/synthesizer.j2`, com três partes: as regras comuns (não criar fatos, escrever todo número que não seja data só por marcador, seguir a ordem e as analogias do plano), a parte do nível, renderizada do LevelSpec que a E6 também lê (o foco, as expressões de analogia e a meta de frase do Iniciante e a regra de vocabulário do Intermediário e do Avançado), com os termos de especialista a explicar, e a parte do formato, com o orçamento calculado na E5.1. As 9 células usam o mesmo template com parâmetros diferentes.
+Um único template, `prompts/synthesizer.j2`, com três partes: as regras comuns (não criar fatos, escrever todo número que não seja data só por marcador, seguir a ordem e as analogias do plano), a parte do nível, renderizada do LevelSpec que a E6 também lê (o foco, as expressões de analogia, a meta de frase e o teto de termos por 100 palavras do Iniciante e a regra de vocabulário do Intermediário e do Avançado), com os termos de especialista a explicar, e a parte do formato, com o orçamento calculado na E5.1. As 9 células usam o mesmo template com parâmetros diferentes.
 
 O modelo devolve o payload do formato com marcadores no texto. Cada formato tem o seu schema de saída (`SaidaArtigo`, `SaidaCarrossel` e `SaidaRoteiro`, ver **Peça final**), que impõe as regras que valem para qualquer célula; a resposta fora do schema volta ao modelo pelo `llm.py` e não consome o orçamento `K`.
 
@@ -609,7 +609,7 @@ flowchart LR
     DET --> M1["M1. numeric_fidelity"]
     DET --> M2["M2. text_size"]
     DET --> M3["M3. readability"]
-    DET --> M4["M4. term_density (so mede)"]
+    DET --> M4["M4. term_density (teto no Iniciante)"]
     DET --> M5["M5. analogy_rule"]
     DET --> PC["M7. plan_contract"]
     M1 --> G{"alguma violacao?"}
@@ -630,7 +630,7 @@ As duas razões, em ordem de importância:
 - **Qualidade: o relatório corretivo precisa ser completo em uma passada.** Se o avaliador parasse na primeira métrica que falha, o retry consertaria o tamanho do artigo, a passada seguinte descobriria a analogia que falta, o conserto da analogia estouraria o tamanho, e o orçamento `K` se esgotaria sem convergir. Pior: uma peça que inventou um número receberia um relatório que não diz nada sobre formato ou analogia, e o modelo reescreveria às cegas justamente nas dimensões que já estavam certas. É o oposto do que a seção do Refinement Loop promete.
 - **Custo: rodar as 6 é grátis.** São microssegundos de código Python, sem token. O que custa é a M6, e ela só roda se as 6 passarem. Curto-circuitar verificações gratuitas para economizar nada, ao custo de um relatório mutilado, é trocar qualidade por zero.
 
-O nível é medido pela regra de analogia (M5), pelo tamanho do artigo por nível (M2), pela legibilidade (M3), pela densidade de termos (M4, que só mede) e pelo nível percebido pelo juiz (M6). A numeração das métricas é M1 a M7; a M7 é o M7 (`plan_contract`), a checagem de estrutura que a montagem da E5.3 calcula.
+O nível é medido pela regra de analogia (M5), pelo tamanho do artigo por nível (M2), pela legibilidade (M3), pela densidade de termos (M4, com teto no Iniciante) e pelo nível percebido pelo juiz (M6). A numeração das métricas é M1 a M7; a M7 é o M7 (`plan_contract`), a checagem de estrutura que a montagem da E5.3 calcula.
 
 ### As métricas
 
@@ -651,7 +651,7 @@ A varredura roda em cada campo da peça: o título, a linha fina, o texto de cad
 
 **M3. Legibilidade (determinístico).** Índice de Facilidade de Leitura de Flesch adaptado ao português (Martins et al., 1996) sobre o texto das unidades: `248,835 - 1,015 x (palavras / frases) - 84,6 x (sílabas / palavras)`, com palavras, sílabas e frases contadas por `sunontent/texto.py`. O nível que tem o bloco `legibilidade` no LevelSpec (hoje o Iniciante) reprova abaixo do piso de IFL do formato; os outros só medem. A violação aponta as frases mais longas. O resultado também registra o sinal de nível da peça, para a matriz de confusão estatística: no artigo, o nível cuja faixa de IFL (bloco `sinal_ifl` do LevelSpec) contém o IFL; no carrossel e no roteiro, o estilo de Iniciante (IFL no piso do Iniciante e analogia na peça). O sinal é só informativo e nunca reprova: na M3, só o piso do Iniciante reprova.
 
-**M4. Densidade de termos (determinístico, só mede).** Ocorrências dos termos do glossário com `nivel_minimo` acima de iniciante por 100 palavras do texto das unidades, casadas pela regra da M5, e a densidade só dos termos de nível avançado. Nunca gera violação: a densidade varia mais entre as fontes que entre os níveis.
+**M4. Densidade de termos (determinístico, teto no Iniciante).** Ocorrências dos termos do glossário com `nivel_minimo` acima de iniciante por 100 palavras do texto das unidades, casadas pela regra da M5, e a densidade só dos termos de nível avançado. O Iniciante tem teto por formato no LevelSpec (bloco `densidade`), com piso de uma ocorrência por unidade, e reprova acima dele; o Intermediário e o Avançado só medem. A densidade varia mais entre as fontes que entre os níveis, por isso o teto tem folga acima do mínimo viável.
 
 **M5. Regra de analogia (determinístico).** No Iniciante e no Intermediário: todo termo do glossário com `nivel_minimo` acima do nível (acima de iniciante no Iniciante, acima de intermediario no Intermediário) encontrado no texto precisa ter uma `Analogia` no plano do nível (no Intermediário, a explicação vinda da `definicao_simples`) **e** um marcador, de `analogia.marcadores` do LevelSpec do nível (Iniciante: "é como", "funciona como", "imagine que", "na prática"; Intermediário: "ou seja", "isto é", "quer dizer", "em outras palavras"), na mesma unidade (seção, slide ou cena) da primeira ocorrência do termo. Os termos são casados pela regra de `docs/glossario.md`, e só no texto das unidades: o título e a linha fina não são unidades e não entram na busca. Uma expressão de analogia em qualquer ponto da unidade vale para todos os termos da unidade. Termo do glossário sem analogia no plano é violação, com o trecho exato e a instrução de trocar o termo por uma explicação simples; termo com analogia no plano e sem marcador na unidade é violação com a analogia do plano e as expressões na instrução.
 
@@ -668,7 +668,7 @@ O juiz decide o nível pelo vocabulário, pela explicação, pelo pressuposto e 
 
 **Gera:** `Scorecard` com a lista completa de `Violacao`, cada uma com trecho, esperado, obtido, posição e instrução corretiva. O veredito é da tentativa. Grava `scorecards`, `metricas` e `violacoes` da tentativa numa única transação.
 
-**Natureza:** híbrido, com a fronteira explícita: 6 verificações determinísticas (a M4 só mede), 1 juiz LLM, e nenhuma influência do juiz sobre os números.
+**Natureza:** híbrido, com a fronteira explícita: 6 verificações determinísticas, 1 juiz LLM, e nenhuma influência do juiz sobre os números.
 
 **Como falha:** falso positivo de M1 por bug de parsing de número na etapa 1 (o modo de falha mais irritante do sistema, porque acusa alucinação onde não houve); e complacência do juiz na M6, mitigada por ele ser de família de modelo diferente do extractor.
 
@@ -917,7 +917,7 @@ As credenciais ficam no `.env`, fora do git. O `.env.example` versionado lista a
 
 O contrato que define cada nível. Uma fonte, lida pelo prompt e pelo avaliador.
 
-Cada arquivo tem os campos da E4, o contrato de formato, no Iniciante e no Intermediário o bloco `analogia`, em qualquer nível, o bloco opcional `legibilidade`, o bloco opcional `sinal_ifl` e, no Intermediário e no Avançado, o bloco opcional `vocabulario`, validados por `sunontent/levelspec.py`, que recusa campo desconhecido (valores e motivos em `docs/fluxos/plano-editorial.md`, LevelSpec da E4):
+Cada arquivo tem os campos da E4, o contrato de formato, no Iniciante e no Intermediário o bloco `analogia`, em qualquer nível, o bloco opcional `legibilidade`, o bloco opcional `densidade` (só no Iniciante), o bloco opcional `sinal_ifl` e, no Intermediário e no Avançado, o bloco opcional `vocabulario`, validados por `sunontent/levelspec.py`, que recusa campo desconhecido (valores e motivos em `docs/fluxos/plano-editorial.md`, LevelSpec da E4):
 
 ```yaml
 # config/levels/iniciante.yaml
@@ -946,11 +946,13 @@ analogia:                                            # Iniciante (obrigatório) 
 legibilidade:                                        # opcional; hoje só no Iniciante
   ifl_minimo: {artigo: 30, carrossel: 45, roteiro: 45}
   frase_max_palavras: 18
+densidade:                                           # opcional; só no Iniciante
+  termos_max_por_100: {artigo: 5.5, carrossel: 6.5, roteiro: 6.5}
 sinal_ifl:                                           # opcional; faixa de IFL do artigo no nível (min inclusivo, max exclusivo)
   artigo: {min: 45}                                  # Iniciante; Intermediário {min: 27, max: 45}; Avançado {max: 27}
 ```
 
-O contrato de formato é a fonte única do orçamento da E5.1, do prompt do redator e da M2. O bloco `analogia` é obrigatório no Iniciante, opcional no Intermediário e proibido no Avançado; os `marcadores` são expressões de pelo menos duas palavras, e a M5 os procura na mesma unidade da primeira ocorrência do termo. O bloco `legibilidade` traz o piso do IFL por formato, lido pela M3, e a meta de tamanho de frase, que só o prompt do redator lê; o nível sem o bloco só mede a legibilidade. O bloco `sinal_ifl` traz a faixa de IFL em que o artigo do nível cai, `min` inclusivo e `max` exclusivo: é só um sinal de nível para a matriz de confusão estatística e não reprova nada. Os três níveis o têm, e as faixas se encaixam (o Iniciante só com `min`, o Avançado só com `max` e o `min` de cada nível igual ao `max` do nível abaixo). O bloco `vocabulario` (`explicar_acima_de: intermediario` no Intermediário e `avancado` no Avançado) é lido só pelo prompt do redator: o Intermediário usa sem explicar o vocabulário padrão de quem investe e explica, na primeira vez, o termo do glossário acima de `explicar_acima_de`, com a explicação do plano e o marcador do bloco `analogia` (a M5 confere); o Avançado escreve com o jargão técnico sem explicar. Nenhuma métrica confere o bloco `vocabulario`. O `levelspec.py` confere que as palavras mínimas do artigo crescem do Iniciante ao Avançado e avisa quando `carrossel.max_claims` é maior que `slides.max - 2`, os slides de corpo possíveis.
+O contrato de formato é a fonte única do orçamento da E5.1, do prompt do redator e da M2. O bloco `analogia` é obrigatório no Iniciante, opcional no Intermediário e proibido no Avançado; os `marcadores` são expressões de pelo menos duas palavras, e a M5 os procura na mesma unidade da primeira ocorrência do termo. O bloco `legibilidade` traz o piso do IFL por formato, lido pela M3, e a meta de tamanho de frase, que só o prompt do redator lê; o nível sem o bloco só mede a legibilidade. O bloco `densidade` traz o teto de ocorrências de termos do glossário por 100 palavras, por formato, lido pela M4 e pelo prompt do redator; o limite em ocorrências nunca fica abaixo de uma por unidade, e o nível sem o bloco só mede a densidade. O bloco `sinal_ifl` traz a faixa de IFL em que o artigo do nível cai, `min` inclusivo e `max` exclusivo: é só um sinal de nível para a matriz de confusão estatística e não reprova nada. Os três níveis o têm, e as faixas se encaixam (o Iniciante só com `min`, o Avançado só com `max` e o `min` de cada nível igual ao `max` do nível abaixo). O bloco `vocabulario` (`explicar_acima_de: intermediario` no Intermediário e `avancado` no Avançado) é lido só pelo prompt do redator: o Intermediário usa sem explicar o vocabulário padrão de quem investe e explica, na primeira vez, o termo do glossário acima de `explicar_acima_de`, com a explicação do plano e o marcador do bloco `analogia` (a M5 confere); o Avançado escreve com o jargão técnico sem explicar. Nenhuma métrica confere o bloco `vocabulario`. O `levelspec.py` confere que as palavras mínimas do artigo crescem do Iniciante ao Avançado e avisa quando `carrossel.max_claims` é maior que `slides.max - 2`, os slides de corpo possíveis.
 
 Quais termos pedem analogia não fica no LevelSpec: vem do `nivel_minimo` de cada termo do glossário, a mesma fonte lida pelo planejador, pelo gate e pela M5.
 

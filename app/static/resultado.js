@@ -18,8 +18,8 @@ const NOTA_METRICAS = [
     texto: "Palavras do artigo, caracteres de cada slide e palavras de cada cena dentro dos limites do contrato de formato do nível." },
   { nome: "readability", reprova: "parcial", condicao: "só o piso do Iniciante",
     texto: "Índice de Facilidade de Leitura (Flesch adaptado ao português) das unidades. Só o Iniciante tem piso por formato e reprova abaixo dele; no Intermediário e no Avançado só mede. O nível que o IFL do artigo indica (Iniciante, Intermediário ou Avançado, pelas faixas do LevelSpec) é um sinal para a matriz de confusão e nunca reprova." },
-  { nome: "term_density", reprova: "nao",
-    texto: "Ocorrências de termos do glossário acima de iniciante por 100 palavras. Só mede." },
+  { nome: "term_density", reprova: "parcial", condicao: "só o teto do Iniciante",
+    texto: "Ocorrências de termos do glossário acima de iniciante por 100 palavras. Só o Iniciante tem teto por formato (com piso de uma ocorrência por unidade) e reprova acima dele; no Intermediário e no Avançado só mede." },
   { nome: "analogy_rule", reprova: "parcial", condicao: "Iniciante e Intermediário",
     texto: "Todo termo do glossário acima do nível (acima de iniciante no Iniciante, acima de intermediário no Intermediário) tem analogia ou explicação no plano e um marcador na mesma unidade da primeira ocorrência. No Avançado não se aplica." },
   { nome: "llm_judge", reprova: "parcial", condicao: "analogia incorreta ou unidade não implicada",
@@ -41,15 +41,19 @@ function cartaoNotasMetricas() {
   const linhas = NOTA_METRICAS.map((n) => `<tr>
       <td>${esc(ROTULO_METRICA[n.nome])}</td><td>${esc(n.texto)}</td><td>${seloEfeito(n.nome)}</td></tr>`).join("");
   return `<details class="cartao"><summary><b>O que cada métrica mede e quais reprovam</b></summary>
-    <p class="nota-aviso" role="note"><span class="nota-selo">Nota</span>A célula é aprovada quando nenhuma métrica que reprova acusa violação. As métricas determinísticas (M1 a M5 e M7) rodam em toda tentativa; a M4 e o nível percebido da M6 são só informativos.</p>
+    <p class="nota-aviso" role="note"><span class="nota-selo">Nota</span><span class="nota-texto">A célula é aprovada quando nenhuma métrica que reprova acusa violação. As métricas determinísticas (M1 a M5 e M7) rodam em toda tentativa; o nível percebido da M6 é só informativo.</span></p>
     <div class="tabela-rolagem"><table><thead><tr><th>Métrica</th><th>O que mede</th><th>Reprova?</th></tr></thead>
     <tbody>${linhas}</tbody></table></div></details>`;
 }
 
-const NOTA_JUIZ = `<p class="nota-aviso" role="note"><span class="nota-selo">Juiz (M6)</span>
-  O juiz reprova a célula em dois casos: uma analogia do plano usada na peça não explica o conceito corretamente (é enganosa ou decorativa), ou uma unidade (seção, slide ou cena) diz algo que os claims que ela cita não sustentam: projeção apresentada como fato ou sem atribuição, causa, consequência ou comparação inventada, fato ou recomendação acrescentados, número por extenso diferente do claim (ou grandeza, período ou sujeito trocados) e contradição com um trecho. Explicação geral de conceito, pergunta retórica e transição não reprovam.
-  Aprova quando todas as analogias estão corretas e todas as unidades são implicadas pelos claims.
-  O <b>nível percebido</b> é só informativo: alimenta a matriz de confusão e não reprova nem aprova nada, então uma peça pedida como Intermediário e percebida como Avançado continua aprovada.</p>`;
+const NOTA_JUIZ = `<div class="nota-aviso" role="note"><span class="nota-selo">Juiz (M6)</span><div>
+  <p style="margin:0 0 8px">O juiz é um modelo de outra família que confere se o que a peça diz faz sentido com os claims. Ele roda depois que as métricas determinísticas passam e responde a três perguntas:</p>
+  <ol style="margin:0 0 8px;padding-left:20px">
+    <li><b>As analogias estão certas?</b> Compara cada analogia do plano usada na peça com a definição técnica do glossário. <b>Reprova</b> se a analogia é enganosa ou só decorativa.</li>
+    <li><b>Cada unidade é sustentada pelos claims?</b> Para cada seção, slide ou cena, lê o texto, os claims que ela cita e trechos do documento, e vê se tudo o que ela afirma decorre deles. <b>Reprova</b> se a unidade apresenta projeção, condicionante ou risco como fato ou sem atribuição, inventa causa, consequência ou comparação, acrescenta fato, tendência ou recomendação, escreve um número por extenso diferente do claim (ou troca grandeza, período ou sujeito) ou contradiz um trecho. Explicação geral de conceito, pergunta retórica, convite à leitura e transição <b>não</b> reprovam.</li>
+    <li><b>Para qual nível a peça parece escrita?</b> Olha vocabulário, explicação, pressuposto de conhecimento e foco. <b>Não reprova nem aprova</b>: só alimenta a matriz de confusão. Uma peça pedida como Intermediário e percebida como Avançado continua aprovada.</li>
+  </ol>
+  <p style="margin:0">A célula é aprovada quando as perguntas 1 e 2 não acusam nada. O juiz só pode reprovar: ele nunca aprova o que uma métrica determinística reprovou.</p></div></div>`;
 
 const vista = { celula: null, tentativa: null, nivel: "iniciante", svgs: new Map() };
 
@@ -298,9 +302,9 @@ async function baixarTodos(celulaIdAlvo, formato, botao) {
   botao.disabled = false;
 }
 
-const NOTA_SINAL_IFL = `<p class="nota-aviso" role="note"><span class="nota-selo">Sinal do IFL (M3)</span>
-  O IFL é um <b>sinal de nível</b>: no artigo, o nível cuja faixa de IFL contém o IFL da peça; no carrossel e no roteiro, o estilo de Iniciante (IFL no piso do Iniciante e analogia na peça), porque o limite de caracteres encurta as frases de qualquer nível.
-  O sinal só alimenta as matrizes e <b>não reprova nada</b>. O que reprova na M3 é o <b>piso de IFL do Iniciante</b>; o Intermediário e o Avançado só medem.</p>`;
+const NOTA_SINAL_IFL = `<p class="nota-aviso" role="note"><span class="nota-selo">Sinal do IFL (M3)</span><span class="nota-texto">
+  O IFL é um <b>sinal de nível</b>. No artigo, é o nível cuja faixa de IFL contém o IFL da peça. No carrossel e no roteiro, é o estilo de Iniciante (IFL no piso do Iniciante e analogia na peça), porque o limite de caracteres encurta as frases de qualquer nível.
+  O sinal só alimenta as matrizes e <b>não reprova nada</b>. O que reprova na M3 é o <b>piso de IFL do Iniciante</b>; o Intermediário e o Avançado só medem.</span></p>`;
 
 // Matrizes de confusão do run, da última tentativa de cada célula: nível pedido contra o nível percebido pelo juiz (M6),
 // contra o nível que o IFL do artigo indica e contra o estilo de Iniciante do carrossel e do roteiro (M3). Só informativas.
@@ -325,10 +329,10 @@ function cartaoConfusao(celulas, faixas) {
       conta[`${c.nivel}|${v}`] = (conta[`${c.nivel}|${v}`] ?? 0) + 1;
       total += 1;
     }
-    if (!total) return `<div><h4>${titulo}</h4><p class="motivo-neutro">Nenhuma célula avaliada.</p></div>`;
+    if (!total) return `<div class="matriz-confusao"><h4>${titulo}</h4><p class="motivo-neutro">Nenhuma célula avaliada.</p></div>`;
     const linhas = NIVEIS.map(([nivel, rotulo]) => `<tr><th>${rotulo}</th>${colunas.map(([chave]) =>
       `<td class="num">${conta[`${nivel}|${chave}`] ?? 0}</td>`).join("")}</tr>`).join("");
-    return `<div><h4>${titulo}</h4><div class="tabela-rolagem"><table><thead><tr><th>pedido / medido</th>${colunas.map(([, r]) =>
+    return `<div class="matriz-confusao"><h4>${titulo}</h4><div class="tabela-rolagem"><table><thead><tr><th>pedido / medido</th>${colunas.map(([, r]) =>
       `<th>${r}</th>`).join("")}</tr></thead><tbody>${linhas}</tbody></table></div></div>`;
   };
   return `<div class="cartao"><h3>Matrizes de confusão de níveis</h3>
@@ -346,7 +350,7 @@ function cartaoConfusao(celulas, faixas) {
 
 function secaoAvaliacao(d) {
   const titulo = `<h2 class="secao-titulo">Avaliação por célula</h2>
-    <p class="nota-aviso" role="note"><span class="nota-selo">Aviso</span>Escolha uma célula para ver o scorecard, a peça com as marcações, a rastreabilidade e o plano do nível.</p>
+    <p class="nota-aviso" role="note"><span class="nota-selo">Aviso</span><span class="nota-texto">Escolha uma célula para ver o scorecard, a peça com as marcações, a rastreabilidade e o plano do nível.</span></p>
     ${cartaoNotasMetricas()}`;
   const celulas = celulasDe(d);
   if (!celulas.length) return "";
@@ -494,7 +498,7 @@ function detalheCelula(celula, d) {
       <div>${selo(celula.estado)} ${motivo}</div></div>`;
   const tentativa = celula.tentativas.find((t) => t.tentativa === vista.tentativa) ?? ultimaTentativa(celula);
   if (!tentativa) return `${cabecalho}</div><div class="vazio">A célula não chegou a gravar uma peça.</div>`;
-  const botoes = celula.tentativas.map((t) => `<button type="button" class="botao fantasma btn-tentativa"
+  const botoes = celula.tentativas.map((t) => `<button type="button" class="botao btn-tentativa"
       data-tentativa="${t.tentativa}" aria-pressed="${t === tentativa}">Tentativa ${t.tentativa}${t.scorecard ? ` · ${esc(t.scorecard.veredito)}` : ""}</button>`).join("");
   const planoNivel = d.plano?.niveis?.find((p) => p.nivel === celula.nivel);
   return `${cabecalho}<div class="barra-tentativas">${botoes}</div></div>

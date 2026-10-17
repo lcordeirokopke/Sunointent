@@ -9,12 +9,12 @@ Este documento descreve as métricas que avaliam uma peça: o que cada uma confe
 | `numeric_fidelity` | M1 | determinística | `sunontent/metrics/numeric_fidelity.py` |
 | `text_size` | M2 | determinística | `sunontent/metrics/text_size.py` |
 | `readability` | M3 | determinística | `sunontent/metrics/readability.py` |
-| `term_density` | M4 | determinística, só mede | `sunontent/metrics/term_density.py` |
+| `term_density` | M4 | determinística, reprova só o Iniciante | `sunontent/metrics/term_density.py` |
 | `analogy_rule` | M5 | determinística | `sunontent/metrics/analogy_rule.py` |
 | `llm_judge` | M6 | juiz LLM | `sunontent/metrics/llm_judge.py` |
 | `plan_contract` | M7 | determinística | calculada na montagem da E5.3 |
 
-O nível é medido pela regra de analogia (M5), pelo tamanho do artigo por nível (M2), pela legibilidade (M3), pela densidade de termos (M4, que só mede) e pelo nível percebido pelo juiz (M6). A M7 (`plan_contract`) confere a estrutura da peça contra o plano. As métricas determinísticas não importam o cliente LLM: rodam sem pipeline, sem banco e sem rede. Só o juiz (`llm_judge.py`) chama o modelo, pelo `llm.py`.
+O nível é medido pela regra de analogia (M5), pelo tamanho do artigo por nível (M2), pela legibilidade (M3), pela densidade de termos (M4, com teto no Iniciante) e pelo nível percebido pelo juiz (M6). A M7 (`plan_contract`) confere a estrutura da peça contra o plano. As métricas determinísticas não importam o cliente LLM: rodam sem pipeline, sem banco e sem rede. Só o juiz (`llm_judge.py`) chama o modelo, pelo `llm.py`.
 
 Arquivos de apoio em `sunontent/metrics/`:
 
@@ -31,7 +31,7 @@ Fora da pasta, as métricas usam `sunontent/texto.py` (contagem de palavras, de 
 numeric_fidelity.avaliar(peca, claims_do_plano, tabela_numeros, data_documento, glossario) -> MetricaResultado
 text_size.avaliar(peca, spec) -> MetricaResultado
 readability.avaliar(peca, spec, spec_iniciante) -> MetricaResultado
-term_density.avaliar(peca, glossario) -> MetricaResultado
+term_density.avaliar(peca, glossario, spec) -> MetricaResultado
 analogy_rule.avaliar(peca, spec, plano_nivel, glossario) -> MetricaResultado
 ```
 
@@ -46,7 +46,7 @@ Toda métrica devolve um `MetricaResultado` (`nome`, `valor`, `faixa_esperada`, 
 | `numeric_fidelity`, `analogy_rule`, `plan_contract` | número de violações | `"0"` |
 | `text_size` | número de unidades fora do limite | `"0 unidades fora do limite (<limite do LevelSpec>)"` |
 | `readability` | o IFL da peça | `"IFL de pelo menos <piso>"`, ou `"sem limite (só mede)"` no nível sem piso |
-| `term_density` | a densidade, por 100 palavras | `"sem limite (só mede)"` |
+| `term_density` | a densidade, por 100 palavras | `"no máximo <teto> ocorrências por 100 palavras"`, ou `"sem limite (só mede)"` no nível sem teto |
 | `llm_judge` | `true` se o juiz não reprova nada, `false` se reprova | `"true"` |
 
 Cada `Violacao` tem `metrica`, `trecho` (o texto exato), `esperado`, `obtido`, `instrucao_corretiva` e a posição: `unidade_indice` (a seção, o slide ou a cena, a partir de 0), `campo` (`titulo`, `linha_fina`, `texto` ou `gancho_visual`; `texto` é o texto da seção, do slide ou a fala da cena), `inicio` e `fim` (o intervalo do trecho no campo, fim exclusivo). A posição é opcional: a violação do total do artigo não tem.
@@ -187,15 +187,39 @@ No artigo, o IFL separa os três níveis: nos runs medidos (Copom e CVM) o Inici
 
 ## M4. `term_density`
 
-Densidade de termos do glossário no texto das unidades da peça (seção, slide ou fala da cena). Só mede: não tem limite e nunca gera violação.
+Densidade de termos do glossário no texto das unidades da peça (seção, slide ou fala da cena). Mede em todo nível e reprova só no Iniciante, acima do teto do formato.
 
-- Conta as ocorrências dos termos com `nivel_minimo` acima de iniciante, casados pela regra da M5 (`docs/glossario.md`, Casamento no texto).
+- Conta as ocorrências dos termos com `nivel_minimo` acima de iniciante, casados pela regra da M5 (`docs/glossario.md`, Casamento no texto). No Iniciante são os mesmos termos que a M5 governa: a M5 exige a analogia na primeira ocorrência, e a M4 limita quantas ocorrências a peça tem ao todo.
 - O `valor` é a densidade: ocorrências por 100 palavras (a contagem de palavras da M2), com uma casa decimal.
 - O resultado traz também a densidade só dos termos de `nivel_minimo` avancado.
 
-`TermDensityDetalhes`: `palavras`, `ocorrencias`, `densidade`, `ocorrencias_avancado`, `densidade_avancado` e `termos`, uma `TermoContado` por termo encontrado (`glossario_id`, `termo`, `nivel_minimo` e `ocorrencias`).
+### Teto e piso
 
-A densidade varia mais entre as fontes que entre os níveis (a ata do Copom tem muito mais termos que o release da B3), por isso não há faixa por nível.
+O LevelSpec do Iniciante tem o bloco `densidade`, o teto por formato em ocorrências por 100 palavras:
+
+```yaml
+densidade:
+  termos_max_por_100: {artigo: 5.5, carrossel: 6.5, roteiro: 6.5}
+```
+
+- O teto vale para todas as ocorrências, não só as repetições. O Intermediário e o Avançado não têm o bloco (o `carregar` o recusa neles) e só medem, com `faixa_esperada` `"sem limite (só mede)"`.
+- O limite em ocorrências é o maior entre `floor(teto x palavras / 100)` e o número de unidades da peça: uma ocorrência por unidade está sempre dentro do limite, para o teto nunca ficar abaixo de um termo por unidade. A peça reprova quando as ocorrências passam desse limite.
+- `instrucoes_redator` escreve o teto do formato no prompt do redator, já na primeira tentativa ("Use poucos termos técnicos: no máximo 5,5 ocorrências de termos do glossário ... a cada 100 palavras").
+
+### Violação
+
+Uma violação por ocorrência a cortar, até 5, em quantidade igual ao excesso sobre o limite (ocorrências da peça menos o limite). A ordem das ocorrências escolhidas é: as repetições, da última para a primeira, e só depois a primeira ocorrência de cada termo, que carrega a analogia da M5. O `trecho` é a ocorrência, com a posição (unidade, `campo` `texto`, intervalo na unidade).
+
+| Violação | Instrução |
+| -------- | --------- |
+| repetição de termo | "A densidade de termos da peça é 7,3 por 100 palavras e o máximo do nível é 5,5 (corte pelo menos 3 ocorrências no total): troque «Selic» no slide 3 por palavras simples: o termo já foi explicado antes. Termo: Selic." |
+| primeira ocorrência | "...: evite o termo «CDI» no slide 1: escreva a ideia em palavras simples, sem o termo (e sem a analogia dele, que deixa de ser necessária). Termo: CDI." |
+
+### Detalhes
+
+`TermDensityDetalhes`: `palavras`, `ocorrencias`, `densidade`, `ocorrencias_avancado`, `densidade_avancado`, `termos`, uma `TermoContado` por termo encontrado (`glossario_id`, `termo`, `nivel_minimo` e `ocorrencias`), e `densidade_maxima` e `ocorrencias_maximas` (o teto do formato e o limite em ocorrências para o tamanho da peça, `None` no nível sem teto).
+
+A densidade varia mais entre as fontes que entre os níveis (a ata do Copom tem muito mais termos que o release da B3). Por isso o teto tem folga acima do mínimo viável do Iniciante, que é o número de termos distintos da peça.
 
 ## M5. `analogy_rule`
 
@@ -223,7 +247,7 @@ A unidade é nomeada `seção`, `slide` ou `cena` conforme o formato, contada a 
 
 Código: `sunontent/metrics/llm_judge.py` (prompt em `prompts/judge.j2`, recuperação de contexto em `sunontent/metrics/contexto.py`). Modelo `openai/gpt-oss-120b` pelo Groq (`docs/fluxos/extracao.md`, Cliente LLM), de família diferente do extractor.
 
-O juiz roda uma vez por tentativa da célula, só depois de M1, M2, M3, M5 e M7 (`plan_contract`) passarem (a M4 só mede), e só pode reprovar: não existe caminho em que ele aprove o que uma determinística reprovou. O `juiz` chega à E6 por `config["configurable"]`, montado por `llm_judge.criar_juiz(llm, raiz)` no `__main__.py`, e é chamado como `juiz(peca, plano_nivel, factsheet, chunks, glossario, run_id=..., registrar_span=...)`.
+O juiz roda uma vez por tentativa da célula, só depois de M1, M2, M3, M5 e M7 (`plan_contract`) passarem, e só pode reprovar: não existe caminho em que ele aprove o que uma determinística reprovou. O `juiz` chega à E6 por `config["configurable"]`, montado por `llm_judge.criar_juiz(llm, raiz)` no `__main__.py`, e é chamado como `juiz(peca, plano_nivel, factsheet, chunks, glossario, run_id=..., registrar_span=...)`.
 
 ### O que o juiz recebe
 

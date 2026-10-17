@@ -380,6 +380,16 @@ class RepositorioMemoria:
         if run is not None and run["status"] == "em_andamento":
             run.update(status="abortado", erro_classe=erro_classe, erro_mensagem=erro_mensagem, etapa_erro=etapa_erro)
 
+    def abortar_orfaos(self, iniciados_antes_de, erro_mensagem) -> list[str]:
+        self._entrar("abortar_orfaos")
+        abortados = []
+        for run_id, run in self.runs.items():
+            manifest = run.get("manifest")
+            if run["status"] == "em_andamento" and manifest is not None and manifest.timestamp < iniciados_antes_de:
+                run.update(status="abortado", erro_classe="terminal", erro_mensagem=erro_mensagem, etapa_erro=None)
+                abortados.append(run_id)
+        return abortados
+
 
 @pytest.fixture
 def repositorio():
