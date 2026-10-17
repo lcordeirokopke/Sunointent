@@ -472,7 +472,7 @@ def test_config_do_repositorio_tem_preco_para_cada_modelo():
     assert cliente.custo_brl("gemini-3.8-flash", 1_000_000, 0) == Decimal("4.050000")
     assert cliente.custo_brl("openai/gpt-oss-120b", 1_000_000, 1_000_000) == Decimal("4.050000")
     assert cliente._raciocinio == {
-        "extractor_correcao": "low", "adapter_correcao": "low", "synthesizer_correcao": "low", "judge": "low"}
+        "extractor_correcao": "low", "adapter_correcao": "low", "synthesizer_correcao": "low", "judge": "medium"}
 
 
 def test_nivel_de_raciocinio_invalido_e_terminal():

@@ -1,4 +1,4 @@
-versao: 7
+versao: 8
 # Snapshot fixo do modelo de cada nó (docs/arquiteturas.md, 1. Model client / router).
 # O juiz (judge) precisa ser de família diferente do extractor.
 modelos:
@@ -21,11 +21,12 @@ precos_usd_por_milhao:
 # do modelo. A correção do extractor só ajusta claims recusados, com o motivo, e não relê o documento todo.
 # A correção do planejador (E4) só resolve os problemas do gate no plano enviado.
 # A correção do redator (E5) reescreve a peça com o relatório corretivo; o plano não muda.
-# O juiz (M6) raciocina pouco: a saída máxima pedida é 8.192 tokens, e o raciocínio conta dentro dela.
+# O juiz (M6) raciocina em nível médio, para conferir, frase a frase, se a peça explica os termos que usa; a saída
+# máxima pedida é 8.192 tokens, e o raciocínio conta dentro dela.
 raciocinio:
   extractor_correcao: low
   adapter_correcao: low
   synthesizer_correcao: low
-  judge: low
+  judge: medium
 # PENDENTE: cotação USD/BRL provisória, usada só para estimar llm_spans.custo_brl e runs.custo_total_brl.
 cotacao_usd_brl: "5.40"
