@@ -200,15 +200,44 @@ O mesmo documento serve ao modo desenvolvimento, ao teste de cobertura da E2 e c
 
 ### Como congelar um documento
 
-A troca do documento de referência é manual e intencional:
+A troca do documento de referência é manual e intencional. Os exemplos usam a fonte `copom`; troque por `cvm` ou `b3`.
 
-1. Rode o modo normal para a fonte desejada.
-2. Copie de `data/sources/<fonte>/` o `<doc_sha256>.pdf` e o `.json` mais recente desse documento para `tests/fixtures/referencia/`, renomeando-os para `<fonte>.pdf` e `<fonte>.json`.
-3. Atualize `<fonte>.anotacao.yaml` para o novo documento.
-4. Atualize a resposta de listagem em `tests/fixtures/http/<fonte>/` para apontar para a nova publicação, de modo que o teste da E0 continue chegando ao `doc_id` do novo `<fonte>.json`.
-5. Versione no git.
+1. Rode o modo normal para a fonte desejada, que baixa a publicação mais recente e a guarda em `data/sources/<fonte>/`:
 
-Não há conferência própria no congelamento: o primeiro run `--dev` depois de congelar confere o hash e para se o par copiado estiver inconsistente.
+   ```
+   python -m sunontent copom
+   ```
+
+2. Copie para `tests/fixtures/referencia/` o PDF e o `.json` desse documento, renomeando-os para `<fonte>.pdf` e `<fonte>.json`. Em `data/sources/<fonte>/` há `<doc_sha256>.pdf` e um `<doc_sha256>.<coletado_em>.json` por coleta; use o `.json` da coleta mais recente do documento:
+
+   ```
+   cp data/sources/copom/<doc_sha256>.pdf tests/fixtures/referencia/copom.pdf
+   cp data/sources/copom/<doc_sha256>.<coletado_em>.json tests/fixtures/referencia/copom.json
+   ```
+
+   O `.json` precisa ter os quatro campos `doc_id`, `doc_sha256`, `url_origem` e `coletado_em`, e o `doc_sha256` precisa ser o SHA-256 dos bytes do PDF copiado. Copie o arquivo, sem abrir e salvar de novo o PDF: qualquer alteração de byte muda o hash.
+
+3. Confira que o par bate, rodando o modo desenvolvimento:
+
+   ```
+   python -m sunontent copom --dev
+   ```
+
+   Se o hash não bater, o run para com erro terminal indicando o arquivo, o hash esperado e o hash encontrado.
+
+4. Atualize `<fonte>.anotacao.yaml` à mão, com os fatos que a E2 precisa cobrir no novo documento (cada fato com os trechos e os números esperados).
+5. Atualize a resposta de listagem em `tests/fixtures/http/<fonte>/` para apontar para a nova publicação, de modo que o teste da E0 continue chegando ao `doc_id` do novo `<fonte>.json`.
+6. Regrave o snapshot da leitura, `<fonte>.documento.json`, e revise a diferença no git:
+
+   ```
+   REGERAR_DOCUMENTO=1 pytest tests/test_extracao.py     # PowerShell: $env:REGERAR_DOCUMENTO=1; pytest tests/test_extracao.py
+   ```
+
+7. Regrave `<fonte>.claims.json` com os claims de um run real do novo documento (o `factsheet.json` de `data/runs/<run_id>/`, rodado em modo `--dev` depois do passo 3, acrescido de `run_id` e `doc_sha256`). Os testes do casador do glossário e do juiz leem esse arquivo.
+8. Rode `pytest` para conferir os testes da E0, da E1, da E2 e do glossário contra o novo documento e, se quiser conferir a cobertura de verdade, `pytest -m gemini -s`.
+9. Versione no git.
+
+O hash também é conferido pela E1 e pelo primeiro run `--dev`: um par copiado de forma inconsistente para a execução antes de qualquer chamada ao LLM.
 
 Como o documento de referência fica no git, o documento anterior continua recuperável pelo histórico.
 

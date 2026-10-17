@@ -288,6 +288,19 @@ python -m app
 
 Sobe em `http://127.0.0.1:8000` (somente local; use `--porta N` para outra porta). Permite iniciar o pipeline, acompanhar as etapas ao vivo, abrir os runs, ver a matriz 3×3 de células com scorecard, violações por posição, rastreabilidade claim a trecho do PDF, plano do nível, as matrizes de confusão e o carrossel em SVG (baixável em SVG ou PNG). O dashboard só lê o Supabase e nunca grava no banco. Detalhes em `docs/fluxos/dashboard.md`.
 
+### Como congelar um documento para o modo `--dev`
+
+O modo `--dev` lê `tests/fixtures/referencia/<fonte>.pdf` e `<fonte>.json` (os campos `doc_id`, `doc_sha256`, `url_origem` e `coletado_em`) e para se o SHA-256 do PDF não bater com o `.json`. Para trocar o documento congelado de uma fonte (aqui, `copom`):
+
+```
+python -m sunontent copom                          # 1. baixa a publicação mais recente para data/sources/copom/
+cp data/sources/copom/<doc_sha256>.pdf tests/fixtures/referencia/copom.pdf
+cp data/sources/copom/<doc_sha256>.<coletado_em>.json tests/fixtures/referencia/copom.json   # 2. copia o par, sem reabrir o PDF
+python -m sunontent copom --dev                    # 3. confere o hash
+```
+
+Depois, atualize à mão `copom.anotacao.yaml` (fatos que a extração deve cobrir) e a listagem simulada em `tests/fixtures/http/copom/`, regrave o snapshot com `REGERAR_DOCUMENTO=1 pytest tests/test_extracao.py`, regrave `copom.claims.json` a partir do `factsheet.json` de um run `--dev` do novo documento, rode `pytest` e versione o resultado. O passo a passo completo está em `docs/fluxos/ingestao.md`, Como congelar um documento.
+
 ### O que fixa a reprodutibilidade
 
 - **Manifest por run:** `manifest.json` registra o modelo de cada nó, a versão de cada prompt, a versão de cada LevelSpec e do glossário, `K`, `max_concorrencia` e o SHA-256 de cada arquivo de `config/` e `prompts/`. Dois runs com o mesmo manifest usaram exatamente as mesmas regras.
