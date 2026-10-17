@@ -98,97 +98,104 @@ Sem `run_id`, usa todos os runs. O dashboard mostra as mesmas matrizes na págin
 
 ## Resultados medidos
 
-Os números abaixo vêm das cópias locais em `data/runs/` dos três runs mais recentes concluídos, um por fonte: Copom (`copom_20261017T153942Z_fac022`), B3 (`b3_20261017T150348Z_435f57`) e CVM (`cvm_20261017T122720Z_920b7c`). São 27 células. São poucas fontes e uma execução de cada: leia como ordem de grandeza, não como estatística robusta.
+Os números abaixo agregam as cópias locais em `data/runs/` dos runs concluídos cujo `manifest.json` registra as mesmas versões e os mesmos hashes de `config/` e `prompts/` que o repositório tem hoje (LevelSpec, glossário, `models.yaml` e os quatro prompts). São 6 runs, nos modos `--dev` e normal: Copom (3), B3 (2) e CVM (1), com 54 células. A CVM tem um único run, então a agregação pesa mais Copom e B3. São poucos runs: ler como ordem de grandeza, não como estatística robusta.
 
-### Estados finais das 27 células
+### Estados finais das 54 células
 
-| Fonte | Aprovadas | Reprovadas | Motivo das reprovadas |
-| ----- | --------- | ---------- | --------------------- |
-| Copom | 7 | 2 | `k_esgotado` (Iniciante/carrossel e Intermediário/roteiro) |
-| B3 | 8 | 1 | `nao_convergencia` (Avançado/roteiro) |
-| CVM | 9 | 0 | |
-| **Total** | **24** | **3** | |
+| Fonte | Runs | Aprovadas | Reprovadas |
+| ----- | ---: | --------: | ---------: |
+| Copom | 3 | 25 | 2 |
+| B3 | 2 | 17 | 1 |
+| CVM | 1 | 9 | 0 |
+| **Total** | **6** | **51** | **3** |
 
-Das 24 aprovadas, 15 passaram na tentativa 1, 8 na tentativa 2 e 1 na tentativa 3, o que mostra o ganho do loop: sem ele, só 15 das 27 células teriam saído aprovadas.
+- Reprovadas: 2 por `k_esgotado` e 1 por `nao_convergencia`. Nenhuma célula terminou em `ERRO_INFRA`.
+- **Aprovação:** 51 de 54 células (94%). Das 51 aprovadas, 34 passaram na tentativa 1, 13 na tentativa 2 e 4 na tentativa 3: sem o loop, só 34 das 54 células (63%) teriam saído aprovadas.
 
 ### Matriz do juiz (nível pedido × nível percebido)
 
-Soma dos três runs, das células em que o juiz rodou.
+Soma dos runs, das células em que o juiz rodou (53 de 54, porque o juiz só roda depois que as determinísticas passam).
 
 | Artigo | percebido Iniciante | percebido Intermediário | percebido Avançado |
 | ------ | :---: | :---: | :---: |
-| **pedido Iniciante** | 1 | 2 | 0 |
-| **pedido Intermediário** | 0 | 3 | 0 |
-| **pedido Avançado** | 0 | 0 | 3 |
+| **pedido Iniciante** | 3 | 3 | 0 |
+| **pedido Intermediário** | 0 | 4 | 2 |
+| **pedido Avançado** | 0 | 0 | 6 |
 
 | Carrossel | percebido Iniciante | percebido Intermediário | percebido Avançado |
 | --------- | :---: | :---: | :---: |
-| **pedido Iniciante** | 2 | 1 | 0 |
-| **pedido Intermediário** | 1 | 1 | 1 |
-| **pedido Avançado** | 0 | 0 | 3 |
+| **pedido Iniciante** | 4 | 2 | 0 |
+| **pedido Intermediário** | 1 | 3 | 2 |
+| **pedido Avançado** | 0 | 1 | 5 |
 
 | Roteiro | percebido Iniciante | percebido Intermediário | percebido Avançado |
 | ------- | :---: | :---: | :---: |
-| **pedido Iniciante** | 2 | 1 | 0 |
-| **pedido Intermediário** | 1 | 1 | 1 |
-| **pedido Avançado** | 0 | 0 | 2 |
+| **pedido Iniciante** | 5 | 1 | 0 |
+| **pedido Intermediário** | 1 | 2 | 3 |
+| **pedido Avançado** | 0 | 1 | 4 |
 
-Leitura: o Avançado é sempre reconhecido (8 de 8). A confusão se concentra nas fronteiras vizinhas (Iniciante com Intermediário, e o Intermediário para os dois lados); não há nenhum Iniciante lido como Avançado nem o inverso. O Intermediário é o nível mais difícil de fixar, como esperado, por ser o do meio.
+Acerto do juiz: 36 de 53 (68%): 13 de 18 no artigo, 12 de 18 no carrossel e 11 de 17 no roteiro. Leitura:
+
+- O Avançado é bem reconhecido (15 de 17).
+- Os erros são todos entre níveis vizinhos: nenhum Iniciante foi lido como Avançado nem o inverso.
+- Há duas direções de confusão. O Iniciante é lido como Intermediário (6 de 18), e o Intermediário é lido como Avançado (7 de 18), sobretudo no roteiro. O Intermediário é o nível mais difícil de fixar, e a peça de Intermediário tende a usar jargão de especialista com explicação curta, que o juiz lê como Avançado.
+- O juiz não vê o nível pedido, então essa é uma medida independente do prompt do redator.
 
 ### Matriz estatística (nível pedido × sinal da M3)
 
-**Artigo** (as 9 células):
+**Artigo** (18 células):
 
 | | sinal Iniciante | sinal Intermediário | sinal Avançado |
 | - | :---: | :---: | :---: |
-| **pedido Iniciante** | 3 | 0 | 0 |
-| **pedido Intermediário** | 0 | 2 | 1 |
-| **pedido Avançado** | 0 | 0 | 3 |
+| **pedido Iniciante** | 6 | 0 | 0 |
+| **pedido Intermediário** | 0 | 5 | 1 |
+| **pedido Avançado** | 0 | 0 | 6 |
 
-IFL medido: Iniciante 48,8 a 62,6; Intermediário 25,3 a 36,8; Avançado 20,0 a 24,8. O Intermediário da CVM (25,3) caiu abaixo do corte de 27 e foi lido como Avançado, o único erro do artigo. Como o IFL mede o texto e não o assunto, um documento com muito nome próprio e termo longo desloca a escala.
+IFL medido: Iniciante 47,6 a 62,6; Intermediário 25,3 a 38,2; Avançado 3,1 a 24,8. Acerto de 17 de 18: o único erro é o Intermediário da CVM (25,3), abaixo do corte de 27. Como o IFL mede o texto e não o assunto, um documento com muito nome próprio e termo longo desloca a escala.
 
-**Carrossel e roteiro** (9 células de cada): o Iniciante caiu em `iniciante` nas 3 fontes, e o Intermediário e o Avançado em `acima_de_iniciante` nas 3, ou seja, 100% de acerto nos dois formatos. O sinal só separa o Iniciante dos demais, por construção.
+**Carrossel** (18 células): 18 de 18 corretas. **Roteiro** (18 células): 17 de 18, com um Iniciante lido como `acima_de_iniciante`. O Intermediário e o Avançado ficam em `acima_de_iniciante` nas 12 células de cada formato. O sinal só separa o Iniciante dos demais, por construção.
+
+O sinal estatístico (52 de 54, 96%) é mais estável que o do juiz (68%), mas mede só legibilidade e analogia, não o pressuposto de conhecimento. Os dois são complementares, e nenhum reprova a célula.
 
 ## Trade-offs de custo e latência
 
-Custos em BRL, com a cotação provisória de R$ 5,40 por US$ (`config/models.yaml`). Preço por milhão de tokens: `gemini-3.8-flash` US$ 0,75 de entrada e US$ 3,75 de saída (promocional até 2026-12-31); juiz `openai/gpt-oss-120b` US$ 0,15 e US$ 0,60. Tokens de raciocínio contam como saída.
+Custos em BRL, com a cotação provisória de R$ 5,40 por US$ (`config/models.yaml`). Preço por milhão de tokens: `gemini-3.8-flash` US$ 0,75 de entrada e US$ 3,75 de saída (promocional até 2026-12-31); juiz `openai/gpt-oss-120b` US$ 0,15 e US$ 0,60. Tokens de raciocínio contam como saída. As tabelas usam os mesmos 6 runs.
 
 ### Custo por run e por etapa
 
-| Etapa | Copom | B3 | CVM |
-| ----- | ----: | -: | --: |
-| Extractor (E2) | R$ 0,17 | R$ 0,52 | R$ 0,27 |
-| Planejador (E4) | R$ 0,16 | R$ 0,22 | R$ 0,09 |
-| Redator (E5) | R$ 1,39 | R$ 1,39 | R$ 0,85 |
-| Juiz (M6) | R$ 0,18 | R$ 0,16 | R$ 0,09 |
-| **Total do run** | **R$ 1,90** | **R$ 2,28** | **R$ 1,31** |
-| Tokens totais | 231.789 | 308.842 | 135.711 |
+| Etapa | Média | Mínimo | Máximo |
+| ----- | ----: | -----: | -----: |
+| Extractor (E2) | R$ 0,35 | R$ 0,17 | R$ 0,52 |
+| Planejador (E4) | R$ 0,15 | R$ 0,09 | R$ 0,22 |
+| Redator (E5) | R$ 1,00 | R$ 0,68 | R$ 1,39 |
+| Juiz (M6) | R$ 0,14 | R$ 0,09 | R$ 0,18 |
+| **Total do run** | **R$ 1,64** | **R$ 1,28** | **R$ 2,28** |
 
-Um run completo (9 células) custa entre R$ 1,3 e R$ 2,3, ou cerca de R$ 0,15 a R$ 0,25 por peça.
+Por fonte, o custo médio do run é R$ 1,55 no Copom (3 runs), R$ 1,96 na B3 (2) e R$ 1,31 na CVM (1). Os tokens por run vão de 136 mil a 309 mil. Um run completo (9 células) custa em média R$ 1,64, ou cerca de R$ 0,18 por peça.
 
 ### Onde está o trade-off
 
-- **O redator domina o custo (cerca de 61% a 73%).** Cada retry reescreve a peça inteira, e o raciocínio conta como saída, o token mais caro. Por isso a correção do redator usa raciocínio `low` (`synthesizer_correcao`), assim como a correção do extractor e do planejador: corrigir com um relatório é tarefa menor que gerar do zero.
-- **O loop troca custo por fidelidade.** Na B3, 5 das 9 células passaram só na tentativa 2. Cada tentativa extra repete a chamada do redator (e, se as determinísticas passam, a do juiz). A parada por não convergência evita gastar a 3ª tentativa quando a 2ª não melhorou.
-- **O juiz é barato, mas o contexto é caro.** Custa menos de 10% do run, mas a entrada dele é grande (claims, trechos do documento por BM25, unidades): 42 mil a 125 mil tokens de entrada por run contra 14 mil a 26 mil do redator. A recuperação por BM25 simples, sem embeddings, mantém esse contexto pequeno e sem custo de indexação.
+- **O redator domina o custo (cerca de 61% da média do run).** Cada retry reescreve a peça inteira, e o raciocínio conta como saída, o token mais caro. Por isso a correção do redator usa raciocínio `low` (`synthesizer_correcao`), assim como a correção do extractor e do planejador: corrigir com um relatório é tarefa menor que gerar do zero.
+- **O loop troca custo por fidelidade.** Das 51 células aprovadas, 17 precisaram de retry (13 na tentativa 2 e 4 na tentativa 3). Cada tentativa extra repete a chamada do redator (e, se as determinísticas passam, a do juiz). A parada por não convergência evita gastar a 3ª tentativa quando a 2ª não melhorou.
+- **O juiz é barato, mas o contexto é caro.** Custa cerca de 9% do run, mas a entrada dele é grande (claims, trechos do documento por BM25, unidades): 42 mil a 137 mil tokens de entrada por run contra 12 mil a 26 mil do redator. A recuperação por BM25 simples, sem embeddings, mantém esse contexto pequeno e sem custo de indexação.
 - **Juiz só depois das determinísticas.** Ele roda uma vez por tentativa e só quando as 6 verificações passam, então a tentativa que já falhou por número, tamanho ou analogia não paga a chamada.
 - **Concorrência limitada a 3 células** (`MAX_CONCORRENCIA`) para ficar dentro dos limites de requisições por minuto das APIs, ao custo de latência.
 - **Chave de reserva do Gemini:** a `GOOGLE_API_KEY_SEC` só é chamada quando a principal falha por infraestrutura ou chave recusada, trocando disponibilidade por um pouco de latência na falha.
 
 ### Latência
 
-A soma das durações das chamadas de LLM por run (chamadas que rodam em paralelo entre as células, então o relógio real é menor que a soma do redator):
+Soma das durações das chamadas de LLM por run (o redator roda em paralelo entre as células, então o relógio real é menor que a soma dele):
 
-| Etapa | Copom | B3 | CVM |
-| ----- | ----: | -: | --: |
-| Extractor | 38 s | 109 s | 82 s |
-| Planejador | 47 s | 50 s | 28 s |
-| Redator | 412 s | 387 s | 255 s |
-| Juiz | 84 s | 55 s | 43 s |
+| Etapa | Mediana | Mínimo | Máximo |
+| ----- | ------: | -----: | -----: |
+| Extractor | 94 s | 38 s | 140 s |
+| Planejador | 42 s | 25 s | 50 s |
+| Redator | 263 s | 206 s | 412 s |
+| Juiz | 58 s | 43 s | 83 s |
 
-- A extração e o plano são sequenciais e somam 1 a 3 minutos. Depois deles, as 9 células rodam 3 a 3.
+- A extração e o plano são sequenciais e somam cerca de 1 a 3 minutos. Depois deles, as 9 células rodam 3 a 3.
 - O tempo de relógio de um run não é registrado no manifest; ele depende da fila de concorrência e das esperas de backoff. Nos testes de cobertura com a Gemini API de verdade, a extração e o plano das 3 fontes levaram de 15 a 20 minutos no total.
-- O número de chamadas inclui as que falharam: o run do Copom registra spans de redator com HTTP 429 (cota da camada gratuita da Gemini API), que não consomem tokens mas somam latência de retentativa. Com uma conta com cota, a latência cai.
+- Os spans incluem as chamadas que falharam por infraestrutura (94 nos 6 runs, como cota 429 da Gemini): não consomem tokens, mas somam latência de retentativa. Com cota disponível, a latência cai.
 
 ## Reprodutibilidade
 
