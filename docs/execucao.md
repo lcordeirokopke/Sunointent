@@ -99,7 +99,7 @@ celula iniciante__artigo router 2: concluída
 celula iniciante__artigo: APROVADA
 ...
 etapa fechamento: concluída
-concluído: cvm_fato_relevante_16993_1575717 (215aa96736b4), 9 claims, plano em 1 rodada, 9 células (7 APROVADA, 2 REPROVADA), 10836 tokens, R$ 0.1516
+concluído: copom_ata_281 (f03423dc2562), 38 claims, plano em 1 rodada, 9 células (7 APROVADA, 2 REPROVADA), 231789 tokens, R$ 1.9001
 ```
 
 - O nome é o do nó em `graph.py` (`coleta`, `referencia`, `leitura`, `extract`, `validate`, `descarte`, `adapt`, `fechamento`). No loop E2/E3, `extract` e `validate` aparecem uma vez por rodada.
@@ -134,7 +134,7 @@ Os campos do documento (`doc_id`, `doc_sha256`, `url_origem`, `coletado_em`, `co
 No terminal, a última linha do run traz o documento, os claims do FactSheet, as rodadas do plano, as células por estado final e o custo:
 
 ```
-concluído: cvm_fato_relevante_16993_1575717 (215aa96736b4), 9 claims, plano em 1 rodada, 9 células (9 APROVADA), 10836 tokens, R$ 0.1516
+concluído: cvm_fato_relevante_16993_1575717 (215aa96736b4), 16 claims, plano em 1 rodada, 9 células (9 APROVADA), 135711 tokens, R$ 1.3080
 ```
 
 O run fecha como `concluido` mesmo com célula em `ERRO_INFRA`: o estado de cada célula está em `celulas`, e o código de saída 1 avisa que alguma ficou sem avaliação por falha de infraestrutura.

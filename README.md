@@ -203,7 +203,7 @@ Soma das durações das chamadas de LLM por run (o redator roda em paralelo entr
 | Juiz | 58 s | 43 s | 83 s |
 
 - A extração e o plano são sequenciais e somam cerca de 1 a 3 minutos. Depois deles, as 9 células rodam 3 a 3.
-- O tempo de relógio de um run não é registrado no manifest; ele depende da fila de concorrência e das esperas de backoff. Nos testes de cobertura com a Gemini API de verdade, a extração e o plano das 3 fontes levaram de 15 a 20 minutos no total.
+- O tempo de relógio de um run não é registrado no manifest; ele depende da fila de concorrência e das esperas de backoff. Pelos spans do Supabase (do início da primeira chamada ao fim da última), os 6 runs levaram de 310 a 452 s (5 a 7,5 minutos), dos quais 94 a 197 s até o fim do plano. Nos testes de cobertura com a Gemini API de verdade, a extração e o plano das 3 fontes levaram de 15 a 20 minutos no total.
 - Os spans incluem as chamadas que falharam por infraestrutura (94 nos 6 runs, como cota 429 da Gemini): não consomem tokens, mas somam latência de retentativa. Com cota disponível, a latência cai.
 
 ## Reprodutibilidade

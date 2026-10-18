@@ -146,7 +146,7 @@ Cada tentativa, com sucesso ou não, vira um `Span` (`schemas.py`): nó, modelo,
 
 O custo acumulado do run é atualizado na mesma instrução SQL que grava o span, e span repetido não soma de novo. O cliente também acumula o total em memória, e o `__main__.py` o escreve no `manifest.json` local ao concluir ou abortar o run.
 
-Ordem de grandeza nos documentos de referência, com 2 rodadas: de R$ 0,15 a R$ 0,60 por documento.
+Ordem de grandeza nos documentos de referência, medida em 6 runs completos: de R$ 0,17 a R$ 0,52 por documento na extração (E2) e de R$ 0,09 a R$ 0,22 no plano (E4); o run completo, com as 9 células, custa de R$ 1,28 a R$ 2,28 (`README.md`, Trade-offs de custo e latência).
 
 ## Saída
 
