@@ -30,12 +30,12 @@ Fora da pasta, as métricas usam `sunontent/texto.py` (contagem de palavras, de 
 ```python
 numeric_fidelity.avaliar(peca, claims_do_plano, tabela_numeros, data_documento, glossario) -> MetricaResultado
 text_size.avaliar(peca, spec) -> MetricaResultado
-readability.avaliar(peca, spec, spec_iniciante) -> MetricaResultado
+readability.avaliar(peca, spec, spec_iniciante, specs) -> MetricaResultado
 term_density.avaliar(peca, glossario, spec) -> MetricaResultado
 analogy_rule.avaliar(peca, spec, plano_nivel, glossario) -> MetricaResultado
 ```
 
-`claims_do_plano` são os claims do `PlanoNivel` da célula, lidos do FactSheet assinado, com os números na ordem de `Claim.numeros`; `tabela_numeros` é a do FactSheet; `data_documento` é a do FactSheet; `spec` é o LevelSpec do nível da célula e `spec_iniciante` é o do Iniciante (a M3 mede de que lado do piso dele a peça cai).
+`claims_do_plano` são os claims do `PlanoNivel` da célula, lidos do FactSheet assinado, com os números na ordem de `Claim.numeros`; `tabela_numeros` é a do FactSheet; `data_documento` é a do FactSheet; `spec` é o LevelSpec do nível da célula e `spec_iniciante` é o do Iniciante (a M3 mede de que lado do piso dele a peça cai); `specs` são os LevelSpec dos 3 níveis (a M3 usa as faixas `sinal_ifl` para o nível estatístico do artigo).
 
 ## Resultado, valor e faixa
 
@@ -183,7 +183,7 @@ Uma violação por frase, até 3, quando o IFL fica abaixo do piso: as frases ma
 
 ### O que a medida mostra
 
-No artigo, o IFL separa os três níveis: nos runs medidos (Copom e CVM) o Iniciante ficou em 52 a 55, o Intermediário em 34 a 39 e o Avançado entre -6 e 19,5, e as faixas de `sinal_ifl` (45 e 27) caem nas lacunas entre esses grupos. Como são poucas fontes, as faixas são um sinal e não reprovam. No carrossel e no roteiro as faixas de IFL se encostam, porque o limite de caracteres encurta as frases de qualquer nível; ali o IFL só separa o Iniciante dos outros dois, junto da analogia. Por isso só o Iniciante tem piso.
+No artigo, o IFL separa os três níveis: nos 6 runs medidos (`README.md`, Matriz estatística) o Iniciante ficou em 47,6 a 62,6, o Intermediário em 25,3 a 38,2 e o Avançado em 3,1 a 24,8, e as faixas de `sinal_ifl` (45 e 27) caem nas lacunas entre esses grupos, com uma exceção: o Intermediário da CVM (25,3), abaixo do corte de 27. Como são poucas fontes, as faixas são um sinal e não reprovam. No carrossel e no roteiro as faixas de IFL se encostam, porque o limite de caracteres encurta as frases de qualquer nível; ali o IFL só separa o Iniciante dos outros dois, junto da analogia. Por isso só o Iniciante tem piso.
 
 ## M4. `term_density`
 
@@ -247,7 +247,7 @@ A unidade é nomeada `seção`, `slide` ou `cena` conforme o formato, contada a 
 
 Código: `sunontent/metrics/llm_judge.py` (prompt em `prompts/judge.j2`, recuperação de contexto em `sunontent/metrics/contexto.py`). Modelo `openai/gpt-oss-120b` pelo Groq (`docs/fluxos/extracao.md`, Cliente LLM), de família diferente do extractor.
 
-O juiz roda uma vez por tentativa da célula, só depois de M1, M2, M3, M5 e M7 (`plan_contract`) passarem, e só pode reprovar: não existe caminho em que ele aprove o que uma determinística reprovou. O `juiz` chega à E6 por `config["configurable"]`, montado por `llm_judge.criar_juiz(llm, raiz)` no `__main__.py`, e é chamado como `juiz(peca, plano_nivel, factsheet, chunks, glossario, run_id=..., registrar_span=...)`.
+O juiz roda uma vez por tentativa da célula, só depois de M1, M2, M3, M4, M5 e M7 (`plan_contract`) passarem, e só pode reprovar: não existe caminho em que ele aprove o que uma determinística reprovou. O `juiz` chega à E6 por `config["configurable"]`, montado por `llm_judge.criar_juiz(llm, raiz)` no `__main__.py`, e é chamado como `juiz(peca, plano_nivel, factsheet, chunks, glossario, run_id=..., registrar_span=...)`.
 
 ### O que o juiz recebe
 

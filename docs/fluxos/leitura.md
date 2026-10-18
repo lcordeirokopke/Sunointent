@@ -51,7 +51,7 @@ Por seção lógica, cobrindo o texto inteiro sem sobreposição. O texto antes 
 
 | Documento | Fronteira | `secao` |
 |---|---|---|
-| Ata do Copom | Parágrafo numerado, só na sequência 1, 2, 3... do documento | Título `A)`, `B)`, `C)` ou `D)` vigente. O título e o primeiro parágrafo da seção formam um chunk só. |
+| Ata do Copom | Parágrafo numerado, só na sequência 1, 2, 3... do documento | Título de seção vigente: letra maiúscula seguida de `)` (`A)`, `B)`, `C)`, `D)`). O título e o primeiro parágrafo da seção formam um chunk só. |
 | Release da B3 | Linha em maiúsculas, sem dígitos, com 8 caracteres ou mais | O título. Títulos seguidos formam um só. |
 | Fato relevante da CVM | Nenhuma | Vazia. O documento todo é um chunk. |
 

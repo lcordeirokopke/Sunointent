@@ -6,7 +6,7 @@ O arquivo explica conceitos, nunca fatos de um documento. Os fatos vêm só do F
 
 ## Estado
 
-O arquivo está montado e versionado no git. Todas as analogias estão em `rascunho`, à espera de revisão humana. Hoje leem o arquivo o `manifesto.py`, que registra a versão e o hash no `RunManifest`, e a E4, M4 e M5, pelo `sunontent/glossario.py`. Um teste lista as flexões dos termos encontradas nos claims das referências que não estão em `variantes` (`docs/testes.md`, Glossário).
+O arquivo está montado e versionado no git. Todas as analogias estão em `rascunho`, à espera de revisão humana. Hoje leem o arquivo o `manifesto.py`, que registra a versão e o hash no `RunManifest`, e a E4, a E5.1, a M1, a M4, a M5 e o juiz (M6), pelo `sunontent/glossario.py`. Um teste lista as flexões dos termos encontradas nos claims das referências que não estão em `variantes` (`docs/testes.md`, Glossário).
 
 ## Formato e campos
 
@@ -41,7 +41,7 @@ termos:
 | `categoria` | `juros`, `inflacao`, `atividade`, `cambio`, `fiscal`, `mercado`, `contabil`, `societario` ou `regulatorio`. |
 | `nivel_minimo` | menor nível em que o termo aparece sem explicação (ver abaixo). |
 | `definicao_simples` | frase curta para o Iniciante; também vai ao redator do Intermediário para os termos de nível avançado. |
-| `definicao_tecnica` | definição para Intermediário e Avançado. |
+| `definicao_tecnica` | definição técnica do termo, lida pelo juiz (M6) como referência para julgar a analogia. |
 | `analogias` | lista de analogias, cada uma com `texto`, `limite` e `status`; vazia quando não há analogia. |
 | `ambiguo` | `true` quando a palavra também tem sentido comum fora das finanças. |
 | `fonte` | `nome` e `url` da fonte oficial ou institucional que sustenta a entrada. |
@@ -87,9 +87,10 @@ Os termos ficam agrupados por categoria, cada grupo aberto por um comentário (`
 | `manifesto.py` | registra `versao` em `glossario_versao` e o SHA-256 do arquivo em `arquivos_sha256` do `RunManifest`. |
 | E4.2, planejador | recebe, em cada claim, os termos acima de iniciante do texto com o `nivel_minimo` de cada um, e os termos acima de iniciante encontrados no texto dos candidatos do Iniciante que não têm nenhuma analogia no glossário; cria uma analogia `nova` para os que estiverem nos claims usados. |
 | E4.3, complemento | no Iniciante, cada termo acima de iniciante encontrado no texto dos claims usados recebe a primeira analogia `aprovada` do termo ou, sem nenhuma aprovada, a primeira `rascunho`, com a referência `<id>#<n>`. No Intermediário, cada termo acima de intermediario recebe a `definicao_simples`, sem referência. |
-| E4.3, gate | `jargao_sem_analogia`: todo termo acima de iniciante nos claims usados do Iniciante tem analogia no plano. `analogia_invalida`: a analogia `nova` não só repete as formas do termo. `motivo_invalido`: `exige_base_tecnica` só vale para claim com termo de `nivel_minimo` acima do nível, o que nunca acontece no Avançado. `tese_invalida`: a tese do Iniciante não tem termo acima de iniciante, e as formas dos termos ficam fora da busca de números da tese (o 15 de IPCA-15). |
+| E4.3, gate | `jargao_sem_analogia`: todo termo acima de iniciante nos claims usados do Iniciante tem analogia no plano. `analogia_invalida`: a analogia `nova` não tem número nem marcador `{{...}}` e não só repete as formas do termo. `motivo_invalido`: `exige_base_tecnica` só vale para claim com termo de `nivel_minimo` acima do nível, o que nunca acontece no Avançado. `tese_invalida`: a tese do Iniciante não tem termo acima de iniciante, e as formas dos termos ficam fora da busca de números da tese (o 15 de IPCA-15). |
 | E4.3, limpeza | depois da última rodada, o claim do Iniciante com termo sem analogia sai do nível como `exige_base_tecnica`, e as analogias do Iniciante e as explicações do Intermediário ficam só para os termos dos claims que restaram. |
 | E5.1, pacote | no nível com o bloco `vocabulario` do LevelSpec (o Intermediário), lista os termos com `nivel_minimo` acima de `explicar_acima_de` encontrados no texto dos claims do formato, com a `definicao_simples`, para o redator explicar na primeira vez que usar cada um (`docs/fluxos/sintese.md`, Termos a explicar). |
+| M1 | mascara as formas do termo que têm dígito (`IPCA-15`) antes de varrer os números da peça, para o `15` não ser lido como número (`docs/metricas.md`, M1). |
 | M4 | conta as ocorrências dos termos com `nivel_minimo` acima de iniciante no texto das unidades da peça, pela [regra de casamento](#casamento-no-texto), e calcula a densidade por 100 palavras (`docs/metricas.md`, M4). |
 | M5 | no Iniciante (termos acima de iniciante) e no Intermediário (termos acima de intermediario), todo termo encontrado no texto precisa de `Analogia` no plano e de um marcador (`analogia.marcadores` do LevelSpec do nível) na mesma unidade da primeira ocorrência, casando o termo pela [regra de casamento](#casamento-no-texto). |
 | M6 | recebe a `definicao_tecnica` do termo de cada analogia do plano usada na peça, como referência para julgar se a analogia está correta (`docs/metricas.md`, M6). |

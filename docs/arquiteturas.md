@@ -263,7 +263,7 @@ class Violacao(BaseModel):
 
 class MetricaResultado(BaseModel):
     nome: Metrica
-    valor: float | bool         # número de violações; true ou false na llm_judge
+    valor: float | bool         # número de violações (o IFL na readability, a densidade na term_density); true ou false na llm_judge
     faixa_esperada: str         # "0"
     passou: bool
     violacoes: list[Violacao]
@@ -278,9 +278,9 @@ class Scorecard(BaseModel):
     duracao_ms: int
 ```
 
-O `veredito` é da tentativa: `APROVADA` se todas as métricas passaram, `REPROVADA` se alguma falhou, `ERRO_INFRA` se o juiz ou a gravação falharam com a peça existente. O estado final da célula não fica no scorecard: fica só em `celulas`, gravado pela E7.
+O `veredito` é da tentativa: `APROVADA` se todas as métricas passaram, `REPROVADA` se alguma falhou, `ERRO_INFRA` se o juiz (ou a leitura dos chunks do juiz) falhou com a peça existente; se a gravação do scorecard falha, a célula vai a `ERRO_INFRA` pela E7 sem scorecard gravado. O estado final da célula não fica no scorecard: fica só em `celulas`, gravado pela E7.
 
-`numeric_fidelity`, `analogy_rule` e M7 (`plan_contract`) valem o número de violações, com faixa `"0"`. `text_size` vale o número de unidades fora do limite, e a faixa traz o limite renderizado do LevelSpec. `llm_judge` vale `true` quando o juiz não reprova nada e `false` quando reprova. `Violacao.campo` diz onde está o trecho: `texto` é o texto da seção ou do slide e a fala da cena.
+`numeric_fidelity`, `analogy_rule` e M7 (`plan_contract`) valem o número de violações, com faixa `"0"`. `text_size` vale o número de unidades fora do limite, e a faixa traz o limite renderizado do LevelSpec. `readability` vale o IFL medido e `term_density` a densidade por 100 palavras; nas duas, `passou` vem da ausência de violações. `llm_judge` vale `true` quando o juiz não reprova nada e `false` quando reprova. `Violacao.campo` diz onde está o trecho: `texto` é o texto da seção ou do slide e a fala da cena.
 
 Cada métrica tem o seu modelo de `detalhes`, gravado em `metricas.detalhes`:
 
@@ -702,7 +702,7 @@ O juiz decide o nível pelo vocabulário, pela explicação, pelo pressuposto e 
 
 **Recebe:** a matriz 3x3 completa, com cada célula em um de três estados finais (`APROVADA`, `REPROVADA` ou `ERRO_INFRA`), e o scorecard de cada uma, com as justificativas do juiz quando a M6 rodou; e o plano de cada nível, com os descartes e os seus motivos, as analogias com `revisada=False` marcadas como não revisadas e o `aviso` do plano (o que a limpeza do código mudou) quando houver.
 
-**O que mostra:** as 9 peças lado a lado, com a rastreabilidade (cada seção, slide ou cena linkado aos seus claims, cada número linkado ao claim de onde veio, cada claim linkado à página do PDF) e o painel de métricas, com as matrizes de confusão de níveis do run, todas só informativas (a do juiz, a do artigo pela faixa de IFL e a do carrossel e do roteiro pelo estilo de Iniciante). O dashboard lê tudo do Supabase: as tabelas do run e o PDF do bucket privado `documentos`, aberto por URL assinada de curta duração gerada no servidor do dashboard. A chave de serviço nunca chega ao navegador.
+**O que mostra:** as 9 peças lado a lado, com a rastreabilidade (cada seção, slide ou cena linkado aos seus claims, cada número linkado ao claim de onde veio, cada claim linkado à página do PDF) e o painel de métricas, com as matrizes de confusão de níveis do run, todas só informativas (a do juiz, a do artigo pela faixa de IFL e a do carrossel e do roteiro pelo estilo de Iniciante). O dashboard lê tudo do Supabase, pela `ConsultaSupabase`: as tabelas do run. O link para a página do PDF usa a `url_origem` do run (`<url_origem>#page=<n>`); o dashboard não lê o PDF do bucket. A chave de serviço nunca chega ao navegador.
 
 O carrossel sai do pipeline como dado estruturado, como o artigo e o roteiro. A única forma visual é a prévia do dashboard: cada slide é um SVG de 1080 x 1350, com o texto em `<text>` e `<tspan>`, gerado na hora pelo servidor a partir da peça lida do Supabase, com a quebra de linha medida pela fonte do template e sem mudar nenhuma palavra do `Slide.texto`. Os botões de baixar salvam esse mesmo SVG ou um PNG feito dele no navegador, e nada é gravado no servidor.
 
@@ -785,7 +785,7 @@ class PipelineState(BaseModel):
     contagem_celulas: dict[str, int] = {}          # fechamento: células em APROVADA, REPROVADA e ERRO_INFRA
 ```
 
-O fan-out da E5 é um subgrafo da célula, com estado mínimo (`CelulaGrafoState`: `run_id` e a `CelulaState`), disparado por um `Send` por célula, com no máximo `MAX_CONCORRENCIA` (3) células em paralelo (`max_concurrency` do config). Cada célula devolve só a sua entrada de `celulas`, e o reducer `juntar_celulas` junta as 9. Depois delas, o nó `fechamento` confere que todas têm estado final e conta quantas terminaram em cada um. A célula não recebe o plano nem os claims pelo estado: lê o plano por `carregar_plano` e o FactSheet assinado por `carregar_factsheet` (`persistencia.py`). No `PipelineState`, `celulas` é um dicionário chaveado por `celula_id`, e não lista: cada célula tem a sua chave.
+O fan-out da E5 é um subgrafo da célula, com estado mínimo (`CelulaGrafoState`: `run_id`, a `CelulaState`, o `relatorio` corretivo do retry, a `falha` que a E5 ou a E6 pegou e, para o scorecard, `tokens_tentativa` e `inicio_tentativa`), disparado por um `Send` por célula, com no máximo `MAX_CONCORRENCIA` (3) células em paralelo (`max_concurrency` do config). Cada célula devolve só a sua entrada de `celulas`, e o reducer `juntar_celulas` junta as 9. Depois delas, o nó `fechamento` confere que todas têm estado final e conta quantas terminaram em cada um. A célula não recebe o plano nem os claims pelo estado: lê o plano por `carregar_plano` e o FactSheet assinado por `carregar_factsheet` (`persistencia.py`). No `PipelineState`, `celulas` é um dicionário chaveado por `celula_id`, e não lista: cada célula tem a sua chave.
 
 ## Ciclo de vida de uma célula
 
@@ -840,7 +840,7 @@ Invariantes:
 - O contador de retry de parse é **separado** do orçamento `K` de qualidade. Misturar os dois faz um JSON quebrado consumir o orçamento de reescrita.
 - Toda chamada emite um span com nó, modelo, tokens de entrada e saída, e custo; o span do planejador da E4 traz também a rodada do gate.
 
-Config: `models.{extractor, adapter, synthesizer, judge}`, cada um pinado em snapshot, não só em família, em `config/models.yaml`, junto com o preço em US$ por milhão de tokens de cada snapshot e a cotação USD/BRL usada para estimar o custo. Hoje o extractor e o adapter têm modelo (`gemini-3.8-flash`). A falha de infraestrutura repete com backoff até 4 tentativas, e a resposta fora do schema, até 3; detalhes em `docs/fluxos/extracao.md`.
+Config: `models.{extractor, adapter, synthesizer, judge}`, cada um pinado em snapshot, não só em família, em `config/models.yaml`, junto com o preço em US$ por milhão de tokens de cada snapshot e a cotação USD/BRL usada para estimar o custo. Hoje os quatro têm modelo: extractor, adapter e synthesizer em `gemini-3.8-flash` e judge em `openai/gpt-oss-120b` (Groq); o bloco `raciocinio` fixa o nível de raciocínio das correções do extractor, do adapter e do synthesizer (`low`) e o do juiz (`medium`). A falha de infraestrutura repete com backoff até 4 tentativas, e a resposta fora do schema, até 3; detalhes em `docs/fluxos/extracao.md`.
 
 ## 2. Context assembly
 
@@ -877,15 +877,14 @@ data/runs/<run_id>/
 ├── factsheet.json                  # E3: claims e números do FactSheet assinado
 ├── validacoes_plano/<rodada>.json  # E4: problemas do gate e saída do planejador, uma por rodada
 ├── plano.json                      # E4: núcleo, aviso (o que a limpeza mudou) e os 3 planos de nível
-├── spans/<span_id>.json            # spans das etapas sem célula
+├── spans/<span_id>.json            # todos os spans do run, das etapas e das células
 └── celulas/<celula_id>/
     ├── estado.json                 # estado e tentativa da célula
     ├── peca_<tentativa>.json
-    ├── scorecard_<tentativa>.json  # métricas e violações da tentativa
-    └── spans/<span_id>.json
+    └── scorecard_<tentativa>.json  # métricas e violações da tentativa
 ```
 
-Cada célula escreve só na sua pasta, então as 9 células em paralelo não disputam arquivo. O banco não registra onde fica a cópia local: os caminhos derivam de `fonte`, `doc_sha256` e `run_id`. Nenhum consumidor lê `data/runs/`; de `data/sources/`, só a E1 lê o PDF do run, conferido pelo hash. Apagar pastas de `data/runs/` ou arquivos de `data/sources/` não perde nada.
+Cada célula escreve só na sua pasta, então as 9 células em paralelo não disputam arquivo. O banco não registra onde fica a cópia local: os caminhos derivam de `fonte`, `doc_sha256` e `run_id`. Nenhum consumidor lê `data/runs/`, exceto o próprio `persistencia.py`, que relê o `manifest.json` ao fechar como abortado um run parado; de `data/sources/`, só a E1 lê o PDF do run, conferido pelo hash. Apagar pastas de `data/runs/` ou arquivos de `data/sources/` não perde nada.
 
 Cada nó grava a sua saída no Supabase e só então devolve o estado. Scorecard, métricas e violações de uma tentativa são gravados numa única transação. Nenhum módulo além de `sunontent/persistencia.py` abre conexão com o Supabase.
 
@@ -924,7 +923,7 @@ Cada arquivo tem os campos da E4, o contrato de formato, no Iniciante e no Inter
 ```yaml
 # config/levels/iniciante.yaml
 nivel: iniciante
-versao: 5
+versao: 7
 foco: "impacto prático no bolso do leitor"
 tags_priorizadas: [impacto_pratico]
 tags_descartaveis: [metodologico]
@@ -998,8 +997,8 @@ A referência de uma analogia é a sua posição na lista do termo (`selic#1`). 
 
 # Trade-offs assumidos
 
-- **Custo por documento:** 1 extração + 1 plano + 9 sínteses + até 9 juízes = **20 chamadas** no caminho feliz, mais até 2 correções do plano quando o gate acusa problema. Retry custa 1 síntese mais, no máximo, 1 juiz. Com `K=3`, cerca de 30% de falha na primeira passada (3 das 9 células) e metade delas falhando de novo na segunda (1 a 2 células), são 4 a 5 retries de 1 a 2 chamadas cada: esperar **25 a 32 chamadas**, porque o retry é isolado por célula. O teto, com as 9 células usando as 3 tentativas e o juiz em todas, é de 1 extração + 1 plano + 27 sínteses + 27 juízes = **56 chamadas**, mais até 2 correções do plano.
-- **Latência:** caminho crítico de 4 chamadas sequenciais (extração, plano, síntese, juiz), porque as 9 sínteses são paralelas. Estimativa de 30 a 60s por documento, mais retries.
+- **Custo por documento:** 1 extração + 1 plano + 9 sínteses + até 9 juízes = **20 chamadas** no caminho feliz, mais até 2 correções do plano quando o gate acusa problema. Retry custa 1 síntese mais, no máximo, 1 juiz. Com `K=3`, cerca de 37% de falha na primeira passada (20 das 54 células nos 6 runs medidos, 3 a 4 das 9 por run) e cerca de 35% delas falhando de novo na segunda (7 das 20, 1 célula por run) (`README.md`, Estados finais das 54 células), são 4 a 5 retries de 1 a 2 chamadas cada: esperar **22 a 32 chamadas**, porque o retry é isolado por célula. O teto, com as 9 células usando as 3 tentativas e o juiz em todas, é de 1 extração + 1 plano + 27 sínteses + 27 juízes = **56 chamadas**, mais até 2 correções do plano.
+- **Latência:** caminho crítico de extração e plano em sequência (1 a 3 minutos), seguidos das 9 células em lotes de 3 (`MAX_CONCORRENCIA`), cada uma com síntese e juiz em sequência e mais as tentativas do retry. Medido em 6 runs: de 5 a 7,5 minutos de relógio por run, mais as esperas de backoff por cota (`README.md`, Latência).
 - **Duplicação de prompt** entre os níveis e entre as 9 células do synthesizer é o risco de manutenção mais concreto. Mitigação: um template por etapa, parametrizado por LevelSpec e por contrato de formato. Se aparecerem arquivos de prompt por nível ou por célula, a arquitetura já degradou.
 - **Nove sínteses parecidas** são gasto real. A alternativa (um synthesizer que gera os 3 formatos numa chamada) economiza chamadas e destrói o isolamento de retry por célula: uma violação no roteiro obrigaria a reescrever o artigo. O isolamento vale o gasto.
 - **Interpretação causal errada** é o que escapa das métricas. "O Copom subiu a Selic **porque** o câmbio depreciou" quando os dois fatos estão no documento mas o nexo não. O juiz de entailment pega parte disso, não tudo. É a principal razão pela qual a leitura humana da matriz no dashboard não é opcional.
@@ -1015,20 +1014,20 @@ O que esta arquitetura ainda não resolve, declarado para não ser descoberto ta
 
 ---
 
-# Sequência de construção
+# Ordem de dependência
 
-Ordem por dependência, não por importância:
+Os componentes dependem uns dos outros nesta ordem, da base para o topo:
 
-1. **Objetos de dado + LevelSpec.** Nada funciona antes do contrato existir. Comece pelos schemas Pydantic e por um YAML de nível, mesmo com valores de partida.
-2. **Harness 1 e 2** (model client, context assembly). Todos os nós dependem deles. Escrever os nós primeiro produz 6 tratamentos de erro diferentes e uma refatoração garantida.
-3. **E1 Leitura**, com teste de igualdade exata contra fixture, e paranoia no parsing de número.
-4. **E2 + E3** em conjunto, com fixture de documento anotado à mão.
-5. **E4 Plano editorial**, com o LevelSpec com os campos da E4 e o contrato de formato, e o leitor do glossário com o casamento de termos que a M5 também usa (`docs/fluxos/plano-editorial.md`). O grafo termina na E4, com as 9 células em `PENDENTE`.
-6. **As verificações determinísticas (M1 a M5 e M7), isoladas**, com teste unitário direto. Elas não dependem de nenhuma chamada de LLM e são o Entregável 2. Podem e devem ser construídas antes de existir qualquer peça.
-7. **E5** para uma única célula, ponta a ponta.
-8. **E7 Router + refinement loop** naquela única célula, até ver uma correção acontecer de verdade.
-9. **Fan-out para 9.**
-10. **M6 LLM Judge.**
-11. **Dashboard com a matriz**, com a rastreabilidade que o trace já estiver guardando.
+1. **Objetos de dado + LevelSpec.** Os schemas Pydantic (`sunontent/schemas.py`) e os YAML de `config/levels/` são o contrato que todas as etapas leem.
+2. **Harness 1 e 2** (model client, context assembly). Todos os nós que chamam modelo passam pelo `llm.py`, que concentra o retry, a validação de schema e o custo, e por isso o tratamento de erro é um só.
+3. **E1 Leitura**, que entrega o texto, os chunks e a tabela de números de que as etapas seguintes dependem, com teste de igualdade exata contra fixture e parsing de número estrito.
+4. **E2 + E3**, em loop, com o documento anotado à mão como teste de cobertura.
+5. **E4 Plano editorial**, que lê o LevelSpec (campos da E4 e contrato de formato) e o glossário, com o casamento de termos que a M5 também usa (`docs/fluxos/plano-editorial.md`), e grava as 9 células em `PENDENTE`.
+6. **As verificações determinísticas (M1 a M5 e M7)**, que não dependem de nenhuma chamada de LLM nem da E5: têm teste unitário direto, sem pipeline, e são o Entregável 2.
+7. **E5** de uma célula, ponta a ponta.
+8. **E6 e E7, com o refinement loop** da célula.
+9. **Fan-out das 9 células** e o fechamento do run.
+10. **M6 LLM Judge**, que roda só depois das determinísticas.
+11. **Dashboard com a matriz**, que lê do Supabase o que as etapas gravam, com a rastreabilidade.
 
-O passo 6 antes do 7 é a inversão que importa: as métricas são testáveis sem pipeline, e construí-las antes da E5 força o LevelSpec do nível e do formato a ser concreto antes de o redator escrever qualquer peça. A E4 vem antes delas porque não escreve texto de peça: o que ela precisa do LevelSpec e do glossário (tags, limite de claims e casamento de termos) não depende dos limiares das métricas.
+As métricas (6) não dependem da E5 (7): são testáveis sem pipeline, e é o LevelSpec do nível e do formato que elas leem que fixa os limites que o redator recebe. A E4 vem antes delas porque não escreve texto de peça: o que ela precisa do LevelSpec e do glossário (tags, limite de claims e casamento de termos) não depende dos limiares das métricas.
