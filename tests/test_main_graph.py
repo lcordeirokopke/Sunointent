@@ -344,6 +344,66 @@ def test_sem_fonte_o_cli_roda_as_tres(monkeypatch, repo):
     assert chamadas == [("b3", False)]
 
 
+def preparar_main(monkeypatch, repo):
+    monkeypatch.setenv("GOOGLE_API_KEY_PRINC", "chave-de-teste")
+    monkeypatch.setenv("GROQ_API_KEY", "chave-de-teste")
+    monkeypatch.setattr(principal.persistencia, "criar_repositorio_supabase", lambda ambiente: repo)
+    monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://localhost/x")
+    monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **k: None)
+
+
+def test_falha_fora_do_grafo_nao_interrompe_as_fontes_seguintes(monkeypatch, repo, capsys):
+    chamadas = []
+
+    def falso(fonte, **kwargs):
+        chamadas.append(fonte)
+        if fonte == "cvm":
+            raise FalhaTerminal("Supabase recusou a criação do run")
+        return 0
+
+    monkeypatch.setattr(principal, "executar", falso)
+    monkeypatch.setattr(principal.llm, "criar_cliente", lambda raiz, ambiente: None)
+    preparar_main(monkeypatch, repo)
+    assert principal.main(["--dev"]) == 1
+    assert chamadas == ["copom", "cvm", "b3"]
+    assert "erro (terminal): cvm: Supabase recusou a criação do run" in capsys.readouterr().err.splitlines()
+
+
+def test_falha_ao_criar_o_cliente_llm_pula_so_a_fonte(monkeypatch, repo, capsys):
+    chamadas, criados = [], []
+
+    def criar_cliente(raiz, ambiente):
+        criados.append(None)
+        if len(criados) == 2:
+            raise FalhaTerminal("config/models.yaml: YAML inválido")
+
+    monkeypatch.setattr(principal, "executar", lambda fonte, **kwargs: chamadas.append(fonte) or 0)
+    monkeypatch.setattr(principal.llm, "criar_cliente", criar_cliente)
+    preparar_main(monkeypatch, repo)
+    assert principal.main(["--dev"]) == 1
+    assert chamadas == ["copom", "b3"]
+    linha = "erro (terminal): cvm: config/models.yaml: YAML inválido"
+    assert linha in capsys.readouterr().err.splitlines()
+
+
+def test_falha_ao_gravar_o_manifest_inicial_aborta_o_run_sem_etapa(raiz, repo, monkeypatch, capsys):
+    original = persistencia.gravar_manifest_local
+
+    def gravar(raiz_dados, manifest, status, *args, **kwargs):
+        if status == "em_andamento":
+            raise FalhaTerminal("disco cheio")
+        return original(raiz_dados, manifest, status, *args, **kwargs)
+
+    monkeypatch.setattr(persistencia, "gravar_manifest_local", gravar)
+    assert rodar(raiz, repo, dev=True) == 1
+    (run,) = repo.runs.values()
+    assert run["status"] == "abortado" and run["erro_classe"] == "terminal"
+    assert run["erro_mensagem"] == "disco cheio" and run["etapa_erro"] is None
+    local = manifest_local(raiz)
+    assert local["status"] == "abortado" and local["etapa_erro"] is None
+    assert "abortado (terminal): disco cheio" in capsys.readouterr().err
+
+
 def test_sem_chave_do_gemini_para_antes_de_criar_o_run(monkeypatch, repo):
     monkeypatch.setattr(principal.persistencia, "criar_repositorio_supabase", lambda ambiente: repo)
     monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://localhost/x")

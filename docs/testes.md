@@ -36,7 +36,7 @@ Usam serviços reais só `test_persistencia_supabase.py`, contra o Supabase **lo
 - `conftest.py` aborta o pytest antes da coleta se `SUPABASE_URL` ou `SUPABASE_DB_URL` apontarem para um host diferente de `localhost`, `127.0.0.1` ou `::1`. Os testes nunca tocam o banco hospedado.
 - O `.env` não é carregado pelos testes.
 - Marker `supabase`: identifica os testes de integração com o Supabase local.
-- Marker `gemini`: identifica os testes que chamam a Gemini API e gastam tokens. Ficam pulados, a menos que o `-m` os peça. Leem só a `GOOGLE_API_KEY_PRINC` e a `GOOGLE_API_KEY_SEC` do `.env`, sem carregar o resto do arquivo, e pulam se a `GOOGLE_API_KEY_PRINC` estiver ausente.
+- Marker `gemini`: identifica os testes que chamam a Gemini API e gastam tokens. Ficam pulados, a menos que o `-m` os peça. Leem só a `GOOGLE_API_KEY_PRINC`, a `GOOGLE_API_KEY_SEC` e a `GROQ_API_KEY` do `.env`, sem carregar o resto do arquivo, e pulam se a `GOOGLE_API_KEY_PRINC` ou a `GROQ_API_KEY` estiver ausente.
 - Marker `judge`: identifica a calibração do juiz, que chama o Groq e gasta tokens. Fica pulada, a menos que o `-m` a peça. Lê só a `GROQ_API_KEY` do `.env` e pula se ela estiver ausente.
 
 ## Limite do que provam
@@ -153,7 +153,7 @@ tests/
 
 ### Gemini de verdade
 
-`test_gemini_cobre_os_fatos_anotados` (marker `gemini`) roda o `__main__` em modo `--dev` para cada fonte, com a Gemini API de verdade e o repositório em memória, e exige o FactSheet assinado e todos os fatos anotados cobertos. Imprime claims, tokens, custo e rodadas, e os tokens, o custo e a duração de cada chamada (com `-s`). O run vai até a E4, com o planejador de verdade; as 9 células ficam simuladas, sem chamar o redator. Custa da ordem de R$ 0,10 a R$ 0,52 por documento na extração, mais R$ 0,08 a R$ 0,22 pelo plano, e leva de 15 a 20 minutos nas 3 fontes. Como a resposta do modelo varia, uma falha aqui pede para ler os claims gerados (`data/runs/<run_id>/factsheet.json` no `tmp_path` do teste) antes de mexer no prompt ou na anotação.
+`test_gemini_cobre_os_fatos_anotados` (marker `gemini`) roda o `__main__` em modo `--dev` para cada fonte, com a Gemini API de verdade e o repositório em memória, e exige o FactSheet assinado e todos os fatos anotados cobertos. Imprime claims, tokens, custo e rodadas, e os tokens, o custo e a duração de cada chamada (com `-s`). O run vai até a E4, com o planejador de verdade; as 9 células ficam simuladas, sem chamar o redator. Custa da ordem de R$ 0,17 a R$ 0,52 por documento na extração, mais R$ 0,09 a R$ 0,22 pelo plano (`README.md`, Trade-offs de custo e latência), e leva de 15 a 20 minutos nas 3 fontes. Como a resposta do modelo varia, uma falha aqui pede para ler os claims gerados (`data/runs/<run_id>/factsheet.json` no `tmp_path` do teste) antes de mexer no prompt ou na anotação.
 
 ### No grafo
 
@@ -218,7 +218,7 @@ Os testes do bloco `analogia` e das instruções do redator conferem:
 - LevelSpec ou glossário inválido abortam antes de chamar o planejador; 3 respostas fora do schema abortam o run;
 - as rodadas antigas do run são apagadas antes da rodada 1.
 
-`test_app.py::test_e4_entra_no_fluxo_do_dashboard` confere o nó `adapt` e as arestas `validate -> adapt`, `descarte -> adapt` e `adapt -> END` em `/api/grafo`, `RODADAS_PLANO` em `rodadas_plano`, e a etapa E4 com o nó `adapt` no `app.js`. `test_persistencia_supabase.py::test_plano_editorial_rodadas_e_celulas` faz a gravação no Supabase local.
+`test_app.py::test_e4_entra_no_fluxo_do_dashboard` confere o nó `adapt` e as arestas `validate -> adapt` e `descarte -> adapt` em `/api/grafo`, `RODADAS_PLANO` em `rodadas_plano`, e a etapa E4 com o nó `adapt` no `app.js`. `test_persistencia_supabase.py::test_plano_editorial_rodadas_e_celulas` faz a gravação no Supabase local.
 
 ## Contrato da peça
 
@@ -294,7 +294,7 @@ Não contém testes, só infraestrutura compartilhada:
 - **Provider por nó:** o `judge` usa a sua cadeia e os outros nós a padrão; chave do Groq recusada é terminal, sem reserva.
 - **Groq (HTTP simulado):** o pedido leva o modelo, o prompt, o `json_schema` com `strict`, o `max_completion_tokens` (8.192), o `include_reasoning` falso e o `reasoning_effort` (e não leva o `reasoning_effort` quando a chamada não pede); os tokens de saída são os `completion_tokens`, com o raciocínio dentro; 408, 422, 429, 498, 500, 502 e 503 são retriáveis, 401 é chave recusada, 400, 403, 404 e 413 são terminais; o 400 `json_validate_failed` devolve o `failed_generation` para o cliente repetir; `content_filter` é bloqueio; timeout e conexão são retriáveis; a resposta vazia por `length` volta como fora do schema e os tokens são cobrados. `schema_estrito` põe todas as propriedades em `required`, fecha os objetos e tira os `default`.
 - **Contexto:** as palavras sem acento, sem maiúscula e sem as vazias; o BM25 ordena pela sobreposição; o chunk da âncora é o que contém o início dela; cada unidade recebe a âncora e os vizinhos e 3 chunks lexicais fora deles; a unidade sem claim recebe todos os da peça; cada chunk vai uma vez, na ordem do documento; o documento de um chunk só (CVM) não tem vizinho nem lexical.
-- **Juiz:** só as analogias do plano usadas na peça vão ao juiz, com a definição técnica; o prompt traz os claims com o `literal_fonte`, os trechos, as unidades e a definição, o foco de cada nível e os termos do glossário da peça com o `nivel_minimo`, sem o nível pedido, com raciocínio `low`; a `justificativa_nivel` vai para os detalhes; tudo implicado aprova com o `nivel_percebido` e o span da célula; cada `false` vira violação, com o intervalo do trecho (no texto ou no gancho visual da cena) e, sem o trecho na unidade, sem intervalo; unidade faltando, repetida ou inexistente e analogia faltando ou não pedida são `FalhaTerminal`; `criar_juiz` tem a assinatura que a E6 chama.
+- **Juiz:** só as analogias do plano usadas na peça vão ao juiz, com a definição técnica; o prompt traz os claims com o `literal_fonte`, os trechos, as unidades e a definição, o foco de cada nível e os termos do glossário da peça com o `nivel_minimo`, sem o nível pedido, com o raciocínio da chave `judge` de `raciocinio` (`medium` em `config/models.yaml`; o teste configura `low`); a `justificativa_nivel` vai para os detalhes; tudo implicado aprova com o `nivel_percebido` e o span da célula; cada `false` vira violação, com o intervalo do trecho (no texto ou no gancho visual da cena) e, sem o trecho na unidade, sem intervalo; unidade faltando, repetida ou inexistente e analogia faltando ou não pedida são `FalhaTerminal`; `criar_juiz` tem a assinatura que a E6 chama.
 - **Matriz de níveis:** `montar`, `acerto` e `formatar`, e o comando com a consulta simulada.
 - **Peças de calibração:** todas são `Peca` válidas, com claims da referência e a unidade do erro dentro da peça, toda analogia dada é usada na peça, metade tem erro, os quatro tipos de erro aparecem e as peças cobrem os 9 pares de nível e formato e as três fontes.
 
@@ -405,17 +405,20 @@ Cobre o manifest, o grafo e o `__main__`, com repositório em memória. A fixtur
 - `test_varredura_aborta_so_o_run_antigo_em_andamento`: o run `em_andamento` com mais de `IDADE_ORFAO` vira `abortado` (terminal, mensagem de processo encerrado) no banco e no manifest local; o run recente segue `em_andamento`.
 - `test_credenciais_ausentes_param_antes_de_tudo`: sem `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_DB_URL`, a execução para com erro listando as três.
 - `test_cli_recusa_fonte_desconhecida`: fonte inválida na linha de comando encerra; `cvm --dev` é lido corretamente.
+- `test_falha_fora_do_grafo_nao_interrompe_as_fontes_seguintes`: sem fonte, uma `FalhaTerminal` levantada por `executar` na CVM escreve `erro (terminal): cvm: ...` no stderr, a B3 ainda roda e o código é 1.
+- `test_falha_ao_criar_o_cliente_llm_pula_so_a_fonte`: sem fonte, o `llm.criar_cliente` falhando só na segunda chamada pula a CVM, com a fonte na linha de erro, e a B3 ainda roda.
+- `test_falha_ao_gravar_o_manifest_inicial_aborta_o_run_sem_etapa`: com o `manifest.json` inicial falhando depois de criar o run, o run fica `abortado` sem etapa no banco e no manifest local, e o código é 1.
 
 ### Linhas de etapa no terminal
 
-- `test_run_escreve_inicio_e_fim_de_cada_etapa`: um run `--dev` com uma correção escreve `iniciada` e `concluída` para `referencia`, `leitura`, duas rodadas de `extract` e `validate` e `adapt`, nessa ordem.
+- `test_run_escreve_inicio_e_fim_de_cada_etapa`: um run `--dev` com uma correção escreve `iniciada` e `concluída` para `referencia`, `leitura`, duas rodadas de `extract` e `validate`, `adapt` e `fechamento`, nessa ordem.
 - `test_etapa_que_falha_fica_sem_a_linha_de_fim`: com a coleta falhando, só aparece `etapa coleta: iniciada`.
 
 ## test_app.py
 
 Cobre o dashboard sem rodar o pipeline e sem banco: o processo é trocado por um script Python que escreve as mesmas linhas do `__main__.py` e a `ConsultaSupabase` por uma `ConsultaFalsa` que devolve runs e peças prontos ou levanta a falha pedida. As consultas de verdade são testadas em `test_persistencia_supabase.py`.
 
-- `test_classifica_as_linhas_do_main`: `run`, `etapa`, `concluído`, `abortado` e `erro` viram eventos com os campos extraídos; o resto é `log`.
+- `test_classifica_as_linhas_do_main`: `run`, `etapa`, `celula` (passo de nó e estado final), `concluído`, `abortado` e `erro` viram eventos com os campos extraídos; o resto, inclusive `celula <id>: AVALIANDO`, é `log`.
 - `test_comando_do_pipeline`: o comando é `python -m sunontent [fonte] [--dev]`; fonte desconhecida é recusada.
 - `test_grafo_vem_do_graph_py`: `/api/grafo` devolve os nós e as arestas de `construir_grafo()`, inclusive `validate -> extract`.
 - `test_execucao_transmite_as_linhas_classificadas`: a execução recusa uma segunda enquanto roda, separa stdout e stderr, termina com o evento `fim` e o SSE devolve todos os eventos em ordem.

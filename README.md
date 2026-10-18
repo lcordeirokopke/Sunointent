@@ -82,7 +82,7 @@ O Router é o único nó que grava estado final de célula. Em cada tentativa el
 
 1. **Aprova** quando todas as métricas ficam dentro da faixa.
 2. **Devolve à E5** com um relatório corretivo (até 5 violações por métrica, o resto em `restantes`, e o que já passou), se a tentativa não esgotou o `K`.
-3. **Encerra por `nao_convergencia`** a partir da tentativa 2 quando a tentativa não melhora a anterior (mesma contagem de violações ou maior, sem nenhuma métrica que passou a passar).
+3. **Encerra por `nao_convergencia`** a partir da tentativa 2 quando a tentativa não melhora a anterior (as mesmas métricas reprovadas, ou mais, e nenhuma contagem de violações por métrica menor).
 4. **Encerra por `k_esgotado`** na 3ª tentativa que ainda reprova (`K = 3`).
 5. **Termina em `ERRO_INFRA`** (com a classe e a mensagem da falha) quando o redator ou o avaliador falha por infraestrutura.
 
@@ -276,7 +276,7 @@ python -m sunontent cvm --dev
 python -m sunontent b3 --dev
 ```
 
-Sem a fonte, `python -m sunontent --dev` roda as três. Sem `--dev`, a E0 baixa a publicação mais recente de cada fonte (ata do Copom, fato relevante da CVM, release da B3).
+Sem a fonte, `python -m sunontent --dev` roda as três, e a falha de uma não impede as seguintes. Sem `--dev`, a E0 baixa a publicação mais recente de cada fonte (ata do Copom, fato relevante da CVM, release da B3).
 
 Cada run grava no Supabase e em `data/runs/<run_id>/`: `manifest.json`, o FactSheet, o plano, e por célula a peça (`peca_N.json`), o scorecard (`scorecard_N.json`) e o `estado.json`. O código de saída é 1 se alguma célula terminar em `ERRO_INFRA`; célula `REPROVADA` não muda o código.
 
@@ -321,7 +321,7 @@ Depois, atualize à mão `copom.anotacao.yaml` (fatos que a extração deve cobr
 
 ### Limites da reprodução
 
-- A saída do LLM varia entre execuções. Dois runs `--dev` do mesmo documento geram claims, planos e peças ligeiramente diferentes (os custos e estados das 18 células medidas acima mostram essa variação). O que é reprodutível é o **critério de avaliação**, não o texto gerado; por isso o relatório usa a matriz de confusão e as contagens de estado, e não a comparação de textos.
+- A saída do LLM varia entre execuções. Dois runs `--dev` do mesmo documento geram claims, planos e peças ligeiramente diferentes (os custos e estados das 54 células medidas acima mostram essa variação). O que é reprodutível é o **critério de avaliação**, não o texto gerado; por isso o relatório usa a matriz de confusão e as contagens de estado, e não a comparação de textos.
 - A cotação (R$ 5,40 por US$) e o preço promocional do Gemini são valores de consulta, e o custo em BRL muda quando eles mudam.
 - Os testes não confirmam que os sites reais do BCB, da CVM e da B3 mantêm o formato esperado; isso só se verifica rodando `python -m sunontent <fonte>` sem `--dev`.
 
@@ -331,12 +331,12 @@ Depois, atualize à mão `copom.anotacao.yaml` (fatos que a extração deve cobr
 | ------- | -------- |
 | `docs/arquiteturas.md` | Arquitetura, etapas E0 a E7 e o refinement loop |
 | `docs/execucao.md` | Ciclo de vida do run, manifest, concluído e abortado |
-| `docs/metricas.md` | M1 a M7: regra, valor, faixa, detalhes e instrução corretiva |
+| `docs/metricas.md` | M1 a M7: regra, valor, faixa, detalhes e instrução corretiva, incluindo o juiz no Groq |
 | `docs/glossario.md` | `config/glossario.yaml`: termos, níveis e analogias |
 | `docs/testes.md` | O que cada teste cobre e como rodar |
 | `docs/fluxos/ingestao.md` | E0 e modo `--dev` |
 | `docs/fluxos/leitura.md` | E1: PDF, chunks, metadados e tabela de números |
-| `docs/fluxos/extracao.md` | E2 e E3: extractor, ancoragem, validação, cliente LLM e Groq |
+| `docs/fluxos/extracao.md` | E2 e E3: extractor, ancoragem, validação e cliente LLM |
 | `docs/fluxos/plano-editorial.md` | E4: LevelSpec, glossário e plano |
 | `docs/fluxos/sintese.md` | E5: pacote, redator e montagem |
 | `docs/fluxos/avaliacao.md` | E6 e E7: scorecard, Router e relatório corretivo |

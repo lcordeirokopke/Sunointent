@@ -100,8 +100,10 @@ def test_correcao_acontece_na_tentativa_2(com_plano, run_id, tmp_path):
     retry = provider.prompts[1]
     assert "# Correção" in retry and "O Copom reduziu a Selic para 13,75%." in retry
     assert "- analogy_rule: 0 (esperado: 0)" in retry and "- plan_contract: 0 (esperado: 0)" in retry
-    assert "## slide 1\n" in retry and "Use o marcador {{C01.1}} no lugar do número 13,75%." in retry
-    assert "## slide 4\n" in retry and "Reduza o slide 5 (corpo)" in retry
+    assert "## slide 2\n" in retry and "Use o marcador {{C01.1}} no lugar do número 13,75%." in retry
+    # O slide do C04 tem unidade_indice 4: o cabeçalho do grupo e a instrução citam o mesmo slide 5.
+    grupo = retry.split("## slide 5\n", 1)[1].split("\n## ", 1)[0]
+    assert "Reduza o slide 5 (corpo)" in grupo
 
     pasta = tmp_path / "runs" / run_id / "celulas" / CELULA
     assert json.loads((pasta / "estado.json").read_text(encoding="utf-8"))["estado"] == "APROVADA"

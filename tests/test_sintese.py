@@ -316,7 +316,7 @@ def test_prompt_do_retry_traz_a_peca_anterior_e_o_relatorio_agrupado():
     assert "# Correção" in prompt
     assert '"titulo": "Selic cai para {{C01.1}}"' in prompt
     assert "- text_size: 0 unidades fora do limite" in prompt
-    assert "## seção 1\n" in prompt and "## a peça inteira\n" in prompt
+    assert "## seção 2\n" in prompt and "## a peça inteira\n" in prompt  # unidade_indice 1, contada a partir de 1
     assert '[numeric_fidelity] trecho: "4,75%"' in prompt
     assert "Mais 2 violações de numeric_fidelity" in prompt
 
@@ -373,9 +373,15 @@ def test_plan_contract_do_carrossel():
     assert (por_nome["quantidade_de_slides"].obtido, por_nome["quantidade_de_slides"].passou) == ("8 slides", False)
     v = {(x.trecho, x.unidade_indice): x for x in contrato.violacoes}
     assert "no máximo 7 slides" in v[("8 slides", None)].instrucao_corretiva
-    assert "tire-o de claim_ids do slide 2" in v[("C05", 2)].instrucao_corretiva
+    assert "tire-o de claim_ids do slide 3" in v[("C05", 2)].instrucao_corretiva
     assert "não aparece em nenhum slide" in v[("C04", None)].instrucao_corretiva
     assert all(x.metrica == "plan_contract" for x in contrato.violacoes)
+
+    # No retry, o cabeçalho do grupo e a instrução da mesma violação citam o mesmo número de slide.
+    relatorio = RelatorioCorretivo(certos=[], violacoes=[v[("C05", 2)]], restantes={})
+    prompt = redator.montar_prompt(RAIZ, p, SPECS["iniciante"], carrossel(slides), relatorio)
+    grupo = prompt.split("## slide 3\n", 1)[1].split("\n## ", 1)[0]
+    assert "tire-o de claim_ids do slide 3" in grupo
 
 
 def test_plan_contract_do_carrossel_curto():

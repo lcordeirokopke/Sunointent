@@ -18,11 +18,13 @@ Este documento descreve como um run começa, como o grafo é montado e executado
 
 ```mermaid
 flowchart TD
-    CLI["python -m sunontent [fonte]"] --> ENV["le o .env e confere SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL e GOOGLE_API_KEY_PRINC"]
+    CLI["python -m sunontent [fonte]"] --> ENV["le o .env e confere SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL, GOOGLE_API_KEY_PRINC e GROQ_API_KEY"]
     ENV -->|"ausente ou conexao recusada"| PARA["erro na tela, codigo 1, sem linha em runs"]
     ENV --> MAN["gera run_id e monta o RunManifest a partir de config/ e prompts/"]
-    MAN -->|"arquivo ausente, vazio ou sem versao"| PARA
+    MAN -->|"arquivo ausente, vazio ou sem versao"| PARAF["erro na tela com a fonte, codigo 1, sem linha em runs; sem fonte, a proxima fonte roda"]
     MAN --> RUN["insere a linha em runs com status em_andamento e grava data/runs/run_id/manifest.json"]
+    RUN -->|"Supabase recusa a linha"| PARAF
+    RUN -->|"falha ao gravar o manifest.json"| AB0["abortar_run sem etapa, codigo 1"]
     RUN --> G{"graph.stream: manifest.modo"}
     G -->|"normal"| E0["no coleta: E0"]
     G -->|"dev"| REF["no referencia"]
@@ -46,12 +48,12 @@ flowchart TD
 
 1. **Parâmetros.** `fonte` é opcional e vale `copom`, `cvm` ou `b3`; sem ela, as três rodam em sequência, um run por fonte. `--dev` escolhe o documento de referência no lugar do download.
 2. **Credenciais.** O `.env` da raiz do repositório é carregado e as variáveis obrigatórias de `.env.example` são conferidas: as três do Supabase, por `persistencia.criar_repositorio_supabase`, e a `GOOGLE_API_KEY_PRINC` e a `GROQ_API_KEY`, por `llm.conferir_credenciais`. A `GOOGLE_API_KEY_SEC` é opcional: sem ela, o run roda só com a principal, sem chave de reserva. O banco recebe um `select 1` sem retentativa. Se algo falhar, a execução para com a mensagem na tela e código de saída 1, **sem criar linha em `runs`** e sem chamar `abortar_run`.
-3. **`run_id` e manifest.** O `run_id` tem o formato `<fonte>_<AAAAMMDDTHHMMSSZ>_<6 hex>`, por exemplo `copom_20261006T150000Z_9f2c1a`, e o instante é o mesmo do `timestamp` do manifest. Se a config for inválida, a execução para antes de existir linha em `runs`.
-4. **Registro.** `criar_run` insere a linha em `runs` com status `em_andamento` (sem efeito se o `run_id` já existe) e o `manifest.json` local é gravado em seguida.
-5. **Execução.** Os recursos vão em `config["configurable"]`: `repositorio`, `raiz` (raiz do repositório, de onde vêm `prompts/` e `config/`), `raiz_dados` (`data/`), `llm` (o `ClienteLLM` do run), `pasta_referencia` (`tests/fixtures/referencia/`) e, nos testes, `cliente_http`. Cada run recebe um `ClienteLLM` novo, para que o custo acumulado seja só daquele run. O `__main__.py` roda o grafo com `stream`. Ele escreve no terminal o início e o fim de cada etapa (ver "Linhas de etapa no terminal") e guarda o nome do último nó iniciado, que é a etapa do erro se o run abortar.
+3. **`run_id` e manifest.** O `run_id` tem o formato `<fonte>_<AAAAMMDDTHHMMSSZ>_<6 hex>`, por exemplo `copom_20261006T150000Z_9f2c1a`, e o instante é o mesmo do `timestamp` do manifest. Se a config for inválida, o run da fonte para antes de existir linha em `runs`, com `erro (<classe>): <fonte>: <mensagem>` na tela e código 1; sem a fonte, as seguintes rodam.
+4. **Registro.** `criar_run` insere a linha em `runs` com status `em_andamento` (sem efeito se o `run_id` já existe) e o `manifest.json` local é gravado em seguida. Se o Supabase recusar a linha, vale o mesmo da config inválida. Se o `manifest.json` falhar depois de a linha existir, o run é registrado como `abortado`, sem etapa.
+5. **Execução.** Os recursos vão em `config["configurable"]`: `repositorio`, `raiz` (raiz do repositório, de onde vêm `prompts/` e `config/`), `raiz_dados` (`data/`), `llm` (o `ClienteLLM` do run), `pasta_referencia` (`tests/fixtures/referencia/`), `juiz` (o M6, de `metrics.llm_judge.criar_juiz`; sem ele a E6 roda só as determinísticas) e, nos testes, `cliente_http`. Cada run recebe um `ClienteLLM` novo, para que o custo acumulado seja só daquele run. O `__main__.py` roda o grafo com `stream`. Ele escreve no terminal o início e o fim de cada etapa (ver "Linhas de etapa no terminal") e guarda o nome do último nó iniciado, que é a etapa do erro se o run abortar.
 6. **Fim.** Concluído ou abortado, como descrito abaixo.
 
-O código de saída é 0 para run concluído sem célula em `ERRO_INFRA` e 1 para run concluído com alguma célula em `ERRO_INFRA`, para run abortado e para erro antes de existir o run. Célula `REPROVADA` não muda o código: é um resultado da avaliação, não uma falha do run.
+O código de saída é 0 para run concluído sem célula em `ERRO_INFRA` e 1 para run concluído com alguma célula em `ERRO_INFRA`, para run abortado e para erro antes de existir o run. Sem a fonte, o código é 1 se alguma das três terminou com 1. Célula `REPROVADA` não muda o código: é um resultado da avaliação, não uma falha do run.
 
 ## O grafo
 
@@ -158,8 +160,9 @@ As constraints de `runs` são respeitadas: `status = 'abortado'` se, e somente s
 | Exceção que não é `Falha` (bug) | Run `abortado` como `terminal`, mensagem `NomeDoTipo: texto`, com a etapa do erro, e a exceção sobe com o traceback. |
 | Run já `concluido` ou `abortado` | O update não altera nada: o primeiro estado final é mantido. |
 | Supabase inacessível no update (retentativas esgotadas) | O erro fica só no `manifest.json`, com `status` `em_andamento`, `erro_classe`, `erro_mensagem` (a mensagem original mais a nota `status não gravado no Supabase`) e `etapa_erro`. A linha de `runs` segue `em_andamento` até a varredura de runs parados (abaixo). A falha de gravação não é levantada e não esconde o erro original. |
-| Falha antes de existir o run (credencial, conexão ou config) | Mensagem na tela e código 1. Nenhuma linha em `runs` e nenhuma chamada a `abortar_run`. |
-| Falha ao gravar o fechamento de um run concluído | Mensagem na tela e código 1. A linha segue `em_andamento` e o `manifest.json` mantém o status gravado no início; a varredura de runs parados a fecha como `abortado` depois de `IDADE_ORFAO`. |
+| Falha antes de existir o run (credencial, conexão ou config) | Mensagem na tela e código 1. Nenhuma linha em `runs` e nenhuma chamada a `abortar_run`. Sem a fonte, as fontes seguintes rodam, exceto quando a falha é global (credenciais, conexão inicial com o Supabase): aí nenhuma roda. |
+| Falha ao gravar o `manifest.json` inicial, depois de criar a linha em `runs` | Run `abortado` com `falha.classe` e `falha.mensagem`, sem etapa, e código 1. |
+| Falha ao gravar o fechamento de um run concluído | Mensagem na tela e código 1. A linha segue `em_andamento` e o `manifest.json` mantém o status gravado no início; a varredura de runs parados a fecha como `abortado` depois de `IDADE_ORFAO`. Sem a fonte, as fontes seguintes rodam. |
 
 ### Varredura de runs parados
 
@@ -187,13 +190,13 @@ O `manifest.json` contém os campos do `RunManifest` (em JSON) e, ao lado deles,
 
 ```
 pip install -r requirements.txt
-cp .env.example .env        # preencher as quatro variáveis
+cp .env.example .env        # preencher as variáveis (GOOGLE_API_KEY_SEC é opcional)
 python -m sunontent                  # modo normal: copom, cvm e b3 em sequência, um run por fonte
 python -m sunontent --dev            # as três fontes com o documento de referência, sem download
 python -m sunontent copom [--dev]    # só uma fonte
 ```
 
-Sem a fonte, as três rodam em sequência, cada uma com o seu `run_id`. Se um run abortar, os seguintes continuam e o código de saída é 1. Rode a partir da raiz do repositório. O modo `--dev` precisa de `tests/fixtures/referencia/<fonte>.pdf` e `<fonte>.json`; sem eles, o run é abortado com a mensagem do arquivo ausente.
+Sem a fonte, as três rodam em sequência, cada uma com o seu `run_id`. Se uma fonte falhar, dentro ou fora do grafo, as seguintes continuam e o código de saída é 1; a falha fora do grafo aparece no stderr como `erro (<classe>): <fonte>: <mensagem>`. As falhas globais, antes do primeiro run (credenciais e conexão inicial com o Supabase), interrompem tudo. Rode a partir da raiz do repositório. O modo `--dev` precisa de `tests/fixtures/referencia/<fonte>.pdf` e `<fonte>.json`; sem eles, o run é abortado com a mensagem do arquivo ausente.
 
 ## Testes
 

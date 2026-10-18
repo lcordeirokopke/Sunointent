@@ -44,7 +44,7 @@ def _grupos(relatorio: RelatorioCorretivo, nome_unidade: str) -> list[dict]:
     grupos: dict[str, list] = {}
     for v in relatorio.violacoes:
         if v.unidade_indice is not None:
-            onde = f"{nome_unidade} {v.unidade_indice}"
+            onde = f"{nome_unidade} {v.unidade_indice + 1}"
             if v.campo in _CAMPO:
                 onde += f", {_CAMPO[v.campo]}"
         elif v.campo in _CAMPO:

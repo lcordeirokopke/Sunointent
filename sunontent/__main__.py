@@ -162,7 +162,12 @@ def executar(
         max_concorrencia=graph.MAX_CONCORRENCIA,
     )
     persistencia.criar_run(repositorio, manifest)
-    persistencia.gravar_manifest_local(raiz_dados, manifest, "em_andamento")
+    try:
+        persistencia.gravar_manifest_local(raiz_dados, manifest, "em_andamento")
+    except Falha as falha:
+        # A linha em runs já existe: registra o aborto, sem etapa, para ela não ficar em_andamento.
+        _abortar(repositorio, raiz_dados, manifest, falha.classe, falha.mensagem, None)
+        return 1
     print(f"run {run_id} ({manifest.modo})")
 
     configuravel = {
@@ -236,9 +241,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         repositorio = persistencia.criar_repositorio_supabase(os.environ)
         llm.conferir_credenciais(os.environ)
         _varrer_orfaos(repositorio, RAIZ / "data")
-        # Um cliente por run, para que o custo acumulado seja só daquele run.
-        codigos = []
-        for fonte in [parametros.fonte] if parametros.fonte else FONTES:
+    except Falha as falha:
+        # Falha global, antes do primeiro run: credencial, conexão ou varredura.
+        print(f"erro ({falha.classe}): {falha.mensagem}", file=sys.stderr)
+        return 1
+    codigos = []
+    for fonte in [parametros.fonte] if parametros.fonte else FONTES:
+        try:
+            # Um cliente por run, para que o custo acumulado seja só daquele run.
             cliente_llm = llm.criar_cliente(RAIZ, os.environ)
             codigos.append(executar(
                 fonte,
@@ -247,11 +257,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 cliente_llm=cliente_llm,
                 juiz=llm_judge.criar_juiz(cliente_llm, RAIZ),
             ))
-        return int(any(codigos))
-    except Falha as falha:
-        # Antes de existir a linha em runs: credencial, conexão ou config inválida.
-        print(f"erro ({falha.classe}): {falha.mensagem}", file=sys.stderr)
-        return 1
+        except Falha as falha:
+            # Falha da fonte fora do grafo (config, criação do run, fechamento): as fontes seguintes rodam.
+            print(f"erro ({falha.classe}): {fonte}: {falha.mensagem}", file=sys.stderr)
+            codigos.append(1)
+    return int(any(codigos))
 
 
 if __name__ == "__main__":
