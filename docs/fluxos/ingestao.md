@@ -155,7 +155,7 @@ A E0 (modo normal) e o `ingestao/referencia.py` (modo desenvolvimento) devolvem 
 - O `.json` guarda `doc_id`, `doc_sha256`, `url_origem` e `coletado_em`. O `caminho` não é gravado, porque é o PDF da mesma pasta com o mesmo `doc_sha256`. O `coleta_id` também não é gravado: ele identifica a linha no Supabase e não vale para o documento de referência.
 - No modo normal, o script monta o `DocumentoFonte` primeiro e grava o `.json` a partir dele.
 - O mesmo objeto alimenta os campos de documento do RunManifest.
-- Os mesmos campos ficam no Supabase, em `coletas` e `documentos`, que são a fonte da verdade persistida. O dashboard lê o documento do bucket `documentos`, nunca de `data/sources/`.
+- Os mesmos campos ficam no Supabase, em `coletas` e `documentos`, que são a fonte da verdade persistida. O dashboard não lê o PDF do bucket nem de `data/sources/`: o link para o documento abre a `url_origem` (`<url_origem>#page=<n>`, que leva à página do PDF).
 
 ## Identificação do documento: `doc_id` e `doc_sha256`
 

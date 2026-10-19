@@ -405,7 +405,7 @@ Detalhada em `docs/fluxos/ingestao.md`. No modo normal, baixa o documento mais r
 **O que faz:**
 
 1. Extrai texto por página preservando offset de caractere. O offset é o que permite a âncora existir; se a extração perder posição, a rastreabilidade do Entregável 4 morre aqui.
-2. OCR só como fallback, quando a página não tem camada de texto (comum em fatos relevantes escaneados). O OCR ainda não está implementado: hoje a página sem camada de texto aborta o run com erro terminal.
+2. Página sem camada de texto (comum em fatos relevantes escaneados) aborta o run com erro terminal.
 3. Normaliza o texto: remove cabeçalho/rodapé repetido, junta palavras hifenizadas quebradas por linha, colapsa espaço.
 4. Faz chunking por seção lógica, não por tamanho fixo. Ata do Copom tem estrutura numerada; release da B3 tem seções nomeadas. Chunk que corta uma tabela no meio gera claim sem número.
 5. **Varre todos os números e monta a `tabela_numeros`.** Parser de formato brasileiro: `12,5%` vira `Decimal("12.5") + unidade "pct"`, `R$ 1,2 bi` vira `Decimal("1200") + "BRL_mi"`, `0,50 p.p.` vira `Decimal("0.50") + "pp"`. Cada um com âncora.
@@ -417,7 +417,7 @@ Detalhada em `docs/fluxos/ingestao.md`. No modo normal, baixa o documento mais r
 
 **Natureza:** determinístico. Zero LLM, zero token. Detalhada em `docs/fluxos/leitura.md`.
 
-**Como falha:** arquivo ausente ou SHA-256 dos bytes diferente do `doc_sha256` do `DocumentoFonte`: aborta o run com erro terminal, indicando o arquivo, o hash esperado e o encontrado, e pedindo para apagar o arquivo local; a próxima coleta grava o PDF de novo. PDF sem camada de texto e OCR ruim: aborta o run com erro terminal, não gera claims errados. Número em formato não previsto (`1.234,56` vs `1,234.56`) é o bug mais provável de toda a etapa, e ele se manifesta bem longe daqui: como falso positivo de fidelidade numérica na etapa 6. Teste esta etapa com paranoia.
+**Como falha:** arquivo ausente ou SHA-256 dos bytes diferente do `doc_sha256` do `DocumentoFonte`: aborta o run com erro terminal, indicando o arquivo, o hash esperado e o encontrado, e pedindo para apagar o arquivo local; a próxima coleta grava o PDF de novo. PDF sem camada de texto: aborta o run com erro terminal, não gera claims errados. Número em formato não previsto (`1.234,56` vs `1,234.56`) é o bug mais provável de toda a etapa, e ele se manifesta bem longe daqui: como falso positivo de fidelidade numérica na etapa 6. Teste esta etapa com paranoia.
 
 ## E2. Extractor & Anchor
 
