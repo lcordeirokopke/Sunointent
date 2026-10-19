@@ -26,7 +26,7 @@ O modelo nunca escreve página, offset nem valor de número. Ele cita o trecho e
 
 ## Modelo
 
-O extractor usa o `gemini-3.8-flash` (Gemini API, SDK `google-genai`), escolhido por ser um modelo estável, com versão fixa. As chaves ficam no `.env`: `GOOGLE_API_KEY_PRINC`, a principal, conferida pelo `__main__.py` antes de o run ser criado, e `GOOGLE_API_KEY_SEC`, a reserva, opcional. A ordem de chamada está em Cliente LLM. O juiz (M6) precisa ser de outra família.
+O extractor usa o `gemini-3.8-flash` (Gemini API, SDK `google-genai`), escolhido por ser um modelo estável, com versão fixa. As chaves ficam no `.env`: `GOOGLE_API_KEY_PRINC`, a principal, conferida pelo `__main__.py` antes de o run ser criado (junto da `GROQ_API_KEY` do juiz), e `GOOGLE_API_KEY_SEC`, a reserva, opcional. A ordem de chamada está em Cliente LLM. O juiz (M6) precisa ser de outra família.
 
 ## O que o modelo recebe
 
@@ -120,9 +120,9 @@ O caso típico é um número que o modelo cita e a E1 não leu: a ancoragem recu
 
 ## Cliente LLM
 
-`llm.ClienteLLM.chamar(no, prompt, schema)` lê o snapshot do nó em `config/models.yaml`, pede ao provider saída JSON no schema Pydantic e devolve o objeto validado, nunca texto. O provider é escolhido por nó: o juiz (`judge`) chama o Groq (seção Groq); os outros nós chamam a Gemini API, pelas chaves da seção Ordem das chaves. Duas contagens separadas, nenhuma ligada ao `K`:
+`llm.ClienteLLM.chamar(no, prompt, schema)` lê o snapshot do nó em `config/models.yaml`, pede ao provider saída JSON no schema Pydantic e devolve o objeto validado, nunca texto. O provider é escolhido por nó: o juiz (`judge`) chama o Groq (`docs/metricas.md`, M6, seção Groq); os outros nós chamam a Gemini API, pelas chaves da seção Ordem das chaves. Duas contagens separadas, nenhuma ligada ao `K`:
 
-- **Falha de infraestrutura** (HTTP 408, 429, 5xx, timeout, erro de conexão) em todas as chaves: repete com o backoff de `retentativa.py`, até 4 tentativas; depois, erro terminal.
+- **Falha de infraestrutura** (na Gemini API, HTTP 408, 429, 5xx, timeout, erro de conexão; os códigos do Groq estão em `docs/metricas.md`, seção Groq) em todas as chaves: repete com o backoff de `retentativa.py`, até 4 tentativas; depois, erro terminal.
 - **Resposta fora do schema:** repete até 3 vezes, acrescentando ao prompt o erro de validação; depois, erro terminal.
 - **Conteúdo recusado pelo provider** (bloqueio do prompt ou `finish_reason` de segurança) e demais erros HTTP 4xx: terminal, sem repetir e sem passar para a chave de reserva.
 
@@ -146,7 +146,7 @@ Cada tentativa, com sucesso ou não, vira um `Span` (`schemas.py`): nó, modelo,
 
 O custo acumulado do run é atualizado na mesma instrução SQL que grava o span, e span repetido não soma de novo. O cliente também acumula o total em memória, e o `__main__.py` o escreve no `manifest.json` local ao concluir ou abortar o run.
 
-Ordem de grandeza nos documentos de referência, com 2 rodadas: de R$ 0,15 a R$ 0,60 por documento.
+Ordem de grandeza nos documentos de referência, medida em 6 runs completos: de R$ 0,17 a R$ 0,52 por documento na extração (E2) e de R$ 0,09 a R$ 0,22 no plano (E4); o run completo, com as 9 células, custa de R$ 1,28 a R$ 2,28 (`README.md`, Trade-offs de custo e latência).
 
 ## Saída
 

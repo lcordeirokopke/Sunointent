@@ -27,7 +27,7 @@ Como cada script localiza a publicação mais recente:
 | Fonte | Listagem | PDF |
 | ----- | -------- | --- |
 | Copom | API JSON do site do Banco Central: `api/servico/sitebcb/copom/atas?quantidade=1` devolve o número da última reunião, e `atas_detalhes?nro_reuniao=<n>` devolve a URL do PDF. | `urlPdfAta` |
-| CVM | Conjunto de dados aberto IPE (`dados.cvm.gov.br`, um ZIP por ano com um CSV em latin-1). Filtra a categoria `Fato Relevante` e escolhe a maior `Data_Entrega`, com desempate pelo `numProtocolo`. Se o ZIP do ano corrente não existe (HTTP 404), usa o do ano anterior. | `Link_Download` (RAD/ENET) |
+| CVM | Conjunto de dados aberto IPE (`dados.cvm.gov.br`, um ZIP por ano com um CSV em latin-1). Filtra a categoria `Fato Relevante` e escolhe a maior `Data_Entrega`, com desempate pelo `numProtocolo`. Se o ZIP do ano corrente não existe (HTTP 404) ou não tem nenhum `Fato Relevante`, usa o do ano anterior; se nenhum dos dois tem, o run aborta. | `Link_Download` (RAD/ENET) |
 | B3 | API de arquivos da MZIQ usada pelo site de RI da B3 S.A. (`ri.b3.com.br`), categoria `central_de_resultados_release_de_resultados`, idioma `pt_BR`. Escolhe a maior data de publicação. | `link_url` ou `permalink` |
 
 ## Onde cada peça vive
@@ -82,7 +82,7 @@ python -m sunontent copom
 2. A E0 executa `ingestao/copom.py`, que localiza a publicação mais recente e baixa o documento inteiro **para a memória**, sem tocar no disco.
 3. Ainda em memória, o script confere o limite de 50 MiB (52.428.800 bytes), valida o formato e calcula o `doc_sha256`. Se qualquer verificação falhar, o run termina com status `abortado`, sem nada no bucket, em `documentos`, em `coletas` nem em `data/sources/`.
 4. Só se tudo deu certo, o script grava no Supabase, nesta ordem:
-   1. Se o `doc_sha256` ainda não está em `documentos`, envia o PDF ao bucket `documentos` em `copom/<doc_sha256>.pdf`, sem `upsert`. Se o objeto já existe (HTTP 400 "Asset Already Exists"), ele é o mesmo arquivo, porque o caminho é o hash, e é reaproveitado.
+   1. Se o `doc_sha256` ainda não está em `documentos`, envia o PDF ao bucket `documentos` em `copom/<doc_sha256>.pdf`, sem `upsert`. Se o objeto já existe (HTTP 400 "Asset Already Exists" ou 409), ele é o mesmo arquivo, porque o caminho é o hash, e é reaproveitado.
    2. Numa única transação, insere a linha em `documentos` (sem efeito se o hash já existe), insere a linha em `coletas` e grava em `runs` o `doc_id`, o `doc_sha256`, o `coleta_id`, a `url_origem` e o `coletado_em` devolvidos pelo insert da coleta.
 5. Em seguida o script grava a cópia local: `data/sources/copom/<doc_sha256>.pdf`, só se ainda não existe (arquivo temporário renomeado no fim), e `data/sources/copom/<doc_sha256>.<AAAAMMDDTHHMMSSZ>.json` com os metadados da coleta (ver **Arquivo de metadados**).
 6. O script devolve um `DocumentoFonte` com o caminho local do arquivo, os metadados e o `coleta_id`, e é esse objeto que a E1 recebe.
@@ -185,16 +185,24 @@ tests/fixtures/referencia/
 ├── copom.pdf
 ├── copom.json
 ├── copom.anotacao.yaml
+├── copom.documento.json
+├── copom.claims.json
 ├── cvm.pdf
 ├── cvm.json
 ├── cvm.anotacao.yaml
+├── cvm.documento.json
+├── cvm.claims.json
 ├── b3.pdf
 ├── b3.json
-└── b3.anotacao.yaml
+├── b3.anotacao.yaml
+├── b3.documento.json
+└── b3.claims.json
 ```
 
 - **`<fonte>.pdf` e `<fonte>.json`:** o documento congelado e seus metadados.
 - **`<fonte>.anotacao.yaml`:** a lista, escrita à mão, dos fatos que a E2 tem que extrair daquele documento. É a base do teste de cobertura da E2.
+- **`<fonte>.documento.json`:** o snapshot da saída da E1 para o documento, conferido por igualdade exata no teste da leitura.
+- **`<fonte>.claims.json`:** os claims de um run `--dev` real, lidos pelos testes do casador do glossário e do juiz.
 
 O mesmo documento serve ao modo desenvolvimento, ao teste de cobertura da E2 e como corpo do download simulado nos testes da E0: não existe um segundo documento de teste para manter.
 
@@ -283,7 +291,7 @@ No modo desenvolvimento, documento, hash e metadados são fixos e versionados, e
 
 ```
 tests/fixtures/
-├── referencia/          # documento congelado, metadados e anotação de cada fonte
+├── referencia/          # documento congelado, metadados, anotação, snapshot da leitura e claims de cada fonte
 └── http/
     ├── copom/           # respostas simuladas da fonte, exceto o documento
     ├── cvm/

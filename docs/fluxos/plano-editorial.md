@@ -73,7 +73,7 @@ O `levelspec.py` valida cada arquivo com Pydantic, sem aceitar campo desconhecid
 - `tags_priorizadas` e `tags_descartaveis` só com tags do vocabulário `Tag` (`sunontent/schemas.py`), sem tag em comum entre as duas listas;
 - `tags_descartaveis` só aceita `metodologico`, a única tag que corresponde a um motivo de descarte;
 - `max_claims` de cada formato inteiro maior ou igual a 3, com artigo >= carrossel >= roteiro;
-- faixas com `min` menor ou igual a `max`; carrossel com pelo menos 3 slides; no roteiro, abertura e fechamento menores que a duração; pesos de papel inteiros maiores ou iguais a 1.
+- faixas com `min` menor ou igual a `max`; carrossel com pelo menos 3 slides; no roteiro, a soma de `abertura_s` e `fechamento_s` menor que `duracao_s`; pesos de papel inteiros maiores ou iguais a 1.
 
 Arquivo inválido é erro terminal: o run aborta no início da E4.
 
@@ -120,7 +120,7 @@ Antes dos níveis, o prompt diz o que vem primeiro no tipo de documento, nos 3 n
 
 Depois dos níveis, o prompt diz como o Intermediário e o Avançado se diferenciam na escolha: o Intermediário fica com os fatos que mudam algo para quem já investe e deixa de fora o detalhe técnico e metodológico que não muda essa leitura; o Avançado inclui as premissas e a metodologia, o balanço de riscos, a orientação futura em detalhe e a governança.
 
-As regras do prompt são estas; o gate confere todas, menos a preferência do Iniciante no `exige_base_tecnica`, o que vem primeiro no tipo de documento e o sentido da tese, que ficam para a revisão humana na matriz do dashboard:
+As regras do prompt são estas; o gate confere todas, menos a preferência do Iniciante no `exige_base_tecnica`, o que vem primeiro no tipo de documento, o início "É como..." das analogias `nova` e o sentido da tese, que ficam para a revisão humana na matriz do dashboard:
 
 - núcleo entre os candidatos nos 3 níveis, presente nos 3 níveis;
 - claims só entre os candidatos do nível, até o máximo do artigo, com papel e `prioridade` de 1 a n, sem repetir (1 é o mais importante; o carrossel e o roteiro ficam com o núcleo e os de maior prioridade);
@@ -148,15 +148,15 @@ O `aviso` do plano é a lista das mudanças, cada uma com a regra e o nível: `[
 |---|---|---|
 | `adapter` | `gemini-3.8-flash` | padrão do modelo na rodada 1; `low` nas correções (chave `adapter_correcao` em `raciocinio` de `config/models.yaml`) |
 
-O preço é o mesmo já registrado para o extractor em `config/models.yaml`. Nos runs do release da B3, a rodada 1 tem cerca de 5,7 a 5,9 mil tokens de entrada; na ata do Copom, cerca de 3,2 a 3,9 mil; no fato relevante da CVM, cerca de 1,9 mil. Os spans registram o custo em BRL, pela cotação de `config/models.yaml`: a E4 custou de R$ 0,07 a R$ 0,46 por run, quase todo em tokens de saída, porque o raciocínio do modelo conta como saída e varia de 3 a 22 mil tokens entre runs. Cada span do `adapter` traz a rodada do gate.
+O preço é o mesmo já registrado para o extractor em `config/models.yaml`. Nos runs do release da B3, a rodada 1 tem cerca de 5,7 a 5,9 mil tokens de entrada; na ata do Copom, cerca de 3,2 a 3,9 mil; no fato relevante da CVM, cerca de 1,9 mil. Os spans registram o custo em BRL, pela cotação de `config/models.yaml`: a E4 custou de R$ 0,09 a R$ 0,22 por run (`README.md`, Trade-offs de custo e latência), quase todo em tokens de saída, porque o raciocínio do modelo conta como saída e varia de 3 a 22 mil tokens entre runs. Cada span do `adapter` traz a rodada do gate.
 
-O nó troca para `gemini-4-argon` só pelo `config/models.yaml`, com o preço do snapshot, se os runs mostrarem o gate reprovando com frequência ou a revisão humana na matriz do dashboard discordando das seleções. Preços e status consultados em 2026-10-14 em https://ai.google.dev/gemini-api/docs/pricing e https://ai.google.dev/gemini-api/docs/models: `gemini-3.8-flash` a US$ 0,75 de entrada e US$ 3,75 de saída por milhão de tokens até 2026-12-31 (US$ 1,50 e US$ 7,50 a partir de 2027-01-01); `gemini-4-argon` a US$ 2,00 e US$ 10,00 até 2026-11-30 (US$ 4,00 e US$ 20,00 a partir de 2026-12-01).
+Preços e status consultados em 2026-10-12 em https://ai.google.dev/gemini-api/docs/pricing e https://ai.google.dev/gemini-api/docs/models: `gemini-3.8-flash` a US$ 0,75 de entrada e US$ 3,75 de saída por milhão de tokens até 2026-12-31 (US$ 1,50 e US$ 7,50 a partir de 2027-01-01).
 
 ## Grafo
 
 ```
-... validate (sem claim para corrigir) -> adapt -> END
-... descarte                           -> adapt -> END
+... validate (sem claim para corrigir) -> adapt -> celula (9 Send) -> fechamento -> END
+... descarte                           -> adapt -> celula (9 Send) -> fechamento -> END
 ```
 
 - A E4 entra depois da E3 com todos os claims aprovados ou depois do descarte; o plano usa só os claims do FactSheet assinado.
@@ -170,11 +170,11 @@ O nó troca para `gemini-4-argon` só pelo `config/models.yaml`, com o preço do
 - Supabase: `rodadas_plano` (a saída do planejador, uma linha por rodada, inclusive a que passou), `validacoes_plano` (uma linha por problema, por rodada), `planos_editoriais`, `planos_nivel` e `celulas` (9 linhas, estado `PENDENTE`, tentativa 0). Plano e células são gravados numa transação. Se o run já tem plano gravado, a gravação não muda nada: o mesmo plano não é erro, outro plano é erro terminal.
 - Cópia local em `data/runs/<run_id>/`: `validacoes_plano/<rodada>.json` (a rodada, os problemas e a saída do planejador; existe em toda rodada, com `problemas: []` na que passou), `plano.json` e `celulas/<celula_id>/estado.json`.
 - Estado do grafo: `rodada_plano`, `plano` e `celulas`.
-- O estado e a tentativa de uma célula mudam por `atualizar_celula` (`persistencia.py`), que grava `atualizado_em` e a cópia local; a E5 usa a função na mesma transação que grava a peça.
+- O estado e a tentativa de uma célula mudam por `atualizar_celula` (`persistencia.py`), que grava `atualizado_em` e a cópia local; a gravação da peça (E5) faz a mesma atualização da célula na transação que grava a peça.
 
 ## Terminal e dashboard
 
-- O terminal ganha as linhas `etapa adapt: iniciada` e `etapa adapt: concluída` (`docs/execucao.md`, Linhas de etapa no terminal). A linha final diz em quantas rodadas o plano ficou pronto e, com `aviso`, que o plano tem aviso: `concluído: <doc> (<hash>), 22 claims, 1 descartado, plano em 2 rodadas (com aviso), 10836 tokens, R$ 0.1516`.
+- O terminal ganha as linhas `etapa adapt: iniciada` e `etapa adapt: concluída` (`docs/execucao.md`, Linhas de etapa no terminal). A linha final diz em quantas rodadas o plano ficou pronto e, com `aviso`, que o plano tem aviso: `concluído: <doc> (<hash>), 22 claims, 1 descartado, plano em 2 rodadas (com aviso), 9 células (<estados>), <tokens> tokens, R$ <custo>`.
 - No dashboard, a E4 entra como etapa da lista do fluxo, com o nó `adapt`. A subaba da E4 e a aba Info. técnicas mostram o plano gravado (a aba Resultado mostra o plano do nível de cada célula): o núcleo, o aviso, e, por nível, a tese, os claims usados com a prioridade, as analogias e os descartes, além dos problemas do gate por rodada (`docs/fluxos/dashboard.md`, Plano editorial).
 
 ## Como falha

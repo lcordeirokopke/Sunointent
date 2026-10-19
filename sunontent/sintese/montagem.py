@@ -140,7 +140,7 @@ def plan_contract(payload: Payload, pacote: Pacote, spec: LevelSpec) -> MetricaR
     for i, claim_id in fora:
         violacoes.append(_violacao(
             claim_id, "claim do plano do nível", claim_id,
-            f"O claim {claim_id} não está no plano deste nível: tire-o de claim_ids {da} {unidade} {i} e escreva "
+            f"O claim {claim_id} não está no plano deste nível: tire-o de claim_ids {da} {unidade} {i + 1} e escreva "
             "só com os claims fornecidos.",
             i,
         ))

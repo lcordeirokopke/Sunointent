@@ -12,7 +12,7 @@ python -m app --porta 8080
 
 Rode a partir da raiz do repositório, com o mesmo `.env` do pipeline e o Python do `.venv` (`.venv\Scripts\python -m app` no Windows): o processo iniciado pelo dashboard é o próprio `python -m sunontent`, executado com o mesmo Python do servidor, que lê o `.env` e confere as credenciais.
 
-Cada run chama o Gemini na E2, na E4 e, por célula, na E5 (redator), e grava no Supabase do site. A ordem de grandeza do custo está em `docs/fluxos/extracao.md` (Custo); com a fonte "Todas", são três runs.
+Cada run chama o Gemini na E2, na E4 e, por célula, na E5 (redator), chama o juiz (Groq) na E6 quando as métricas determinísticas passam, e grava no Supabase do site. A ordem de grandeza do custo está em `docs/fluxos/extracao.md` (Custo); com a fonte "Todas", são três runs.
 
 ## Peças
 
@@ -22,8 +22,8 @@ Cada run chama o Gemini na E2, na E4 e, por célula, na E5 (redator), e grava no
 | `app/servidor.py` | API FastAPI e arquivos estáticos. |
 | `app/execucao.py` | Inicia `python -m sunontent [fonte] [--dev]` como processo filho, lê stdout e stderr linha a linha e classifica cada linha. Uma execução por vez. |
 | `app/slide_svg.py` | O slide do carrossel em SVG: o template (caixas por papel), a quebra de linha medida pela fonte (Pillow) e a montagem do SVG. |
-| `sunontent/persistencia.py` | `ConsultaSupabase`: lê os runs do Supabase para o dashboard (`listar_runs`, `detalhar_run`, com as células, e `peca`), em conexão só de leitura. O dashboard não grava nada no banco. |
-| `app/static/` | `index.html` (sidebar e as cinco páginas), `estilo.css` (tema claro, cor de marca `#E11927`, fonte Inter) e os scripts `app.js` (início, fluxo, histórico e a navegação), `resultado.js` (aba Resultado, com as peças por nível e a exportação em SVG e PNG), e `tecnicas.js` (aba Info. técnicas): HTML, CSS e JS sem build e sem dependências externas; os ícones são SVG inline. |
+| `sunontent/persistencia.py` | `ConsultaSupabase`: lê os runs do Supabase para o dashboard (`listar_runs`, `detalhar_run`, com as células, `peca`, `balanco` e `biblioteca`), em conexão só de leitura. O dashboard não grava nada no banco. |
+| `app/static/` | `index.html` (sidebar e as cinco páginas), `estilo.css` (tema claro, cor de marca `#E11927`, fonte Inter) e os scripts `app.js` (resumo do último run no Início, fluxo, histórico e a navegação), `inicio.js` (balanço geral e peças salvas do Início), `resultado.js` (aba Resultado, com as peças por nível e a exportação em SVG e PNG), e `tecnicas.js` (aba Info. técnicas): HTML, CSS e JS sem build e sem dependências externas; os ícones são SVG inline. |
 | `app/static/fontes/` | `Inter-Regular.ttf`, `Inter-Bold.ttf` e `Inter-OFL.txt`: a fonte do slide (Inter, licença SIL OFL 1.1), carregada por `@font-face` na página e lida pelo Pillow no servidor. |
 
 ## Botões
@@ -32,14 +32,14 @@ Ficam na barra fixa do topo, visível em todas as páginas.
 
 - **Executar run**: `python -m sunontent [fonte]`. O `__main__.py` monta o manifest, registra o run no Supabase e chama `graph.construir_grafo()`. Cada run passa pela E0 (download da publicação mais recente), E1, E2, E3 e E4, depois pelas 9 células em paralelo (E5, E6 e E7, até 3 ao mesmo tempo) e pelo fechamento, e termina com o plano editorial e as 9 células no estado final.
 - **Modo dev**: o mesmo com `--dev`, entrando pelo nó `referencia` com o documento de `tests/fixtures/referencia/`, sem download. A E2, a E4 e a E5 chamam o Gemini nos dois modos.
-- **Parar**: encerra o processo. O `__main__.py` não chega a registrar o aborto: o run fica `em_andamento` no Supabase até a varredura do início do próximo run (`docs/execucao.md`, Run abortado).
+- **Parar**: encerra o processo. O `__main__.py` não chega a registrar o aborto: o run fica `em_andamento` no Supabase até a varredura de um run iniciado mais de 1 hora depois (`docs/execucao.md`, Run abortado).
 - **Fonte**: Todas (sem fonte, os três runs em sequência), Copom, CVM ou B3.
 
 ## Leitura do Supabase
 
 Os dados dos runs vêm do Supabase, a fonte da verdade, pela `ConsultaSupabase` de `persistencia.py`. Não há leitura de `data/runs/`.
 
-- A consulta é criada na primeira leitura, a partir do `.env` (`SUPABASE_DB_URL`), e reaproveitada depois. Se o banco estiver fora, a leitura seguinte tenta de novo.
+- A consulta é criada na primeira leitura, a partir do `.env` (as três variáveis do Supabase são conferidas e a conexão usa `SUPABASE_DB_URL`), e reaproveitada depois. Se o banco estiver fora, a leitura seguinte tenta de novo.
 - Toda transação abre com `BEGIN READ ONLY` (`read_only` da conexão do psycopg). A opção não vai em `options` da URL porque o pooler do Supabase descarta os parâmetros de inicialização da sessão.
 - Durante o run, a página relê o run a cada etapa concluída: cada etapa grava no banco o que produziu, então a aba da E3 mostra a rodada 1 enquanto a 2 roda.
 - O documento processado vem de `documentos_processados` e das contagens de páginas, chunks e números: a aba da E1 mostra o emissor e a data assim que a E1 termina, mesmo que o run aborte depois.
@@ -57,7 +57,7 @@ O `__main__.py` escreve `etapa <no>: iniciada` e `etapa <no>: concluída` para c
 | `celula <celula_id>: <ESTADO>` | `celula`: a célula terminou em `APROVADA`, `REPROVADA` ou `ERRO_INFRA`; a página relê o run no Supabase. |
 | `concluído: ...` | `concluido`: o run terminou; a página relê o run no Supabase. |
 | `abortado (<classe>): <mensagem>` | `abortado`: a etapa em andamento fica como `falhou`. |
-| `erro (<classe>): <mensagem>` | `erro`: falha antes de existir o run (credencial, conexão, config). |
+| `erro (<classe>): <mensagem>` | `erro`: falha fora do grafo: global, antes do primeiro run (credencial, conexão), ou de uma fonte (config, criação ou fechamento do run), com a mensagem começando pela fonte. |
 | qualquer outra | `log`: vai para o terminal e para a etapa em andamento (progresso da E0, novas tentativas). |
 
 Quando o processo termina, o servidor acrescenta o evento `fim` com o código de saída. Os eventos ficam em memória até a próxima execução: recarregar a página reconstrói o estado, mas reiniciar o servidor apaga o log. O resultado do run continua no Supabase.
@@ -66,7 +66,7 @@ Quando o processo termina, o servidor acrescenta o evento `fim` com o código de
 
 Uma sidebar à esquerda leva às cinco páginas, nesta ordem (no celular ela vira uma barra no topo). O estado geral da execução (ocioso, rodando, concluída...) fica no pé da sidebar. Uma barra fixa no topo de todas as páginas tem só o seletor de fonte (Todas, Copom, CVM ou B3) e os botões Executar run, Modo dev e Parar (no celular a barra rola com a página).
 
-- **Início**: o resumo do último run (fonte, documento, claims, claims descartados na E3, células aprovadas, tokens e custo), com atalhos para o Resultado, as Info. técnicas e o Fluxo. Enquanto o banco não tem nenhum run, a página mostra no lugar o aviso de como iniciar o pipeline; o mesmo vale para a dica do terminal do Fluxo. Ao iniciar o pipeline, a página abre o Fluxo. Depois do último run, o Início mostra o **balanço geral** de todos os runs (runs por status e por fonte, tokens e custo total e médio, células por estado, tentativas por célula e a taxa de aprovação de cada métrica na última tentativa) e as **peças salvas**: uma lista de cartões resumidos (título, formato, nível, fonte, data, run e estado) da última tentativa de cada célula, com filtro de formato, de nível e de estado (aprovadas por padrão). Cada cartão expande o conteúdo da peça: o artigo em texto, o carrossel em SVG e o roteiro por cena.
+- **Início**: o resumo do último run (fonte, documento, claims, claims descartados na E3, células aprovadas, tokens e custo), com atalhos para o Resultado, as Info. técnicas e o Fluxo. Enquanto o banco não tem nenhum run, a página mostra no lugar o aviso de como iniciar o pipeline; o mesmo vale para a dica do terminal do Fluxo. Ao iniciar o pipeline, a página abre o Fluxo. Depois do último run, o Início mostra o **balanço geral** de todos os runs (runs por status e por fonte, tokens e custo total e médio, células por estado, tentativas por célula e a taxa de aprovação de cada métrica na última tentativa) e as **peças salvas**: uma lista de cartões resumidos (título, formato, nível, fonte, data, run e estado) da última tentativa de cada célula, com filtro de formato, de nível e de estado (aprovadas por padrão). Cada cartão expande o conteúdo da peça: o artigo em texto, o carrossel em SVG e o roteiro por cena. A lista mostra 20 cartões por vez, com o botão Mostrar mais.
 - **Resultado**: um run lido do Supabase, escolhido no seletor (abaixo, Resultado).
 - **Fluxo**: os cartões E0 a E7 com estado e duração, o contador de rodadas do loop E2/E3, a miniatura das 9 células nos cartões da E5 à E7 e as arestas do grafo. As subabas mostram o terminal completo ou uma etapa: descrição, estado, duração, os dados do run gravados por ela e as linhas do terminal daquela etapa. O cartão da E3 cobre os nós `validate` e `descarte`: soma as durações, junta as linhas e mostra o estado do último que rodou. Cada etapa com agente mostra só as chamadas de LLM do seu nó: a E2, as do `extractor`; a E4, as do `adapter`. A subaba da E4 mostra as rodadas do plano, se ele tem aviso e o plano gravado (ver Plano editorial abaixo). As subabas da E5, da E6 e da E7 mostram a grade das células (abaixo).
 - **Info. técnicas**: tudo o que um run gravou, de um run por vez (abaixo, Informações técnicas).
@@ -146,8 +146,8 @@ Os claims descartados de um run são os que reprovaram na última rodada do loop
 
 | Rota | O que faz |
 | ---- | --------- |
-| `GET /api/grafo` | Nós e arestas de `construir_grafo()` com o subgrafo da célula aberto (`get_graph(xray=True)`), sem os nós de início e fim do subgrafo; `RODADAS_EXTRACAO`, `RODADAS_PLANO`, `K` e `max_concorrencia`. |
-| `POST /api/execucao` | Corpo `{"fonte": null \| "copom" \| "cvm" \| "b3", "dev": bool}`. 409 se já houver execução em andamento, 422 para fonte desconhecida. |
+| `GET /api/grafo` | Nós e arestas de `construir_grafo()` com o subgrafo da célula aberto (`get_graph(xray=True)`), sem os nós de início e fim do subgrafo; `rodadas_extracao`, `rodadas_plano`, `k` e `max_concorrencia`. |
+| `POST /api/execucao` | Corpo `{"fonte": null \| "copom" \| "cvm" \| "b3", "dev": bool}`. 201 ao iniciar, 409 se já houver execução em andamento, 422 para fonte desconhecida. |
 | `GET /api/execucao` | A execução atual ou a última, com todos os eventos. |
 | `GET /api/execucao/eventos?desde=N` | SSE com os eventos a partir de `N`; termina depois do `fim`. |
 | `POST /api/execucao/parar` | Encerra o processo. |
